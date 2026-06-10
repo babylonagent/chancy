@@ -114,6 +114,18 @@ Each transaction endpoint returns:
 }
 ```
 
+## Web client
+
+The web client provides an 8×8 grid and API-backed payload builder controls.
+
+```bash
+npm run web:dev
+npm run web:build
+npm run web:test
+```
+
+It does not hold keys. It displays transaction/read payloads for a wallet or agent to sign/send.
+
 ## Deployment
 
 Copy env template:
@@ -152,4 +164,6 @@ npm install
 npm test
 npm run build
 npm run export:abi
+npm run web:test
+npm run web:build
 ```
