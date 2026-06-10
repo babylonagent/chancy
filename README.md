@@ -116,7 +116,7 @@ Each transaction endpoint returns:
 
 ## Web client
 
-The web client provides an 8×8 grid and API-backed payload builder controls.
+The web client provides an 8×8 grid, API-backed payload builder controls, and injected wallet execution.
 
 ```bash
 npm run web:dev
@@ -124,7 +124,14 @@ npm run web:build
 npm run web:test
 ```
 
-It does not hold keys. It displays transaction/read payloads for a wallet or agent to sign/send.
+Capabilities:
+
+- Connect an injected Base-compatible wallet.
+- Build create/fund/join/click/claim transaction payloads.
+- Send built transaction payloads through the connected wallet.
+- Build session/player/claimable/next-session read payloads.
+- Run built read payloads with `eth_call` through the wallet provider.
+- No private keys in UI.
 
 ## Deployment
 
