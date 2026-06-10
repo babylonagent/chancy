@@ -89,12 +89,20 @@ CHANCY_CONTRACT_ADDRESS=0x... npm run api
 
 Endpoints:
 
-- `GET /health`
+Transaction builders:
+
 - `POST /tx/create-session`
 - `POST /tx/fund-session-rewards`
 - `POST /tx/join-session`
 - `POST /tx/click-tile`
 - `POST /tx/claim-rewards`
+
+Read-call builders:
+
+- `GET /read/session/:sessionId`
+- `GET /read/player-game/:sessionId/:player`
+- `GET /read/claimable-rewards/:player`
+- `GET /read/next-session-id`
 
 Each transaction endpoint returns:
 

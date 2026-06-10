@@ -4,6 +4,7 @@ const { decodeFunctionData } = require("viem");
 const { createApp, chancyAbi } = require("../apps/api/server");
 
 const CONTRACT = "0x1111111111111111111111111111111111111111";
+const PLAYER = "0x2222222222222222222222222222222222222222";
 
 describe("agent API", function () {
   it("returns health status", async function () {
@@ -50,10 +51,36 @@ describe("agent API", function () {
     expect(decodeFunctionData({ abi: chancyAbi, data: claim.body.data }).functionName).to.equal("claimRewards");
   });
 
-  it("rejects invalid request bodies", async function () {
+  it("builds read-call payloads for session and player state", async function () {
+    const app = createApp({ contractAddress: CONTRACT });
+
+    const session = await request(app).get("/read/session/1").expect(200);
+    expect(session.body.to).to.equal(CONTRACT);
+    expect(session.body.value).to.equal("0");
+    expect(session.body.decodeAs).to.equal("sessions");
+    expect(decodeFunctionData({ abi: chancyAbi, data: session.body.data }).functionName).to.equal("sessions");
+
+    const player = await request(app).get(`/read/player-game/1/${PLAYER}`).expect(200);
+    expect(player.body.decodeAs).to.equal("playerGames");
+    const decodedPlayer = decodeFunctionData({ abi: chancyAbi, data: player.body.data });
+    expect(decodedPlayer.functionName).to.equal("playerGames");
+    expect(decodedPlayer.args.map(String)).to.deep.equal(["1", PLAYER]);
+
+    const rewards = await request(app).get(`/read/claimable-rewards/${PLAYER}`).expect(200);
+    expect(rewards.body.decodeAs).to.equal("claimableRewards");
+    expect(decodeFunctionData({ abi: chancyAbi, data: rewards.body.data }).functionName).to.equal("claimableRewards");
+
+    const next = await request(app).get("/read/next-session-id").expect(200);
+    expect(next.body.decodeAs).to.equal("nextSessionId");
+    expect(decodeFunctionData({ abi: chancyAbi, data: next.body.data }).functionName).to.equal("nextSessionId");
+  });
+
+  it("rejects invalid request bodies and read params", async function () {
     const app = createApp({ contractAddress: CONTRACT });
 
     await request(app).post("/tx/create-session").send({ difficulty: "Impossible" }).expect(400);
     await request(app).post("/tx/click-tile").send({ sessionId: "1", tileIndex: 64 }).expect(400);
+    await request(app).get("/read/session/not-a-number").expect(400);
+    await request(app).get("/read/player-game/1/not-address").expect(400);
   });
 });
