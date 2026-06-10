@@ -7,7 +7,10 @@
     "test": "hardhat test",
     "build": "hardhat compile",
     "export:abi": "hardhat compile && node scripts/export-abi.js",
-    "api": "node apps/api/server.js"
+    "api": "node apps/api/server.js",
+    "web:test": "vitest run apps/web/src/App.test.jsx",
+    "web:build": "vite build",
+    "web:dev": "vite --host 0.0.0.0"
   },
   "keywords": [],
   "author": "",
@@ -16,12 +19,20 @@
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
     "@openzeppelin/contracts": "^5.0.2",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@vitejs/plugin-react": "^4.7.0",
     "cors": "^2.8.6",
     "dotenv": "^16.6.1",
     "express": "^4.22.2",
     "hardhat": "^2.22.19",
+    "jsdom": "^25.0.1",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
     "supertest": "^7.2.2",
     "viem": "^2.52.2",
+    "vite": "^6.4.3",
+    "vitest": "^2.1.9",
     "zod": "^3.25.76"
   },
   "dependencies": {
