@@ -1,6 +1,6 @@
 # Chancy
 
-Commit-reveal block game for Base.
+Commit-reveal-style block game for Base, now using **Pyth Entropy** for per-player board generation.
 
 ## Current scope
 
@@ -12,6 +12,39 @@ This repo starts with the disposable full-test contract:
 
 Production will use a fresh main contract deployed with the real project token.
 
+## Randomness / board generation
+
+Chancy does **not** use one shared hidden board per session.
+
+Correct flow:
+
+```text
+host creates session with difficulty
+→ player joins session
+→ join transfers fixed game token entry amount
+→ join requests Pyth Entropy randomness
+→ Pyth Entropy callback returns random number
+→ contract derives that player's 64-block board
+→ player clicks tiles against their own board
+```
+
+Storage shape:
+
+```text
+sessionId + player => PlayerGame
+```
+
+`PlayerGame` tracks:
+
+- joined
+- boardReady
+- Pyth Entropy sequence number
+- bomb mask
+- prize mask
+- clicked mask
+- bombs hit
+- prizes found
+
 ## Rules
 
 - 64 hidden blocks.
@@ -21,7 +54,21 @@ Production will use a fresh main contract deployed with the real project token.
   - Normal: 7 bombs / 2 prizes
   - Hardcore: 10 bombs / 1 prize
 - Duplicate tile clicks are rejected.
+- Player cannot click until their Pyth Entropy board is ready.
 - Token selection is not a host/session parameter.
+
+## Pyth Entropy integration
+
+Docs: https://docs.pyth.network/entropy/generate-random-numbers-evm
+
+The contract uses:
+
+- `IEntropyV2.getFeeV2(provider, gasLimit)`
+- `IEntropyV2.requestV2(provider, userRandomNumber, gasLimit)`
+- `IEntropyConsumer._entropyCallback(...)`
+- internal `entropyCallback(...)` to derive the board
+
+Tests use `contracts/test/MockEntropy.sol` to simulate the Pyth callback.
 
 ## Commands
 
