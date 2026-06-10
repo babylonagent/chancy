@@ -65,6 +65,10 @@ function createApp({ contractAddress = process.env.CHANCY_CONTRACT_ADDRESS || DE
   const contract = addressSchema.parse(contractAddress);
   const app = express();
 
+  app.use((req, _res, next) => {
+    if (req.url.startsWith("/api/")) req.url = req.url.slice(4);
+    next();
+  });
   app.use(cors());
   app.use(express.json());
 

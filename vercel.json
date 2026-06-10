@@ -5,10 +5,13 @@
   "functions": {
     "api/index.js": {
       "includeFiles": "artifacts/contracts/ChancyGame.sol/ChancyGame.json"
+    },
+    "api/[...path].js": {
+      "includeFiles": "artifacts/contracts/ChancyGame.sol/ChancyGame.json"
     }
   },
   "rewrites": [
-    { "source": "/health", "destination": "/api" },
+    { "source": "/health", "destination": "/api/health" },
     { "source": "/tx/(.*)", "destination": "/api/tx/$1" },
     { "source": "/read/(.*)", "destination": "/api/read/$1" }
   ]
