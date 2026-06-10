@@ -3,10 +3,7 @@
   "buildCommand": "npm run export:abi && npm run web:build",
   "outputDirectory": "dist/web",
   "functions": {
-    "api/index.js": {
-      "includeFiles": "artifacts/contracts/ChancyGame.sol/ChancyGame.json"
-    },
-    "api/[...path].js": {
+    "api/**/*.js": {
       "includeFiles": "artifacts/contracts/ChancyGame.sol/ChancyGame.json"
     }
   },
