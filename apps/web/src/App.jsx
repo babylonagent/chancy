@@ -33,6 +33,7 @@ function shortAddress(address) {
 
 export default function App() {
   const [health, setHealth] = useState('checking');
+  const [contractAddress, setContractAddress] = useState('');
   const [difficulty, setDifficulty] = useState('Normal');
   const [sessionId, setSessionId] = useState('1');
   const [entryAmount, setEntryAmount] = useState('10000000000000000000');
@@ -44,11 +45,15 @@ export default function App() {
   const [chainId, setChainId] = useState('');
   const [payload, setPayload] = useState(null);
   const [execution, setExecution] = useState(null);
+  const [walletTestMode, setWalletTestMode] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
     getJson('/health')
-      .then((data) => setHealth(data.ok ? 'online' : 'offline'))
+      .then((data) => {
+        setHealth(data.ok ? 'online' : 'offline');
+        setContractAddress(data.contractAddress || '');
+      })
       .catch(() => setHealth('offline'));
   }, []);
 
@@ -121,9 +126,12 @@ export default function App() {
       setWallet(from);
       setPlayer(from);
 
-      if (payload.decodeAs) {
-        const result = await provider.request({ method: 'eth_call', params: [{ to: payload.to, data: payload.data }, 'latest'] });
-        setExecution({ kind: 'read', decodeAs: payload.decodeAs, result });
+      if (payload.decodeAs || walletTestMode) {
+        const result = await provider.request({
+          method: 'eth_call',
+          params: [{ from, to: payload.to, data: payload.data, value: `0x${BigInt(payload.value || '0').toString(16)}` }, 'latest'],
+        });
+        setExecution({ kind: payload.decodeAs ? 'read' : 'simulation', decodeAs: payload.decodeAs, result });
         return;
       }
 
@@ -147,6 +155,7 @@ export default function App() {
         </div>
         <div className="top-actions">
           <div className={`status ${health}`}>API {health}</div>
+          {contractAddress && <div className="status contract">Contract {shortAddress(contractAddress)}</div>}
           <button className="wallet-button" onClick={connectWallet}>{walletReady ? shortAddress(wallet) : 'Connect wallet'}</button>
           {walletReady && !onBase && <button className="wallet-button warning" onClick={switchToBase}>Switch to Base</button>}
         </div>
@@ -197,7 +206,11 @@ export default function App() {
         <section className="panel payload-panel">
           <div className="panel-head">
             <h2>Payload</h2>
-            <button className="execute-button" disabled={!payload} onClick={executePayload}>{payload?.decodeAs ? 'Run wallet read' : 'Send with wallet'}</button>
+            <label className="test-mode">
+              <input type="checkbox" checked={walletTestMode} onChange={(event) => setWalletTestMode(event.target.checked)} />
+              Wallet test mode: simulate writes with eth_call
+            </label>
+            <button className="execute-button" disabled={!payload} onClick={executePayload}>{payload?.decodeAs ? 'Run wallet read' : walletTestMode ? 'Simulate with wallet' : 'Send with wallet'}</button>
           </div>
           {error && <pre className="error">{error}</pre>}
           {payload ? <pre>{JSON.stringify(payload, null, 2)}</pre> : <p className="muted">No payload yet. Build a transaction or read call.</p>}

@@ -116,7 +116,7 @@ Each transaction endpoint returns:
 
 ## Web client
 
-The web client provides an 8×8 grid, API-backed payload builder controls, and injected wallet execution.
+The web client provides an 8×8 grid, API-backed payload builder controls, injected wallet execution, and a Vercel-ready preview deployment. The preview API is served by the same app through serverless `/tx/*`, `/read/*`, and `/health` routes.
 
 ```bash
 npm run web:dev
@@ -127,11 +127,31 @@ npm run web:test
 Capabilities:
 
 - Connect an injected Base-compatible wallet.
+- Show API health and the configured Chancy contract address.
 - Build create/fund/join/click/claim transaction payloads.
 - Send built transaction payloads through the connected wallet.
+- Keep wallet test mode enabled by default to simulate write payloads with `eth_call` before any real send.
 - Build session/player/claimable/next-session read payloads.
 - Run built read payloads with `eth_call` through the wallet provider.
 - No private keys in UI.
+
+## Preview deployment
+
+The Vercel preview uses `vercel.json` to build the web app and expose the Express transaction builder as serverless routes.
+
+Required preview environment variable:
+
+```text
+CHANCY_CONTRACT_ADDRESS=0x...
+```
+
+Deploy preview:
+
+```bash
+vercel deploy --prod
+```
+
+Do not commit RPC URLs, API keys, private keys, or token launch secrets. The browser wallet supplies the active Base RPC for reads and sends.
 
 ## Deployment
 

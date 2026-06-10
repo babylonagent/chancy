@@ -31,6 +31,8 @@ h1 { margin: 0; font-size: clamp(44px, 8vw, 96px); line-height: .85; letter-spac
 .panel h2 { margin: 0 0 14px; font-size: 16px; letter-spacing: -.02em; }
 .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; color: #9b927f; margin-bottom: 14px; }
 .panel-head h2 { margin: 0; }
+.test-mode { display: flex; align-items: center; gap: 8px; text-transform: none; letter-spacing: 0; }
+.test-mode input { width: auto; }
 .controls { display: grid; gap: 10px; }
 label { display: grid; gap: 6px; color: #9b927f; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
 input, select { width: 100%; border: 1px solid #363024; background: #0b0a08; color: #f5f2e8; border-radius: 12px; padding: 10px 12px; outline: none; }

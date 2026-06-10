@@ -1,0 +1,15 @@
+{
+  "version": 2,
+  "buildCommand": "npm run export:abi && npm run web:build",
+  "outputDirectory": "dist/web",
+  "functions": {
+    "api/index.js": {
+      "includeFiles": "artifacts/contracts/ChancyGame.sol/ChancyGame.json"
+    }
+  },
+  "rewrites": [
+    { "source": "/health", "destination": "/api" },
+    { "source": "/tx/(.*)", "destination": "/api/tx/$1" },
+    { "source": "/read/(.*)", "destination": "/api/read/$1" }
+  ]
+}

@@ -11,7 +11,7 @@ describe('Chancy web client', () => {
   beforeEach(() => {
     global.fetch = vi.fn(async (url, options = {}) => {
       if (url === '/health') {
-        return Response.json({ ok: true, service: 'chancy-api' });
+        return Response.json({ ok: true, service: 'chancy-api', contractAddress: txPayload.to });
       }
       if (url.startsWith('/tx/')) {
         return Response.json({ ...txPayload, route: url, body: JSON.parse(options.body || '{}') });
@@ -43,6 +43,7 @@ describe('Chancy web client', () => {
     expect(screen.getAllByRole('button', { name: /tile/i })).toHaveLength(64);
     expect(screen.getByLabelText(/difficulty/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /connect wallet/i })).toBeInTheDocument();
+    expect(await screen.findByText(/Contract 0x1111…1111/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /build create session tx/i })).toBeInTheDocument();
   });
 
@@ -79,11 +80,17 @@ describe('Chancy web client', () => {
     expect(await screen.findByText(/sessions/)).toBeInTheDocument();
   });
 
-  it('sends transactions and runs reads through the wallet provider', async () => {
+  it('simulates transactions, can send transactions when test mode is disabled, and runs reads through the wallet provider', async () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole('button', { name: /build create session tx/i }));
     await screen.findByText(/\/tx\/create-session/);
+    fireEvent.click(screen.getByRole('button', { name: /simulate with wallet/i }));
+
+    await waitFor(() => expect(window.ethereum.request).toHaveBeenCalledWith(expect.objectContaining({ method: 'eth_call' })));
+    expect(await screen.findByText(/simulation/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText(/wallet test mode/i));
     fireEvent.click(screen.getByRole('button', { name: /send with wallet/i }));
 
     await waitFor(() => expect(window.ethereum.request).toHaveBeenCalledWith(expect.objectContaining({ method: 'eth_sendTransaction' })));
