@@ -41,18 +41,6 @@ Storage shape:
 sessionId + player => PlayerGame
 ```
 
-`PlayerGame` tracks:
-
-- joined
-- boardReady
-- gameOver
-- Pyth Entropy sequence number
-- bomb mask
-- prize mask
-- clicked mask
-- bombs hit
-- prizes found
-
 ## Rules
 
 - 64 hidden blocks.
@@ -63,10 +51,8 @@ sessionId + player => PlayerGame
   - Hardcore: 10 bombs / 1 prize
 - Duplicate tile clicks are rejected.
 - Player cannot click until their Pyth Entropy board is ready.
-- Bomb clicks increment `bombsHit`.
 - 3 bombs marks the player's game over and blocks further clicks.
-- Prize clicks increment `prizesFound` and accrue `rewardPerPrize` into claimable rewards.
-- Empty clicks only mark the tile as clicked.
+- Prize clicks accrue `rewardPerPrize` into claimable rewards.
 - Token selection is not a host/session parameter.
 
 ## Reward funding
@@ -78,8 +64,6 @@ totalRewardReserve = rewardPerPrize × prizeCount × maxPlayers
 ```
 
 Players cannot join until the host funds that reserve with `fundSessionRewards(...)`.
-
-This keeps reward claims covered before gameplay starts.
 
 ## Pyth Entropy integration
 
@@ -93,6 +77,36 @@ The contract uses:
 - internal `entropyCallback(...)` to derive the board
 
 Tests use `contracts/test/MockEntropy.sol` to simulate the Pyth callback.
+
+## Deployment
+
+Copy env template:
+
+```bash
+cp .env.example .env
+```
+
+Set:
+
+```text
+PRIVATE_KEY=
+BASE_RPC_URL=
+BASE_SEPOLIA_RPC_URL=
+CHANCY_GAME_TOKEN_ADDRESS=
+PYTH_ENTROPY_ADDRESS=
+```
+
+Deploy production-shaped contract:
+
+```bash
+npx hardhat run scripts/deploy-chancy-game.js --network baseSepolia
+```
+
+Local smoke deploy:
+
+```bash
+npx hardhat run scripts/smoke-local-deploy.js
+```
 
 ## Commands
 
