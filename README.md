@@ -1,16 +1,21 @@
 # Chancy
 
-Commit-reveal-style block game for Base, now using **Pyth Entropy** for per-player board generation.
+Commit-reveal-style block game for Base, using **Pyth Entropy** for per-player board generation.
 
-## Current scope
-
-This repo starts with the disposable full-test contract:
+## Contracts
 
 - `contracts/ChancyGameFixedTokenTestnet.sol`
-- Hardcoded temporary token CA: `0x3E1A6D23303bE04403BAdC8bFF348027148Fef27`
-- This contract is **test only** and must not be used as production deployment.
+  - Disposable full-test contract.
+  - Hardcoded temporary token CA: `0x3E1A6D23303bE04403BAdC8bFF348027148Fef27`.
+  - Not for production deployment.
 
-Production will use a fresh main contract deployed with the real project token.
+- `contracts/ChancyGame.sol`
+  - Production-shaped contract.
+  - Accepts `gameTokenAddress` and `entropyAddress` in the constructor.
+  - Deploy fresh with the real project token when ready.
+
+- `contracts/ChancyGameBase.sol`
+  - Shared game logic.
 
 ## Randomness / board generation
 
@@ -20,6 +25,7 @@ Correct flow:
 
 ```text
 host creates session with difficulty
+→ host funds max prize exposure
 → player joins session
 → join transfers fixed game token entry amount
 → join requests Pyth Entropy randomness
@@ -62,6 +68,18 @@ sessionId + player => PlayerGame
 - Prize clicks increment `prizesFound` and accrue `rewardPerPrize` into claimable rewards.
 - Empty clicks only mark the tile as clicked.
 - Token selection is not a host/session parameter.
+
+## Reward funding
+
+Sessions calculate maximum reward exposure at creation:
+
+```text
+totalRewardReserve = rewardPerPrize × prizeCount × maxPlayers
+```
+
+Players cannot join until the host funds that reserve with `fundSessionRewards(...)`.
+
+This keeps reward claims covered before gameplay starts.
 
 ## Pyth Entropy integration
 

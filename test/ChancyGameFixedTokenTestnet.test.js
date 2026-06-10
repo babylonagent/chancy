@@ -62,13 +62,23 @@ describe("ChancyGameFixedTokenTestnet", function () {
     return { owner, entropyProvider, host, player, otherPlayer, token, entropy, chancy };
   }
 
-  async function createSession(chancy, host, difficulty = Difficulty.Normal) {
-    return chancy.connect(host).createSession(
+  async function createSession(chancy, host, difficulty = Difficulty.Normal, maxPlayers = 4) {
+    const tx = await chancy.connect(host).createSession(
       difficulty,
       ethers.parseEther("10"),
-      4,
+      maxPlayers,
       ethers.parseEther("2")
     );
+    await tx.wait();
+    return 1;
+  }
+
+  async function createFundedSession({ chancy, token, host }, difficulty = Difficulty.Normal, maxPlayers = 4) {
+    const sessionId = await createSession(chancy, host, difficulty, maxPlayers);
+    const session = await chancy.sessions(sessionId);
+    await token.connect(host).transfer(await chancy.getAddress(), session.totalRewardReserve);
+    await chancy.connect(host).fundSessionRewards(sessionId, session.totalRewardReserve);
+    return sessionId;
   }
 
   async function joinAndReveal({ chancy, entropy, entropyProvider, player }, sessionId, label) {
@@ -93,7 +103,12 @@ describe("ChancyGameFixedTokenTestnet", function () {
   it("lets host create an Easy session with fixed bomb/prize config", async function () {
     const { host, chancy } = await deployFixture();
 
-    await expect(createSession(chancy, host, Difficulty.Easy))
+    await expect(chancy.connect(host).createSession(
+      Difficulty.Easy,
+      ethers.parseEther("10"),
+      4,
+      ethers.parseEther("2")
+    ))
       .to.emit(chancy, "SessionCreated")
       .withArgs(1, host.address, Difficulty.Easy, 5, 3);
 
@@ -101,12 +116,35 @@ describe("ChancyGameFixedTokenTestnet", function () {
     expect(session.host).to.equal(host.address);
     expect(session.bombCount).to.equal(5);
     expect(session.prizeCount).to.equal(3);
+    expect(session.totalRewardReserve).to.equal(ethers.parseEther("24"));
+  });
+
+  it("requires host-funded prize reserve before players can join", async function () {
+    const { host, player, chancy } = await deployFixture();
+    await createSession(chancy, host, Difficulty.Normal);
+
+    await expect(chancy.connect(player).joinSession(1, userRandom("player-seed")))
+      .to.be.revertedWith("SESSION_REWARDS_NOT_FUNDED");
+  });
+
+  it("lets the host fund exact session reward exposure", async function () {
+    const { host, token, chancy } = await deployFixture();
+    await createSession(chancy, host, Difficulty.Normal);
+    const session = await chancy.sessions(1);
+
+    await token.connect(host).transfer(await chancy.getAddress(), session.totalRewardReserve);
+    await expect(chancy.connect(host).fundSessionRewards(1, session.totalRewardReserve))
+      .to.emit(chancy, "SessionRewardsFunded")
+      .withArgs(1, host.address, session.totalRewardReserve);
+
+    const funded = await chancy.sessions(1);
+    expect(funded.rewardReserveFunded).to.equal(true);
   });
 
   it("transfers entry token and requests Pyth Entropy when a player joins", async function () {
     const { host, player, token, entropyProvider, chancy } = await deployFixture();
     const entryAmount = ethers.parseEther("10");
-    await createSession(chancy, host, Difficulty.Normal);
+    await createFundedSession({ chancy, token, host }, Difficulty.Normal);
 
     await expect(chancy.connect(player).joinSession(1, userRandom("player-seed")))
       .to.emit(chancy, "PlayerJoined")
@@ -118,12 +156,12 @@ describe("ChancyGameFixedTokenTestnet", function () {
     expect(game.joined).to.equal(true);
     expect(game.boardReady).to.equal(false);
     expect(game.entropySequenceNumber).to.equal(1);
-    expect(await token.balanceOf(await chancy.getAddress())).to.equal(entryAmount);
+    expect(await token.balanceOf(await chancy.getAddress())).to.equal(entryAmount + ethers.parseEther("16"));
   });
 
   it("builds an isolated per-player board after Pyth Entropy callback", async function () {
-    const { host, player, otherPlayer, entropy, entropyProvider, chancy } = await deployFixture();
-    await createSession(chancy, host, Difficulty.Normal);
+    const { host, player, otherPlayer, token, entropy, entropyProvider, chancy } = await deployFixture();
+    await createFundedSession({ chancy, token, host }, Difficulty.Normal);
 
     await joinAndReveal({ chancy, entropy, entropyProvider, player }, 1, "player-one");
     await joinAndReveal({ chancy, entropy, entropyProvider, player: otherPlayer }, 1, "player-two");
@@ -141,16 +179,16 @@ describe("ChancyGameFixedTokenTestnet", function () {
   });
 
   it("prevents tile clicks before the player entropy board is ready", async function () {
-    const { host, player, chancy } = await deployFixture();
-    await createSession(chancy, host, Difficulty.Hardcore);
+    const { host, player, token, chancy } = await deployFixture();
+    await createFundedSession({ chancy, token, host }, Difficulty.Hardcore);
     await chancy.connect(player).joinSession(1, userRandom("player-seed"));
 
     await expect(chancy.connect(player).clickTile(1, 7)).to.be.revertedWith("BOARD_NOT_READY");
   });
 
   it("rejects duplicate tile clicks after board readiness", async function () {
-    const { host, player, entropy, entropyProvider, chancy } = await deployFixture();
-    await createSession(chancy, host, Difficulty.Hardcore);
+    const { host, player, token, entropy, entropyProvider, chancy } = await deployFixture();
+    await createFundedSession({ chancy, token, host }, Difficulty.Hardcore);
     await joinAndReveal({ chancy, entropy, entropyProvider, player }, 1, "player-one");
 
     await expect(chancy.connect(player).clickTile(1, 7))
@@ -161,8 +199,8 @@ describe("ChancyGameFixedTokenTestnet", function () {
   });
 
   it("resolves bomb, prize, and empty outcomes from the player board", async function () {
-    const { host, player, entropy, entropyProvider, chancy } = await deployFixture();
-    await createSession(chancy, host, Difficulty.Normal);
+    const { host, player, token, entropy, entropyProvider, chancy } = await deployFixture();
+    await createFundedSession({ chancy, token, host }, Difficulty.Normal);
     await joinAndReveal({ chancy, entropy, entropyProvider, player }, 1, "player-one");
 
     const game = await chancy.playerGames(1, player.address);
@@ -186,8 +224,8 @@ describe("ChancyGameFixedTokenTestnet", function () {
   });
 
   it("marks a player game over after 3 bombs", async function () {
-    const { host, player, entropy, entropyProvider, chancy } = await deployFixture();
-    await createSession(chancy, host, Difficulty.Hardcore);
+    const { host, player, token, entropy, entropyProvider, chancy } = await deployFixture();
+    await createFundedSession({ chancy, token, host }, Difficulty.Hardcore);
     await joinAndReveal({ chancy, entropy, entropyProvider, player }, 1, "player-one");
 
     const game = await chancy.playerGames(1, player.address);
@@ -209,8 +247,7 @@ describe("ChancyGameFixedTokenTestnet", function () {
 
   it("accrues and claims rewardPerPrize for prize hits", async function () {
     const { host, player, token, entropy, entropyProvider, chancy } = await deployFixture();
-    await createSession(chancy, host, Difficulty.Normal);
-    await token.connect(host).transfer(await chancy.getAddress(), ethers.parseEther("20"));
+    await createFundedSession({ chancy, token, host }, Difficulty.Normal);
     await joinAndReveal({ chancy, entropy, entropyProvider, player }, 1, "player-one");
 
     const game = await chancy.playerGames(1, player.address);
@@ -227,5 +264,17 @@ describe("ChancyGameFixedTokenTestnet", function () {
 
     expect(after - before).to.equal(ethers.parseEther("2"));
     expect(await chancy.claimableRewards(player.address)).to.equal(0);
+  });
+
+  it("rejects full sessions, double joins, invalid tiles, and empty reward claims", async function () {
+    const { host, player, otherPlayer, token, entropy, entropyProvider, chancy } = await deployFixture();
+    await createFundedSession({ chancy, token, host }, Difficulty.Normal, 1);
+
+    await joinAndReveal({ chancy, entropy, entropyProvider, player }, 1, "player-one");
+
+    await expect(chancy.connect(player).joinSession(1, userRandom("again"))).to.be.revertedWith("ALREADY_JOINED");
+    await expect(chancy.connect(otherPlayer).joinSession(1, userRandom("other"))).to.be.revertedWith("SESSION_FULL");
+    await expect(chancy.connect(player).clickTile(1, 64)).to.be.revertedWith("INVALID_TILE");
+    await expect(chancy.connect(otherPlayer).claimRewards()).to.be.revertedWith("NO_REWARDS");
   });
 });
