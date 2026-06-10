@@ -78,6 +78,34 @@ The contract uses:
 
 Tests use `contracts/test/MockEntropy.sol` to simulate the Pyth callback.
 
+## Agent/API transaction builder
+
+The API builds unsigned transaction payloads for wallets or agents.
+
+```bash
+npm run export:abi
+CHANCY_CONTRACT_ADDRESS=0x... npm run api
+```
+
+Endpoints:
+
+- `GET /health`
+- `POST /tx/create-session`
+- `POST /tx/fund-session-rewards`
+- `POST /tx/join-session`
+- `POST /tx/click-tile`
+- `POST /tx/claim-rewards`
+
+Each transaction endpoint returns:
+
+```json
+{
+  "to": "0x...",
+  "data": "0x...",
+  "value": "0"
+}
+```
+
 ## Deployment
 
 Copy env template:
@@ -94,6 +122,7 @@ BASE_RPC_URL=
 BASE_SEPOLIA_RPC_URL=
 CHANCY_GAME_TOKEN_ADDRESS=
 PYTH_ENTROPY_ADDRESS=
+CHANCY_CONTRACT_ADDRESS=
 ```
 
 Deploy production-shaped contract:
@@ -114,4 +143,5 @@ npx hardhat run scripts/smoke-local-deploy.js
 npm install
 npm test
 npm run build
+npm run export:abi
 ```

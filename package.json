@@ -5,7 +5,9 @@
   "main": "index.js",
   "scripts": {
     "test": "hardhat test",
-    "build": "hardhat compile"
+    "build": "hardhat compile",
+    "export:abi": "hardhat compile && node scripts/export-abi.js",
+    "api": "node apps/api/server.js"
   },
   "keywords": [],
   "author": "",
@@ -14,8 +16,13 @@
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
     "@openzeppelin/contracts": "^5.0.2",
+    "cors": "^2.8.6",
     "dotenv": "^16.6.1",
-    "hardhat": "^2.22.19"
+    "express": "^4.22.2",
+    "hardhat": "^2.22.19",
+    "supertest": "^7.2.2",
+    "viem": "^2.52.2",
+    "zod": "^3.25.76"
   },
   "dependencies": {
     "@pythnetwork/entropy-sdk-solidity": "^2.2.1"
