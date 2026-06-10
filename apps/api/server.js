@@ -2,9 +2,8 @@ const express = require("express");
 const cors = require("cors");
 const { z } = require("zod");
 const { encodeFunctionData } = require("viem");
-const chancyArtifact = require("../../artifacts/contracts/ChancyGame.sol/ChancyGame.json");
-
-const chancyAbi = chancyArtifact.abi;
+const chancyAbiJson = require("../../abi/ChancyGame.json");
+const chancyAbi = chancyAbiJson.abi || chancyAbiJson;
 
 const difficultyMap = {
   Easy: 0,
