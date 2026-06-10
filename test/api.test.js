@@ -15,6 +15,14 @@ describe("agent API", function () {
     expect(res.body).to.deep.equal({ ok: true, service: "chancy-api", contractAddress: CONTRACT });
   });
 
+  it("supports Vercel /api-prefixed health routing", async function () {
+    const app = createApp({ contractAddress: CONTRACT });
+
+    const res = await request(app).get("/api/health").expect(200);
+
+    expect(res.body).to.deep.equal({ ok: true, service: "chancy-api", contractAddress: CONTRACT });
+  });
+
   it("builds a createSession transaction", async function () {
     const app = createApp({ contractAddress: CONTRACT });
 
