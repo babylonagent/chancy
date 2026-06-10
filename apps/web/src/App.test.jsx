@@ -5,6 +5,7 @@ import '@testing-library/jest-dom/vitest';
 import App from './App.jsx';
 
 const txPayload = { to: '0x1111111111111111111111111111111111111111', data: '0x1234', value: '0' };
+const walletAddress = '0x9999999999999999999999999999999999999999';
 
 describe('Chancy web client', () => {
   beforeEach(() => {
@@ -20,15 +21,38 @@ describe('Chancy web client', () => {
       }
       return new Response('not found', { status: 404 });
     });
+
+    window.ethereum = {
+      request: vi.fn(async ({ method }) => {
+        if (method === 'eth_accounts') return [];
+        if (method === 'eth_requestAccounts') return [walletAddress];
+        if (method === 'eth_chainId') return '0x2105';
+        if (method === 'eth_sendTransaction') return '0xabc';
+        if (method === 'eth_call') return '0x0000000000000000000000000000000000000000000000000000000000000005';
+        return null;
+      }),
+      on: vi.fn(),
+      removeListener: vi.fn(),
+    };
   });
 
-  it('renders 64 board tiles and controls', async () => {
+  it('renders 64 board tiles, wallet action, and controls', async () => {
     render(<App />);
 
     expect(await screen.findByText('Chancy')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: /tile/i })).toHaveLength(64);
     expect(screen.getByLabelText(/difficulty/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /connect wallet/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /build create session tx/i })).toBeInTheDocument();
+  });
+
+  it('connects an injected wallet and uses it as the player address', async () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: /connect wallet/i }));
+
+    expect(await screen.findByRole('button', { name: /0x9999…9999/i })).toBeInTheDocument();
+    expect(screen.getByDisplayValue(walletAddress)).toBeInTheDocument();
   });
 
   it('builds create-session and click-tile transaction payloads from the API', async () => {
@@ -42,13 +66,34 @@ describe('Chancy web client', () => {
     expect(await screen.findByText(/\/tx\/click-tile/)).toBeInTheDocument();
   });
 
-  it('builds join and read payloads', async () => {
+  it('builds join, claim, and read payloads', async () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole('button', { name: /build join tx/i }));
     expect(await screen.findByText(/\/tx\/join-session/)).toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole('button', { name: /build claim tx/i }));
+    expect(await screen.findByText(/\/tx\/claim-rewards/)).toBeInTheDocument();
+
     fireEvent.click(screen.getByRole('button', { name: /build session read/i }));
     expect(await screen.findByText(/sessions/)).toBeInTheDocument();
+  });
+
+  it('sends transactions and runs reads through the wallet provider', async () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: /build create session tx/i }));
+    await screen.findByText(/\/tx\/create-session/);
+    fireEvent.click(screen.getByRole('button', { name: /send with wallet/i }));
+
+    await waitFor(() => expect(window.ethereum.request).toHaveBeenCalledWith(expect.objectContaining({ method: 'eth_sendTransaction' })));
+    expect(await screen.findByText(/0xabc/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /build session read/i }));
+    await screen.findByText(/sessions/);
+    fireEvent.click(screen.getByRole('button', { name: /run wallet read/i }));
+
+    await waitFor(() => expect(window.ethereum.request).toHaveBeenCalledWith(expect.objectContaining({ method: 'eth_call' })));
+    expect(await screen.findByText(/0005/)).toBeInTheDocument();
   });
 });
