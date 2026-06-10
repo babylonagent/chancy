@@ -26,6 +26,7 @@ host creates session with difficulty
 → Pyth Entropy callback returns random number
 → contract derives that player's 64-block board
 → player clicks tiles against their own board
+→ bomb/prize/empty outcome is resolved
 ```
 
 Storage shape:
@@ -38,6 +39,7 @@ sessionId + player => PlayerGame
 
 - joined
 - boardReady
+- gameOver
 - Pyth Entropy sequence number
 - bomb mask
 - prize mask
@@ -55,6 +57,10 @@ sessionId + player => PlayerGame
   - Hardcore: 10 bombs / 1 prize
 - Duplicate tile clicks are rejected.
 - Player cannot click until their Pyth Entropy board is ready.
+- Bomb clicks increment `bombsHit`.
+- 3 bombs marks the player's game over and blocks further clicks.
+- Prize clicks increment `prizesFound` and accrue `rewardPerPrize` into claimable rewards.
+- Empty clicks only mark the tile as clicked.
 - Token selection is not a host/session parameter.
 
 ## Pyth Entropy integration
