@@ -59,7 +59,9 @@ function validateParams(schema, handler) {
   };
 }
 
-function createApp({ contractAddress = process.env.CHANCY_CONTRACT_ADDRESS } = {}) {
+const DEFAULT_CONTRACT_ADDRESS = "0x0000000000000000000000000000000000000000";
+
+function createApp({ contractAddress = process.env.CHANCY_CONTRACT_ADDRESS || DEFAULT_CONTRACT_ADDRESS } = {}) {
   const contract = addressSchema.parse(contractAddress);
   const app = express();
 
@@ -67,7 +69,7 @@ function createApp({ contractAddress = process.env.CHANCY_CONTRACT_ADDRESS } = {
   app.use(express.json());
 
   app.get("/health", (_req, res) => {
-    res.json({ ok: true, service: "chancy-api" });
+    res.json({ ok: true, service: "chancy-api", contractAddress: contract });
   });
 
   app.post("/tx/create-session", validate(z.object({

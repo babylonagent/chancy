@@ -12,7 +12,7 @@ describe("agent API", function () {
 
     const res = await request(app).get("/health").expect(200);
 
-    expect(res.body).to.deep.equal({ ok: true, service: "chancy-api" });
+    expect(res.body).to.deep.equal({ ok: true, service: "chancy-api", contractAddress: CONTRACT });
   });
 
   it("builds a createSession transaction", async function () {
