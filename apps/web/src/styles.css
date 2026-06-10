@@ -40,9 +40,16 @@ input, select { width: 100%; border: 1px solid #363024; background: #0b0a08; col
 .controls button:hover, .tile:hover, .wallet-button:hover, .execute-button:hover { transform: translateY(-1px); }
 
 .board-panel { min-height: 620px; }
+.demo-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+.demo-actions button { border: 1px solid #5e4b21; background: #d0a941; color: #080806; border-radius: 14px; padding: 12px; font-weight: 800; }
+.score-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 10px 0; }
+.score-strip span { border: 1px solid #342e22; border-radius: 14px; background: #0b0a08; color: #d7cda7; padding: 10px; text-align: center; font-weight: 800; }
 .grid { display: grid; grid-template-columns: repeat(8, minmax(42px, 1fr)); gap: 8px; margin-top: 14px; }
 .tile { aspect-ratio: 1; border: 1px solid #342e22; border-radius: 16px; background: linear-gradient(180deg, #17140f, #0b0a08); color: #d7cda7; font-weight: 800; transition: transform .12s ease, border-color .12s ease; }
 .tile:hover { border-color: #d0a941; color: #fff3bd; }
+.tile.empty { background: #151515; color: #9b927f; }
+.tile.prize { background: radial-gradient(circle, #f3d36a 0, #8b681b 70%); color: #080806; border-color: #ffe28a; }
+.tile.bomb { background: radial-gradient(circle, #ff8b73 0, #612019 72%); color: #fff1ed; border-color: #ff9e8d; }
 .payload-panel { grid-column: 1 / -1; }
 pre { overflow: auto; max-height: 340px; margin: 0 0 12px; border-radius: 16px; background: #050504; border: 1px solid #292418; padding: 16px; color: #d7cda7; }
 .error { color: #ffb4a8; border-color: #8a3b31; }

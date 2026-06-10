@@ -4,7 +4,7 @@
   "outputDirectory": "dist/web",
   "functions": {
     "api/**/*.js": {
-      "includeFiles": "artifacts/contracts/ChancyGame.sol/ChancyGame.json"
+      "includeFiles": "apps/api/server.js"
     }
   },
   "rewrites": [
