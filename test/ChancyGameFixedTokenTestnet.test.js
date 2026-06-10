@@ -1,7 +1,7 @@
 const { expect } = require("chai");
 const { ethers, network } = require("hardhat");
 
-const TEMP_GAME_TOKEN = "0x3e1a6d23303be04403badc8bff348027148fef27";
+const TEMP_GAME_TOKEN="0x3e1a6d23303be04403badc8bff348027148fef27";
 
 const Difficulty = {
   Easy: 0,
@@ -9,8 +9,29 @@ const Difficulty = {
   Hardcore: 2,
 };
 
+const TileOutcome = {
+  Empty: 0,
+  Prize: 1,
+  Bomb: 2,
+};
+
 function userRandom(label) {
   return ethers.keccak256(ethers.toUtf8Bytes(label));
+}
+
+function firstTileFromMask(mask) {
+  for (let i = 0; i < 64; i++) {
+    if (((mask >> BigInt(i)) & 1n) === 1n) return i;
+  }
+  throw new Error("mask has no tile");
+}
+
+function firstEmptyTile(bombMask, prizeMask) {
+  const occupied = bombMask | prizeMask;
+  for (let i = 0; i < 64; i++) {
+    if (((occupied >> BigInt(i)) & 1n) === 0n) return i;
+  }
+  throw new Error("no empty tile");
 }
 
 async function placeMockTokenAtFixedAddress() {
@@ -33,7 +54,7 @@ describe("ChancyGameFixedTokenTestnet", function () {
     const Chancy = await ethers.getContractFactory("ChancyGameFixedTokenTestnet");
     const chancy = await Chancy.deploy(await entropy.getAddress());
 
-    for (const signer of [player, otherPlayer]) {
+    for (const signer of [host, player, otherPlayer]) {
       await token.mint(signer.address, ethers.parseEther("1000"));
       await token.connect(signer).approve(await chancy.getAddress(), ethers.parseEther("1000"));
     }
@@ -137,5 +158,74 @@ describe("ChancyGameFixedTokenTestnet", function () {
       .withArgs(1, player.address, 7);
 
     await expect(chancy.connect(player).clickTile(1, 7)).to.be.revertedWith("TILE_ALREADY_CLICKED");
+  });
+
+  it("resolves bomb, prize, and empty outcomes from the player board", async function () {
+    const { host, player, entropy, entropyProvider, chancy } = await deployFixture();
+    await createSession(chancy, host, Difficulty.Normal);
+    await joinAndReveal({ chancy, entropy, entropyProvider, player }, 1, "player-one");
+
+    const game = await chancy.playerGames(1, player.address);
+    const bombTile = firstTileFromMask(game.bombMask);
+    const prizeTile = firstTileFromMask(game.prizeMask);
+    const emptyTile = firstEmptyTile(game.bombMask, game.prizeMask);
+
+    await expect(chancy.connect(player).clickTile(1, bombTile))
+      .to.emit(chancy, "TileResolved")
+      .withArgs(1, player.address, bombTile, TileOutcome.Bomb);
+    await expect(chancy.connect(player).clickTile(1, prizeTile))
+      .to.emit(chancy, "TileResolved")
+      .withArgs(1, player.address, prizeTile, TileOutcome.Prize);
+    await expect(chancy.connect(player).clickTile(1, emptyTile))
+      .to.emit(chancy, "TileResolved")
+      .withArgs(1, player.address, emptyTile, TileOutcome.Empty);
+
+    const updated = await chancy.playerGames(1, player.address);
+    expect(updated.bombsHit).to.equal(1);
+    expect(updated.prizesFound).to.equal(1);
+  });
+
+  it("marks a player game over after 3 bombs", async function () {
+    const { host, player, entropy, entropyProvider, chancy } = await deployFixture();
+    await createSession(chancy, host, Difficulty.Hardcore);
+    await joinAndReveal({ chancy, entropy, entropyProvider, player }, 1, "player-one");
+
+    const game = await chancy.playerGames(1, player.address);
+    const bombTiles = [];
+    for (let i = 0; i < 64 && bombTiles.length < 3; i++) {
+      if (((game.bombMask >> BigInt(i)) & 1n) === 1n) bombTiles.push(i);
+    }
+
+    for (const tile of bombTiles) {
+      await chancy.connect(player).clickTile(1, tile);
+    }
+
+    const updated = await chancy.playerGames(1, player.address);
+    expect(updated.bombsHit).to.equal(3);
+    expect(updated.gameOver).to.equal(true);
+    await expect(chancy.connect(player).clickTile(1, firstEmptyTile(game.bombMask, game.prizeMask)))
+      .to.be.revertedWith("PLAYER_GAME_OVER");
+  });
+
+  it("accrues and claims rewardPerPrize for prize hits", async function () {
+    const { host, player, token, entropy, entropyProvider, chancy } = await deployFixture();
+    await createSession(chancy, host, Difficulty.Normal);
+    await token.connect(host).transfer(await chancy.getAddress(), ethers.parseEther("20"));
+    await joinAndReveal({ chancy, entropy, entropyProvider, player }, 1, "player-one");
+
+    const game = await chancy.playerGames(1, player.address);
+    const prizeTile = firstTileFromMask(game.prizeMask);
+
+    await chancy.connect(player).clickTile(1, prizeTile);
+    expect(await chancy.claimableRewards(player.address)).to.equal(ethers.parseEther("2"));
+
+    const before = await token.balanceOf(player.address);
+    await expect(chancy.connect(player).claimRewards())
+      .to.emit(chancy, "RewardsClaimed")
+      .withArgs(player.address, ethers.parseEther("2"));
+    const after = await token.balanceOf(player.address);
+
+    expect(after - before).to.equal(ethers.parseEther("2"));
+    expect(await chancy.claimableRewards(player.address)).to.equal(0);
   });
 });

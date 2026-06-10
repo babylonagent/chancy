@@ -13,6 +13,7 @@ contract ChancyGameFixedTokenTestnet is IEntropyConsumer {
 
     address public constant GAME_TOKEN = 0x3E1A6D23303bE04403BAdC8bFF348027148Fef27;
     uint32 public constant ENTROPY_CALLBACK_GAS_LIMIT = 350000;
+    uint8 public constant BOMBS_TO_GAME_OVER = 3;
 
     IEntropyV2 public immutable entropy;
 
@@ -43,6 +44,7 @@ contract ChancyGameFixedTokenTestnet is IEntropyConsumer {
     struct PlayerGame {
         bool joined;
         bool boardReady;
+        bool gameOver;
         uint64 entropySequenceNumber;
         uint64 bombMask;
         uint64 prizeMask;
@@ -57,6 +59,7 @@ contract ChancyGameFixedTokenTestnet is IEntropyConsumer {
     mapping(uint256 => mapping(address => PlayerGame)) public playerGames;
     mapping(uint64 => uint256) public entropySequenceToSessionId;
     mapping(uint64 => address) public entropySequenceToPlayer;
+    mapping(address => uint256) public claimableRewards;
 
     event SessionCreated(
         uint256 indexed sessionId,
@@ -70,6 +73,8 @@ contract ChancyGameFixedTokenTestnet is IEntropyConsumer {
     event PlayerBoardReady(uint256 indexed sessionId, address indexed player, uint64 bombMask, uint64 prizeMask);
     event TileClicked(uint256 indexed sessionId, address indexed player, uint8 tileIndex);
     event TileResolved(uint256 indexed sessionId, address indexed player, uint8 tileIndex, TileOutcome outcome);
+    event PlayerGameOver(uint256 indexed sessionId, address indexed player);
+    event RewardsClaimed(address indexed player, uint256 amount);
 
     constructor(address entropyAddress) {
         require(entropyAddress != address(0), "INVALID_ENTROPY");
@@ -139,6 +144,7 @@ contract ChancyGameFixedTokenTestnet is IEntropyConsumer {
         PlayerGame storage game = playerGames[sessionId][msg.sender];
         require(game.joined, "PLAYER_NOT_JOINED");
         require(game.boardReady, "BOARD_NOT_READY");
+        require(!game.gameOver, "PLAYER_GAME_OVER");
 
         uint64 tileBit = uint64(1) << tileIndex;
         require(game.clickedMask & tileBit == 0, "TILE_ALREADY_CLICKED");
@@ -149,13 +155,28 @@ contract ChancyGameFixedTokenTestnet is IEntropyConsumer {
         if (game.bombMask & tileBit != 0) {
             game.bombsHit += 1;
             outcome = TileOutcome.Bomb;
+            if (game.bombsHit >= BOMBS_TO_GAME_OVER) {
+                game.gameOver = true;
+                emit PlayerGameOver(sessionId, msg.sender);
+            }
         } else if (game.prizeMask & tileBit != 0) {
             game.prizesFound += 1;
+            claimableRewards[msg.sender] += session.rewardPerPrize;
             outcome = TileOutcome.Prize;
         }
 
         emit TileClicked(sessionId, msg.sender, tileIndex);
         emit TileResolved(sessionId, msg.sender, tileIndex, outcome);
+    }
+
+    function claimRewards() external {
+        uint256 amount = claimableRewards[msg.sender];
+        require(amount > 0, "NO_REWARDS");
+
+        claimableRewards[msg.sender] = 0;
+        IERC20(GAME_TOKEN).safeTransfer(msg.sender, amount);
+
+        emit RewardsClaimed(msg.sender, amount);
     }
 
     function entropyCallback(uint64 sequenceNumber, address, bytes32 randomNumber) internal override {
