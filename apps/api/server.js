@@ -20,6 +20,15 @@ function tx(to, data, value = "0") {
   return { to, data, value };
 }
 
+function readCall(to, functionName, args = []) {
+  return {
+    to,
+    data: encodeFunctionData({ abi: chancyAbi, functionName, args }),
+    value: "0",
+    decodeAs: functionName,
+  };
+}
+
 function validate(schema, handler) {
   return (req, res) => {
     const parsed = schema.safeParse(req.body || {});
@@ -31,6 +40,21 @@ function validate(schema, handler) {
       return res.json(handler(parsed.data));
     } catch (error) {
       return res.status(500).json({ error: "TX_BUILD_FAILED", message: error.message });
+    }
+  };
+}
+
+function validateParams(schema, handler) {
+  return (req, res) => {
+    const parsed = schema.safeParse(req.params || {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: "INVALID_PARAMS", details: parsed.error.flatten() });
+    }
+
+    try {
+      return res.json(handler(parsed.data));
+    } catch (error) {
+      return res.status(500).json({ error: "READ_BUILD_FAILED", message: error.message });
     }
   };
 }
@@ -91,6 +115,23 @@ function createApp({ contractAddress = process.env.CHANCY_CONTRACT_ADDRESS } = {
     args: [],
   }))));
 
+  app.get("/read/session/:sessionId", validateParams(z.object({
+    sessionId: uintString,
+  }), (params) => readCall(contract, "sessions", [BigInt(params.sessionId)])));
+
+  app.get("/read/player-game/:sessionId/:player", validateParams(z.object({
+    sessionId: uintString,
+    player: addressSchema,
+  }), (params) => readCall(contract, "playerGames", [BigInt(params.sessionId), params.player])));
+
+  app.get("/read/claimable-rewards/:player", validateParams(z.object({
+    player: addressSchema,
+  }), (params) => readCall(contract, "claimableRewards", [params.player])));
+
+  app.get("/read/next-session-id", (_req, res) => {
+    res.json(readCall(contract, "nextSessionId"));
+  });
+
   return app;
 }
 
@@ -106,4 +147,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { createApp, chancyAbi };
+module.exports = { createApp, chancyAbi, readCall };
