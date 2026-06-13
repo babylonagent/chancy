@@ -4,9 +4,9 @@ const { deployChancyGame } = require("./deploy-chancy-game");
 async function main() {
   const [deployer, entropyProvider] = await hre.ethers.getSigners();
 
-  const MockGameToken = await hre.ethers.getContractFactory("MockGameToken");
-  const token = await MockGameToken.deploy();
-  await token.waitForDeployment();
+  const MockUSDC = await hre.ethers.getContractFactory("MockUSDC");
+  const usdc = await MockUSDC.deploy();
+  await usdc.waitForDeployment();
 
   const MockEntropy = await hre.ethers.getContractFactory("MockEntropy");
   const entropy = await MockEntropy.deploy(entropyProvider.address);
@@ -14,14 +14,14 @@ async function main() {
 
   const deployment = await deployChancyGame({
     ethers: hre.ethers,
-    gameTokenAddress: await token.getAddress(),
     entropyAddress: await entropy.getAddress(),
+    usdcAddress: await usdc.getAddress(),
   });
 
-  const tokenOk = await deployment.contract.gameToken() === await token.getAddress();
+  const assetOk = await deployment.contract.isAssetAllowed(await usdc.getAddress());
   const entropyOk = await deployment.contract.entropy() === await entropy.getAddress();
 
-  if (!tokenOk || !entropyOk) {
+  if (!assetOk || !entropyOk) {
     throw new Error("Smoke verification failed");
   }
 
@@ -30,7 +30,7 @@ async function main() {
     network: hre.network.name,
     deployer: deployer.address,
     chancyGame: deployment.contractAddress,
-    gameToken: await token.getAddress(),
+    usdc: await usdc.getAddress(),
     entropy: await entropy.getAddress(),
   }, null, 2));
 }

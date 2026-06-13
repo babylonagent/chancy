@@ -8,19 +8,21 @@ function requireAddress(name, value) {
   return value;
 }
 
-async function deployChancyGame({ ethers, gameTokenAddress, entropyAddress }) {
-  const token = requireAddress("CHANCY_GAME_TOKEN_ADDRESS", gameTokenAddress);
+// Deploys ChancyGame. Sessions settle in native ETH or USDC; pass the USDC
+// token address (USDC on Base in production) and the Pyth Entropy address.
+async function deployChancyGame({ ethers, entropyAddress, usdcAddress }) {
   const entropy = requireAddress("PYTH_ENTROPY_ADDRESS", entropyAddress);
+  const usdc = requireAddress("CHANCY_USDC_ADDRESS", usdcAddress);
 
   const ChancyGame = await ethers.getContractFactory("ChancyGame");
-  const contract = await ChancyGame.deploy(token, entropy);
+  const contract = await ChancyGame.deploy(entropy, usdc);
   await contract.waitForDeployment();
 
   return {
     contract,
     contractAddress: await contract.getAddress(),
-    gameTokenAddress: token,
     entropyAddress: entropy,
+    usdcAddress: usdc,
   };
 }
 
@@ -28,15 +30,15 @@ async function main() {
   const hre = require("hardhat");
   const deployment = await deployChancyGame({
     ethers: hre.ethers,
-    gameTokenAddress: process.env.CHANCY_GAME_TOKEN_ADDRESS,
     entropyAddress: process.env.PYTH_ENTROPY_ADDRESS,
+    usdcAddress: process.env.CHANCY_USDC_ADDRESS,
   });
 
   console.log(JSON.stringify({
     contract: "ChancyGame",
     address: deployment.contractAddress,
-    gameTokenAddress: deployment.gameTokenAddress,
     entropyAddress: deployment.entropyAddress,
+    usdcAddress: deployment.usdcAddress,
     network: hre.network.name,
   }, null, 2));
 }

@@ -7,6 +7,11 @@ import {EntropyStructsV2} from "@pythnetwork/entropy-sdk-solidity/EntropyStructs
 
 contract MockEntropy is IEntropyV2 {
     address public defaultProvider;
+    uint128 public fee;
+
+    function setFee(uint128 fee_) external {
+        fee = fee_;
+    }
 
     mapping(address => EntropyStructsV2.ProviderInfo) public providers;
     mapping(address => mapping(uint64 => EntropyStructsV2.Request)) public requests;
@@ -103,15 +108,15 @@ contract MockEntropy is IEntropyV2 {
         return requests[provider][sequenceNumber];
     }
 
-    function getFeeV2() external pure returns (uint128 feeAmount) {
-        return 0;
+    function getFeeV2() external view returns (uint128 feeAmount) {
+        return fee;
     }
 
-    function getFeeV2(uint32) external pure returns (uint128 feeAmount) {
-        return 0;
+    function getFeeV2(uint32) external view returns (uint128 feeAmount) {
+        return fee;
     }
 
-    function getFeeV2(address, uint32) external pure returns (uint128 feeAmount) {
-        return 0;
+    function getFeeV2(address, uint32) external view returns (uint128 feeAmount) {
+        return fee;
     }
 }

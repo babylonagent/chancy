@@ -59,6 +59,7 @@ export default function App() {
   const [health, setHealth] = useState('checking');
   const [contractAddress, setContractAddress] = useState('');
   const [difficulty, setDifficulty] = useState('Normal');
+  const [currency, setCurrency] = useState('ETH');
   const [sessionId, setSessionId] = useState('1');
   const [entryAmount, setEntryAmount] = useState('10000000000000000000');
   const [maxPlayers, setMaxPlayers] = useState('4');
@@ -225,6 +226,13 @@ export default function App() {
               <option>Hardcore</option>
             </select>
           </label>
+          <label>
+            Currency
+            <select aria-label="currency" value={currency} onChange={(event) => setCurrency(event.target.value)}>
+              <option>ETH</option>
+              <option>USDC</option>
+            </select>
+          </label>
           <label>Session ID<input value={sessionId} onChange={(event) => setSessionId(event.target.value)} /></label>
           <label>Entry amount<input value={entryAmount} onChange={(event) => setEntryAmount(event.target.value)} /></label>
           <label>Max players<input value={maxPlayers} onChange={(event) => setMaxPlayers(event.target.value)} /></label>
@@ -232,13 +240,13 @@ export default function App() {
           <label>Entropy fee<input value={entropyFee} onChange={(event) => setEntropyFee(event.target.value)} /></label>
           <label>Player address<input value={player} onChange={(event) => setPlayer(event.target.value)} /></label>
 
-          <button onClick={() => run('/tx/create-session', () => postJson('/tx/create-session', { difficulty, entryAmount, maxPlayers, rewardPerPrize }))}>Build create session tx</button>
-          <button onClick={() => run('/tx/fund-session-rewards', () => postJson('/tx/fund-session-rewards', { sessionId, amount: String(BigInt(rewardPerPrize || '0') * BigInt(maxPlayers || '0') * 2n) }))}>Build fund tx</button>
-          <button onClick={() => run('/tx/join-session', () => postJson('/tx/join-session', { sessionId, userRandomNumber: DEFAULT_RANDOM, entropyFee }))}>Build join tx</button>
-          <button onClick={() => run('/tx/claim-rewards', () => postJson('/tx/claim-rewards', {}))}>Build claim tx</button>
+          <button onClick={() => run('/tx/create-session', () => postJson('/tx/create-session', { currency, difficulty, entryAmount, maxPlayers, rewardPerPrize }))}>Build create session tx</button>
+          <button onClick={() => run('/tx/fund-session-rewards', () => postJson('/tx/fund-session-rewards', { sessionId, currency, amount: String(BigInt(rewardPerPrize || '0') * BigInt(maxPlayers || '0') * 2n) }))}>Build fund tx</button>
+          <button onClick={() => run('/tx/join-session', () => postJson('/tx/join-session', { sessionId, currency, userRandomNumber: DEFAULT_RANDOM, entropyFee, entryAmount }))}>Build join tx</button>
+          <button onClick={() => run('/tx/claim-rewards', () => postJson('/tx/claim-rewards', { currency }))}>Build claim tx</button>
           <button onClick={() => run('/read/session', () => getJson(`/read/session/${sessionId}`))}>Build session read</button>
           <button onClick={() => run('/read/player-game', () => getJson(`/read/player-game/${sessionId}/${player}`))}>Build player read</button>
-          <button onClick={() => run('/read/claimable-rewards', () => getJson(`/read/claimable-rewards/${player}`))}>Build claimable read</button>
+          <button onClick={() => run('/read/claimable-rewards', () => getJson(`/read/claimable-rewards/${currency}/${player}`))}>Build claimable read</button>
           <button onClick={() => run('/read/next-session-id', () => getJson('/read/next-session-id'))}>Build next session read</button>
         </aside>
 

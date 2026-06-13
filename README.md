@@ -4,15 +4,12 @@ Commit-reveal-style block game for Base, using **Pyth Entropy** for per-player b
 
 ## Contracts
 
-- `contracts/ChancyGameFixedTokenTestnet.sol`
-  - Disposable full-test contract.
-  - Hardcoded temporary token CA: `0x3E1A6D23303bE04403BAdC8bFF348027148Fef27`.
-  - Not for production deployment.
-
 - `contracts/ChancyGame.sol`
-  - Production-shaped contract.
-  - Accepts `gameTokenAddress` and `entropyAddress` in the constructor.
-  - Deploy fresh with the real project token when ready.
+  - Production contract.
+  - Constructor: `(entropyAddress, initialAllowedAsset)`.
+  - Multi-asset by address: native ETH is `address(0)`; ERC20 settlement assets
+    (e.g. USDC) are allow-listed by the owner via `setAssetAllowed`. New assets
+    need no redeploy.
 
 - `contracts/ChancyGameBase.sol`
   - Shared game logic.
@@ -167,7 +164,7 @@ Set:
 PRIVATE_KEY=
 BASE_RPC_URL=
 BASE_SEPOLIA_RPC_URL=
-CHANCY_GAME_TOKEN_ADDRESS=
+CHANCY_USDC_ADDRESS=
 PYTH_ENTROPY_ADDRESS=
 CHANCY_CONTRACT_ADDRESS=
 ```

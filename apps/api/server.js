@@ -11,9 +11,17 @@ const difficultyMap = {
   Hardcore: 2,
 };
 
+// Settlement asset is an address: native ETH is the zero address, USDC (or any
+// allow-listed ERC20) is its token address. New assets need no API change.
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
 const addressSchema = z.string().regex(/^0x[0-9a-fA-F]{40}$/);
 const uintString = z.union([z.string().regex(/^\d+$/), z.number().int().nonnegative()]).transform(String);
 const bytes32Schema = z.string().regex(/^0x[0-9a-fA-F]{64}$/);
+
+function isNative(asset) {
+  return asset.toLowerCase() === ZERO_ADDRESS;
+}
 
 function tx(to, data, value = "0") {
   return { to, data, value };
@@ -76,6 +84,7 @@ function createApp({ contractAddress = process.env.CHANCY_CONTRACT_ADDRESS || DE
   });
 
   app.post("/tx/create-session", validate(z.object({
+    asset: addressSchema,
     difficulty: z.enum(["Easy", "Normal", "Hardcore"]),
     entryAmount: uintString,
     maxPlayers: uintString,
@@ -83,27 +92,41 @@ function createApp({ contractAddress = process.env.CHANCY_CONTRACT_ADDRESS || DE
   }), (body) => tx(contract, encodeFunctionData({
     abi: chancyAbi,
     functionName: "createSession",
-    args: [difficultyMap[body.difficulty], BigInt(body.entryAmount), BigInt(body.maxPlayers), BigInt(body.rewardPerPrize)],
+    args: [body.asset, difficultyMap[body.difficulty], BigInt(body.entryAmount), BigInt(body.maxPlayers), BigInt(body.rewardPerPrize)],
   }))));
 
   app.post("/tx/fund-session-rewards", validate(z.object({
     sessionId: uintString,
     amount: uintString,
-  }), (body) => tx(contract, encodeFunctionData({
-    abi: chancyAbi,
-    functionName: "fundSessionRewards",
-    args: [BigInt(body.sessionId), BigInt(body.amount)],
-  }))));
+    asset: addressSchema,
+  }), (body) => tx(
+    contract,
+    encodeFunctionData({
+      abi: chancyAbi,
+      functionName: "fundSessionRewards",
+      args: [BigInt(body.sessionId), BigInt(body.amount)],
+    }),
+    // ETH sessions fund the reserve with msg.value; ERC20 sessions pull via approval.
+    isNative(body.asset) ? body.amount : "0",
+  )));
 
   app.post("/tx/join-session", validate(z.object({
     sessionId: uintString,
     userRandomNumber: bytes32Schema,
     entropyFee: uintString.default("0"),
-  }), (body) => tx(contract, encodeFunctionData({
-    abi: chancyAbi,
-    functionName: "joinSession",
-    args: [BigInt(body.sessionId), body.userRandomNumber],
-  }), body.entropyFee)));
+    // For ETH sessions, include the entry amount so it is added to msg.value.
+    entryAmount: uintString.default("0"),
+    asset: addressSchema,
+  }), (body) => tx(
+    contract,
+    encodeFunctionData({
+      abi: chancyAbi,
+      functionName: "joinSession",
+      args: [BigInt(body.sessionId), body.userRandomNumber],
+    }),
+    // msg.value = entropy fee (+ entry amount when the session asset is ETH).
+    (BigInt(body.entropyFee) + (isNative(body.asset) ? BigInt(body.entryAmount) : 0n)).toString(),
+  )));
 
   app.post("/tx/click-tile", validate(z.object({
     sessionId: uintString,
@@ -114,10 +137,12 @@ function createApp({ contractAddress = process.env.CHANCY_CONTRACT_ADDRESS || DE
     args: [BigInt(body.sessionId), body.tileIndex],
   }))));
 
-  app.post("/tx/claim-rewards", validate(z.object({}), () => tx(contract, encodeFunctionData({
+  app.post("/tx/claim-rewards", validate(z.object({
+    asset: addressSchema,
+  }), (body) => tx(contract, encodeFunctionData({
     abi: chancyAbi,
     functionName: "claimRewards",
-    args: [],
+    args: [body.asset],
   }))));
 
   app.get("/read/session/:sessionId", validateParams(z.object({
@@ -129,9 +154,10 @@ function createApp({ contractAddress = process.env.CHANCY_CONTRACT_ADDRESS || DE
     player: addressSchema,
   }), (params) => readCall(contract, "playerGames", [BigInt(params.sessionId), params.player])));
 
-  app.get("/read/claimable-rewards/:player", validateParams(z.object({
+  app.get("/read/claimable-rewards/:player/:asset", validateParams(z.object({
     player: addressSchema,
-  }), (params) => readCall(contract, "claimableRewards", [params.player])));
+    asset: addressSchema,
+  }), (params) => readCall(contract, "claimableRewards", [params.player, params.asset])));
 
   app.get("/read/next-session-id", (_req, res) => {
     res.json(readCall(contract, "nextSessionId"));
