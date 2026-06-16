@@ -15,11 +15,13 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 
 .shell { width: min(1240px, calc(100vw - 32px)); margin: 0 auto; padding: 32px 0; }
 .hero { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; margin-bottom: 24px; }
+.brand-block { display: flex; align-items: center; gap: 18px; }
+.brand-logo { width: clamp(72px, 12vw, 132px); height: auto; filter: drop-shadow(0 18px 32px rgba(0,0,0,.4)); flex: 0 0 auto; }
 .eyebrow { margin: 0 0 8px; color: #c2a15a; text-transform: uppercase; letter-spacing: .18em; font-size: 12px; }
 h1 { margin: 0; font-size: clamp(44px, 8vw, 96px); line-height: .85; letter-spacing: -.07em; }
 .subtitle { max-width: 640px; color: #b9b2a2; font-size: 18px; line-height: 1.5; }
 .top-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
-.status, .wallet-button, .execute-button { border: 1px solid #3b3528; border-radius: 999px; padding: 10px 14px; color: #b9b2a2; background: #11100d; }
+.status, .wallet-button, .execute-button { border: 1px solid #3b3528; border-radius: 999px; padding: 10px 14px; color: #b9b2a2; background: #11100d; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
 .status.online { border-color: #6f9f5f; color: #c9f4b9; }
 .status.offline { border-color: #9f5f5f; color: #f4b9b9; }
 .wallet-button { color: #f5f2e8; }
@@ -37,6 +39,9 @@ h1 { margin: 0; font-size: clamp(44px, 8vw, 96px); line-height: .85; letter-spac
 label { display: grid; gap: 6px; color: #9b927f; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
 input, select { width: 100%; border: 1px solid #363024; background: #0b0a08; color: #f5f2e8; border-radius: 12px; padding: 10px 12px; outline: none; }
 .controls button { border: 1px solid #5e4b21; background: #d0a941; color: #080806; border-radius: 14px; padding: 12px; font-weight: 700; }
+.usdc-note { display: grid; gap: 4px; border: 1px solid #3b3528; background: #0b0a08; color: #b9b2a2; border-radius: 14px; padding: 12px; font-size: 13px; line-height: 1.35; }
+.usdc-note strong { color: #f5f2e8; }
+.swap-link { border-color: #d0a941; color: #080806; background: #d0a941; font-weight: 800; }
 .controls button:hover, .tile:hover, .wallet-button:hover, .execute-button:hover { transform: translateY(-1px); }
 
 .board-panel { min-height: 620px; }
@@ -58,6 +63,8 @@ pre { overflow: auto; max-height: 340px; margin: 0 0 12px; border-radius: 16px; 
 
 @media (max-width: 900px) {
   .hero, .layout { grid-template-columns: 1fr; display: grid; }
+  .brand-block { align-items: flex-start; }
+  .brand-logo { width: 82px; }
   .top-actions { justify-content: flex-start; }
   .board-panel { min-height: auto; }
 }

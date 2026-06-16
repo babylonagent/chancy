@@ -1,15 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import chancyLogo from './assets/chancy-logo.svg';
 
 const API = import.meta.env?.VITE_CHANCY_API_URL || '';
-const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 const BASE_USDC_ADDRESS = import.meta.env?.VITE_CHANCY_BASE_USDC_ADDRESS || '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 const BASE_SEPOLIA_USDC_ADDRESS = import.meta.env?.VITE_CHANCY_BASE_SEPOLIA_USDC_ADDRESS || '0x036cbd53842c5426634e7929541ec2318f3dcf7e';
 const DEFAULT_RANDOM = '0x1111111111111111111111111111111111111111111111111111111111111111';
 const BASE_CHAIN_ID = '0x2105';
 const BASE_SEPOLIA_CHAIN_ID = '0x14a34';
 const CHAIN_CONFIG = {
-  [BASE_CHAIN_ID]: { label: 'Base', usdc: BASE_USDC_ADDRESS },
-  [BASE_SEPOLIA_CHAIN_ID]: { label: 'Base Sepolia', usdc: BASE_SEPOLIA_USDC_ADDRESS },
+  [BASE_CHAIN_ID]: { label: 'Base', usdc: BASE_USDC_ADDRESS, swapUrl: 'https://app.uniswap.org/swap?chain=base&outputCurrency=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' },
+  [BASE_SEPOLIA_CHAIN_ID]: { label: 'Base Sepolia', usdc: BASE_SEPOLIA_USDC_ADDRESS, swapUrl: 'https://faucet.circle.com/' },
 };
 const DIFFICULTY_CONFIG = {
   Easy: { bombs: 5, prizes: 3 },
@@ -17,15 +17,21 @@ const DIFFICULTY_CONFIG = {
   Hardcore: { bombs: 10, prizes: 1 },
 };
 const TILE_HIDDEN = 'hidden';
+const USDC_DECIMALS = 1_000_000n;
+
+function usdcUnits(value) {
+  const clean = String(value || '0').trim();
+  if (!/^\d+(\.\d{0,6})?$/.test(clean)) return '0';
+  const [whole, fraction = ''] = clean.split('.');
+  return (BigInt(whole || '0') * USDC_DECIMALS + BigInt((fraction + '000000').slice(0, 6))).toString();
+}
 
 function makeDemoBoard(difficulty, seed) {
   const config = DIFFICULTY_CONFIG[difficulty];
   let state = Array.from(`${seed}:${difficulty}`).reduce((acc, char) => (acc * 31 + char.charCodeAt(0)) >>> 0, 2166136261);
   const used = new Set();
   const pick = () => {
-    do {
-      state = (state * 1664525 + 1013904223) >>> 0;
-    } while (used.has(state % 64));
+    do { state = (state * 1664525 + 1013904223) >>> 0; } while (used.has(state % 64));
     const tile = state % 64;
     used.add(tile);
     return tile;
@@ -37,11 +43,7 @@ function makeDemoBoard(difficulty, seed) {
 }
 
 async function postJson(path, body) {
-  const response = await fetch(`${API}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  const response = await fetch(`${API}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (!response.ok) throw new Error(await response.text());
   return response.json();
 }
@@ -62,11 +64,6 @@ function shortAddress(address) {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
 }
 
-function assetForCurrency(currency, chainId) {
-  if (currency === 'ETH') return ZERO_ADDRESS;
-  return CHAIN_CONFIG[chainId]?.usdc || BASE_SEPOLIA_USDC_ADDRESS;
-}
-
 function chainLabel(chainId) {
   return CHAIN_CONFIG[chainId]?.label || (chainId ? `Unsupported (${chainId})` : 'Not connected');
 }
@@ -75,11 +72,10 @@ export default function App() {
   const [health, setHealth] = useState('checking');
   const [contractAddress, setContractAddress] = useState('');
   const [difficulty, setDifficulty] = useState('Normal');
-  const [currency, setCurrency] = useState('ETH');
   const [sessionId, setSessionId] = useState('1');
-  const [entryAmount, setEntryAmount] = useState('10000000000000000000');
+  const [entryUsdc, setEntryUsdc] = useState('1');
   const [maxPlayers, setMaxPlayers] = useState('4');
-  const [rewardPerPrize, setRewardPerPrize] = useState('2000000000000000000');
+  const [rewardUsdc, setRewardUsdc] = useState('0.25');
   const [entropyFee, setEntropyFee] = useState('0');
   const [player, setPlayer] = useState('0x2222222222222222222222222222222222222222');
   const [wallet, setWallet] = useState('');
@@ -92,48 +88,32 @@ export default function App() {
   const [revealed, setRevealed] = useState(() => Array.from({ length: 64 }, () => TILE_HIDDEN));
   const [demoStatus, setDemoStatus] = useState({ joined: false, bombs: 0, prizes: 0, clicks: 0, gameOver: false, message: 'Start demo session, then join and reveal tiles.' });
 
-  useEffect(() => {
-    getJson('/health')
-      .then((data) => {
-        setHealth(data.ok ? 'online' : 'offline');
-        setContractAddress(data.contractAddress || '');
-      })
-      .catch(() => setHealth('offline'));
-  }, []);
+  useEffect(() => { getJson('/health').then((data) => { setHealth(data.ok ? 'online' : 'offline'); setContractAddress(data.contractAddress || ''); }).catch(() => setHealth('offline')); }, []);
 
   useEffect(() => {
     if (!window.ethereum) return undefined;
-
     const handleAccounts = (accounts) => setWallet(accounts?.[0] || '');
     const handleChain = (nextChainId) => setChainId(nextChainId || '');
-
     window.ethereum.request({ method: 'eth_accounts' }).then(handleAccounts).catch(() => {});
     window.ethereum.request({ method: 'eth_chainId' }).then(handleChain).catch(() => {});
     window.ethereum.on?.('accountsChanged', handleAccounts);
     window.ethereum.on?.('chainChanged', handleChain);
-
-    return () => {
-      window.ethereum.removeListener?.('accountsChanged', handleAccounts);
-      window.ethereum.removeListener?.('chainChanged', handleChain);
-    };
+    return () => { window.ethereum.removeListener?.('accountsChanged', handleAccounts); window.ethereum.removeListener?.('chainChanged', handleChain); };
   }, []);
 
   const tiles = useMemo(() => Array.from({ length: 64 }, (_, index) => index), []);
   const walletReady = Boolean(wallet);
   const onBase = chainId === BASE_CHAIN_ID || chainId === BASE_SEPOLIA_CHAIN_ID;
-  const selectedAsset = assetForCurrency(currency, chainId);
+  const selectedAsset = CHAIN_CONFIG[chainId]?.usdc || BASE_SEPOLIA_USDC_ADDRESS;
   const networkName = chainLabel(chainId);
-  const sessionReserve = String(BigInt(rewardPerPrize || '0') * BigInt(maxPlayers || '0') * BigInt(DIFFICULTY_CONFIG[difficulty].prizes));
+  const entryAmount = usdcUnits(entryUsdc);
+  const rewardPerPrize = usdcUnits(rewardUsdc);
+  const sessionReserve = String(BigInt(rewardPerPrize) * BigInt(maxPlayers || '0') * BigInt(DIFFICULTY_CONFIG[difficulty].prizes));
+  const swapUrl = CHAIN_CONFIG[chainId]?.swapUrl || CHAIN_CONFIG[BASE_SEPOLIA_CHAIN_ID].swapUrl;
 
   async function run(label, fn) {
-    setError('');
-    setExecution(null);
-    try {
-      const nextPayload = await fn();
-      setPayload({ label, ...nextPayload });
-    } catch (err) {
-      setError(err.message || String(err));
-    }
+    setError(''); setExecution(null);
+    try { setPayload({ label, ...(await fn()) }); } catch (err) { setError(err.message || String(err)); }
   }
 
   async function connectWallet() {
@@ -142,12 +122,8 @@ export default function App() {
       const provider = getWalletProvider();
       const accounts = await provider.request({ method: 'eth_requestAccounts' });
       const nextChainId = await provider.request({ method: 'eth_chainId' });
-      setWallet(accounts[0] || '');
-      setPlayer(accounts[0] || player);
-      setChainId(nextChainId);
-    } catch (err) {
-      setError(err.message || String(err));
-    }
+      setWallet(accounts[0] || ''); setPlayer(accounts[0] || player); setChainId(nextChainId);
+    } catch (err) { setError(err.message || String(err)); }
   }
 
   async function switchToBase() {
@@ -156,40 +132,26 @@ export default function App() {
       const provider = getWalletProvider();
       await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: BASE_SEPOLIA_CHAIN_ID }] });
       setChainId(await provider.request({ method: 'eth_chainId' }));
-    } catch (err) {
-      setError(err.message || String(err));
-    }
+    } catch (err) { setError(err.message || String(err)); }
   }
 
   async function executePayload() {
-    setError('');
-    setExecution(null);
+    setError(''); setExecution(null);
     try {
       if (!payload) throw new Error('Build a payload first.');
       const provider = getWalletProvider();
       const accounts = wallet ? [wallet] : await provider.request({ method: 'eth_requestAccounts' });
       const from = accounts[0];
       if (!from) throw new Error('Wallet is not connected.');
-      setWallet(from);
-      setPlayer(from);
-
+      setWallet(from); setPlayer(from);
       if (payload.decodeAs || walletTestMode) {
-        const result = await provider.request({
-          method: 'eth_call',
-          params: [{ from, to: payload.to, data: payload.data, value: `0x${BigInt(payload.value || '0').toString(16)}` }, 'latest'],
-        });
+        const result = await provider.request({ method: 'eth_call', params: [{ from, to: payload.to, data: payload.data, value: `0x${BigInt(payload.value || '0').toString(16)}` }, 'latest'] });
         setExecution({ kind: payload.decodeAs ? 'read' : 'simulation', decodeAs: payload.decodeAs, result });
         return;
       }
-
-      const hash = await provider.request({
-        method: 'eth_sendTransaction',
-        params: [{ from, to: payload.to, data: payload.data, value: `0x${BigInt(payload.value || '0').toString(16)}` }],
-      });
+      const hash = await provider.request({ method: 'eth_sendTransaction', params: [{ from, to: payload.to, data: payload.data, value: `0x${BigInt(payload.value || '0').toString(16)}` }] });
       setExecution({ kind: 'transaction', hash });
-    } catch (err) {
-      setError(err.message || String(err));
-    }
+    } catch (err) { setError(err.message || String(err)); }
   }
 
   function resetDemo(nextDifficulty = difficulty) {
@@ -205,31 +167,32 @@ export default function App() {
   }
 
   function revealDemoTile(tile) {
-    if (!demoStatus.joined || demoStatus.gameOver) return;
-    if (revealed[tile] !== TILE_HIDDEN) return;
+    if (!demoStatus.joined || demoStatus.gameOver || revealed[tile] !== TILE_HIDDEN) return;
     const outcome = demoBoard[tile];
-    const nextRevealed = [...revealed];
-    nextRevealed[tile] = outcome;
+    const nextRevealed = [...revealed]; nextRevealed[tile] = outcome;
     const bombs = demoStatus.bombs + (outcome === 'bomb' ? 1 : 0);
     const prizes = demoStatus.prizes + (outcome === 'prize' ? 1 : 0);
     const gameOver = bombs >= 3;
     const message = gameOver ? 'Game over: 3 bombs hit.' : outcome === 'prize' ? 'Prize found.' : outcome === 'bomb' ? 'Bomb hit.' : 'Empty tile.';
-    setRevealed(nextRevealed);
-    setDemoStatus({ joined: true, bombs, prizes, clicks: demoStatus.clicks + 1, gameOver, message });
+    setRevealed(nextRevealed); setDemoStatus({ joined: true, bombs, prizes, clicks: demoStatus.clicks + 1, gameOver, message });
   }
 
   return (
     <main className="shell">
       <section className="hero">
-        <div>
-          <p className="eyebrow">Base game terminal</p>
-          <h1>Chancy</h1>
-          <p className="subtitle">Pyth Entropy powered 8×8 risk grid. Build, sign, send, and read Chancy payloads from a Base wallet.</p>
+        <div className="brand-block">
+          <img className="brand-logo" src={chancyLogo} alt="Chancy logo" />
+          <div>
+            <p className="eyebrow">USDC risk grid on Base</p>
+            <h1>Chancy</h1>
+            <p className="subtitle">Pyth Entropy powered 8×8 game. Swap into USDC, create a session, join, and reveal tiles.</p>
+          </div>
         </div>
         <div className="top-actions">
           <div className={`status ${health}`}>API {health}</div>
           <div className={`status ${onBase ? 'contract' : 'offline'}`}>Network {networkName}</div>
           {shortAddress(contractAddress) && <div className="status contract">Contract {shortAddress(contractAddress)}</div>}
+          <a className="wallet-button swap-link" href={swapUrl} target="_blank" rel="noreferrer">Get USDC</a>
           <button className="wallet-button" onClick={connectWallet}>{walletReady ? shortAddress(wallet) : 'Connect wallet'}</button>
           {walletReady && !onBase && <button className="wallet-button warning" onClick={switchToBase}>Switch to Base Sepolia</button>}
         </div>
@@ -237,29 +200,15 @@ export default function App() {
 
       <section className="layout">
         <aside className="panel controls">
-          <h2>Session controls</h2>
-          <label>
-            Difficulty
-            <select aria-label="difficulty" value={difficulty} onChange={(event) => { setDifficulty(event.target.value); resetDemo(event.target.value); }}>
-              <option>Easy</option>
-              <option>Normal</option>
-              <option>Hardcore</option>
-            </select>
-          </label>
-          <label>
-            Currency
-            <select aria-label="currency" value={currency} onChange={(event) => setCurrency(event.target.value)}>
-              <option>ETH</option>
-              <option>USDC</option>
-            </select>
-          </label>
+          <h2>USDC session controls</h2>
+          <label>Difficulty<select aria-label="difficulty" value={difficulty} onChange={(event) => { setDifficulty(event.target.value); resetDemo(event.target.value); }}><option>Easy</option><option>Normal</option><option>Hardcore</option></select></label>
           <label>Session ID<input value={sessionId} onChange={(event) => setSessionId(event.target.value)} /></label>
-          <label>Entry amount<input value={entryAmount} onChange={(event) => setEntryAmount(event.target.value)} /></label>
+          <label>Entry amount (USDC)<input aria-label="entry amount usdc" value={entryUsdc} onChange={(event) => setEntryUsdc(event.target.value)} /></label>
           <label>Max players<input value={maxPlayers} onChange={(event) => setMaxPlayers(event.target.value)} /></label>
-          <label>Reward per prize<input value={rewardPerPrize} onChange={(event) => setRewardPerPrize(event.target.value)} /></label>
-          <label>Entropy fee<input value={entropyFee} onChange={(event) => setEntropyFee(event.target.value)} /></label>
+          <label>Reward per prize (USDC)<input aria-label="reward per prize usdc" value={rewardUsdc} onChange={(event) => setRewardUsdc(event.target.value)} /></label>
+          <label>Entropy fee (wei)<input value={entropyFee} onChange={(event) => setEntropyFee(event.target.value)} /></label>
           <label>Player address<input value={player} onChange={(event) => setPlayer(event.target.value)} /></label>
-          <p className="muted">Selected asset: {currency === 'ETH' ? 'native ETH' : shortAddress(selectedAsset)} on {networkName}.</p>
+          <div className="usdc-note"><strong>USDC only in v1.</strong><span>Contract still supports future assets; the product keeps play simple.</span><span>Selected USDC: {shortAddress(selectedAsset)} on {networkName}.</span></div>
 
           <button onClick={() => run('/tx/create-session', () => postJson('/tx/create-session', { asset: selectedAsset, difficulty, entryAmount, maxPlayers, rewardPerPrize }))}>Build create session tx</button>
           <button onClick={() => run('/tx/fund-session-rewards', () => postJson('/tx/fund-session-rewards', { sessionId, asset: selectedAsset, amount: sessionReserve }))}>Build fund tx</button>
@@ -272,44 +221,15 @@ export default function App() {
         </aside>
 
         <section className="panel board-panel">
-          <div className="panel-head">
-            <h2>Playable demo board</h2>
-            <span>{DIFFICULTY_CONFIG[difficulty].bombs} bombs / {DIFFICULTY_CONFIG[difficulty].prizes} prizes</span>
-          </div>
-          <div className="demo-actions">
-            <button onClick={() => resetDemo()}>Start demo session</button>
-            <button onClick={joinDemo}>Join as player</button>
-          </div>
-          <div className="score-strip">
-            <span>Bombs {demoStatus.bombs}/3</span>
-            <span>Prizes {demoStatus.prizes}</span>
-            <span>Clicks {demoStatus.clicks}</span>
-            <span>{demoStatus.joined ? demoStatus.gameOver ? 'Game over' : 'Playing' : 'Not joined'}</span>
-          </div>
+          <div className="panel-head"><h2>Playable demo board</h2><span>{DIFFICULTY_CONFIG[difficulty].bombs} bombs / {DIFFICULTY_CONFIG[difficulty].prizes} prizes</span></div>
+          <div className="demo-actions"><button onClick={() => resetDemo()}>Start demo session</button><button onClick={joinDemo}>Join as player</button></div>
+          <div className="score-strip"><span>Bombs {demoStatus.bombs}/3</span><span>Prizes {demoStatus.prizes}</span><span>Clicks {demoStatus.clicks}</span><span>{demoStatus.joined ? demoStatus.gameOver ? 'Game over' : 'Playing' : 'Not joined'}</span></div>
           <p className="muted">{demoStatus.message}</p>
-          <div className="grid" aria-label="Chancy 8x8 board">
-            {tiles.map((tile) => (
-              <button
-                key={tile}
-                aria-label={`tile ${tile}`}
-                className={`tile ${revealed[tile]}`}
-                onClick={() => { revealDemoTile(tile); run('/tx/click-tile', () => postJson('/tx/click-tile', { sessionId, tileIndex: tile })); }}
-              >
-                {revealed[tile] === 'hidden' ? tile : revealed[tile] === 'bomb' ? '✹' : revealed[tile] === 'prize' ? '◆' : '·'}
-              </button>
-            ))}
-          </div>
+          <div className="grid" aria-label="Chancy 8x8 board">{tiles.map((tile) => <button key={tile} aria-label={`tile ${tile}`} className={`tile ${revealed[tile]}`} onClick={() => { revealDemoTile(tile); run('/tx/click-tile', () => postJson('/tx/click-tile', { sessionId, tileIndex: tile })); }}>{revealed[tile] === 'hidden' ? tile : revealed[tile] === 'bomb' ? '✹' : revealed[tile] === 'prize' ? '◆' : '·'}</button>)}</div>
         </section>
 
         <section className="panel payload-panel">
-          <div className="panel-head">
-            <h2>Payload</h2>
-            <label className="test-mode">
-              <input type="checkbox" checked={walletTestMode} onChange={(event) => setWalletTestMode(event.target.checked)} />
-              Wallet test mode: simulate writes with eth_call
-            </label>
-            <button className="execute-button" disabled={!payload} onClick={executePayload}>{payload?.decodeAs ? 'Run wallet read' : walletTestMode ? 'Simulate with wallet' : 'Send with wallet'}</button>
-          </div>
+          <div className="panel-head"><h2>Payload</h2><label className="test-mode"><input type="checkbox" checked={walletTestMode} onChange={(event) => setWalletTestMode(event.target.checked)} />Wallet test mode: simulate writes with eth_call</label><button className="execute-button" disabled={!payload} onClick={executePayload}>{payload?.decodeAs ? 'Run wallet read' : walletTestMode ? 'Simulate with wallet' : 'Send with wallet'}</button></div>
           {error && <pre className="error">{error}</pre>}
           {payload ? <pre>{JSON.stringify(payload, null, 2)}</pre> : <p className="muted">No payload yet. Build a transaction or read call.</p>}
           {execution && <pre className="execution">{JSON.stringify(execution, null, 2)}</pre>}
