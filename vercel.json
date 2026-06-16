@@ -3,7 +3,7 @@
   "buildCommand": "npm run export:abi && npm run web:build",
   "outputDirectory": "dist/web",
   "functions": {
-    "api/[...path].js": {
+    "api/**/*.js": {
       "includeFiles": "apps/api/server.js"
     }
   },
