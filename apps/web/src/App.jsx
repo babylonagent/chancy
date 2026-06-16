@@ -63,7 +63,7 @@ async function getJson(path) {
 }
 
 function getWalletProvider() {
-  if (!window.ethereum) throw new Error('No injected wallet found. Install a Base-compatible wallet first.');
+  if (!window.ethereum) throw new Error('No wallet found. Install a supported wallet first.');
   return window.ethereum;
 }
 
@@ -82,7 +82,7 @@ function RulesModal({ onClose }) {
         <h2 id="rules-title">Find prizes before your third bomb.</h2>
         <div className="rule-list">
           <p><strong>Browse rooms.</strong> Pick a session by entry, difficulty, and player count.</p>
-          <p><strong>Join with USDC.</strong> Stable entries and rewards keep the math clear.</p>
+          <p><strong>Pay the entry.</strong> The room shows the entry price and prize amount before you join.</p>
           <p><strong>Reveal tiles.</strong> Prizes pay. Empty tiles are safe. Three bombs end the run.</p>
         </div>
         <button className="main-button full" type="button" onClick={onClose}>Got it</button>
@@ -226,9 +226,9 @@ export default function App() {
         <>
           <section className="landing-hero">
             <div className="hero-copy">
-              <p className="kicker">USDC tile game on Base</p>
+              <p className="kicker">Prize rooms</p>
               <h1>Pick a room. Reveal tiles. Dodge the third bomb.</h1>
-              <p className="lede">Chancy is a simple risk game: join a USDC room, uncover your private board, and claim prizes before the bombs end your run.</p>
+              <p className="lede">Chancy is a simple risk game: join a room, uncover your private board, and claim prizes before the bombs end your run.</p>
               <div className="hero-buttons">
                 <button className="main-button large" type="button" onClick={openSessions}>Browse sessions</button>
                 <button className="ghost-button large" type="button" onClick={() => setShowRules(true)}>How it works</button>
@@ -239,7 +239,7 @@ export default function App() {
 
           <section className="info-grid" aria-label="Game guide">
             <div><strong>1. Choose a session</strong><span>Browse open rooms by difficulty, entry size, prize amount, and seats.</span></div>
-            <div><strong>2. Join with USDC</strong><span>One stable asset keeps every number readable and every prize clear.</span></div>
+            <div><strong>2. Join with USDC</strong><span>Entry and prize amounts are shown clearly before you commit.</span></div>
             <div><strong>3. Reveal your board</strong><span>The board appears only after you join or create a room.</span></div>
           </section>
 
@@ -248,7 +248,7 @@ export default function App() {
             <div className="guide-list">
               <p><strong>Hosts create rooms.</strong> Hosts set terms and fund rewards, but do not play their own room.</p>
               <p><strong>Players take the risk.</strong> Every tile is a decision. Prizes accrue, bombs pressure the run.</p>
-              <p><strong>USDC keeps it readable.</strong> No ETH decimal noise on the game screen.</p>
+              <p><strong>Clear rewards.</strong> Entry price, prize amount, and seats are shown before you join.</p>
             </div>
           </section>
         </>
