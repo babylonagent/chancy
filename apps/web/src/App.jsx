@@ -12,9 +12,9 @@ const CHAIN_CONFIG = {
   [BASE_SEPOLIA_CHAIN_ID]: { label: 'Base Sepolia', usdc: BASE_SEPOLIA_USDC_ADDRESS, swapUrl: 'https://faucet.circle.com/' },
 };
 const DIFFICULTY_CONFIG = {
-  Easy: { bombs: 5, prizes: 3 },
-  Normal: { bombs: 7, prizes: 2 },
-  Hardcore: { bombs: 10, prizes: 1 },
+  Easy: { bombs: 5, prizes: 3, hint: 'More room to learn.' },
+  Normal: { bombs: 7, prizes: 2, hint: 'Balanced risk.' },
+  Hardcore: { bombs: 10, prizes: 1, hint: 'Sharp teeth.' },
 };
 const TILE_HIDDEN = 'hidden';
 const USDC_DECIMALS = 1_000_000n;
@@ -68,6 +68,24 @@ function chainLabel(chainId) {
   return CHAIN_CONFIG[chainId]?.label || (chainId ? `Unsupported (${chainId})` : 'Not connected');
 }
 
+function InfoModal({ onClose }) {
+  return (
+    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="how-chancy-works">
+      <div className="modal-card">
+        <button className="modal-close" type="button" aria-label="Close rules" onClick={onClose}>×</button>
+        <p className="mini-label">How Chancy works</p>
+        <h2 id="how-chancy-works">Find prizes before 3 bombs find you.</h2>
+        <div className="rules-grid">
+          <div><strong>1. Choose a room</strong><span>Pick difficulty, entry price, and the prize amount in USDC.</span></div>
+          <div><strong>2. Join the board</strong><span>Each player gets their own hidden 8 by 8 board from Pyth Entropy.</span></div>
+          <div><strong>3. Reveal tiles</strong><span>Prizes add rewards. Empty tiles are safe. Hit 3 bombs and the run ends.</span></div>
+        </div>
+        <button className="primary-action wide" type="button" onClick={onClose}>Play the demo</button>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [health, setHealth] = useState('checking');
   const [contractAddress, setContractAddress] = useState('');
@@ -84,9 +102,10 @@ export default function App() {
   const [execution, setExecution] = useState(null);
   const [walletTestMode, setWalletTestMode] = useState(true);
   const [error, setError] = useState('');
+  const [showInfo, setShowInfo] = useState(() => !localStorage.getItem('chancy_intro_seen'));
   const [demoBoard, setDemoBoard] = useState(() => makeDemoBoard('Normal', 'demo-player'));
   const [revealed, setRevealed] = useState(() => Array.from({ length: 64 }, () => TILE_HIDDEN));
-  const [demoStatus, setDemoStatus] = useState({ joined: false, bombs: 0, prizes: 0, clicks: 0, gameOver: false, message: 'Start demo session, then join and reveal tiles.' });
+  const [demoStatus, setDemoStatus] = useState({ joined: false, bombs: 0, prizes: 0, clicks: 0, gameOver: false, message: 'Start a demo room, join, then reveal tiles.' });
 
   useEffect(() => { getJson('/health').then((data) => { setHealth(data.ok ? 'online' : 'offline'); setContractAddress(data.contractAddress || ''); }).catch(() => setHealth('offline')); }, []);
 
@@ -110,6 +129,11 @@ export default function App() {
   const rewardPerPrize = usdcUnits(rewardUsdc);
   const sessionReserve = String(BigInt(rewardPerPrize) * BigInt(maxPlayers || '0') * BigInt(DIFFICULTY_CONFIG[difficulty].prizes));
   const swapUrl = CHAIN_CONFIG[chainId]?.swapUrl || CHAIN_CONFIG[BASE_SEPOLIA_CHAIN_ID].swapUrl;
+
+  function closeInfo() {
+    localStorage.setItem('chancy_intro_seen', '1');
+    setShowInfo(false);
+  }
 
   async function run(label, fn) {
     setError(''); setExecution(null);
@@ -157,13 +181,13 @@ export default function App() {
   function resetDemo(nextDifficulty = difficulty) {
     setDemoBoard(makeDemoBoard(nextDifficulty, player || wallet || 'demo-player'));
     setRevealed(Array.from({ length: 64 }, () => TILE_HIDDEN));
-    setDemoStatus({ joined: false, bombs: 0, prizes: 0, clicks: 0, gameOver: false, message: 'Demo session ready. Join to generate your player board.' });
+    setDemoStatus({ joined: false, bombs: 0, prizes: 0, clicks: 0, gameOver: false, message: 'Demo room ready. Join to generate your player board.' });
   }
 
   function joinDemo() {
     setDemoBoard(makeDemoBoard(difficulty, player || wallet || 'demo-player'));
     setRevealed(Array.from({ length: 64 }, () => TILE_HIDDEN));
-    setDemoStatus({ joined: true, bombs: 0, prizes: 0, clicks: 0, gameOver: false, message: 'Player board generated. Pick tiles until 3 bombs or all prizes found.' });
+    setDemoStatus({ joined: true, bombs: 0, prizes: 0, clicks: 0, gameOver: false, message: 'Board generated. Reveal tiles until you find all prizes or hit 3 bombs.' });
   }
 
   function revealDemoTile(tile) {
@@ -173,67 +197,151 @@ export default function App() {
     const bombs = demoStatus.bombs + (outcome === 'bomb' ? 1 : 0);
     const prizes = demoStatus.prizes + (outcome === 'prize' ? 1 : 0);
     const gameOver = bombs >= 3;
-    const message = gameOver ? 'Game over: 3 bombs hit.' : outcome === 'prize' ? 'Prize found.' : outcome === 'bomb' ? 'Bomb hit.' : 'Empty tile.';
+    const message = gameOver ? 'Game over. 3 bombs hit.' : outcome === 'prize' ? 'Prize found. Keep going or claim later.' : outcome === 'bomb' ? 'Bomb hit. Two more end the run.' : 'Safe tile. Nothing here.';
     setRevealed(nextRevealed); setDemoStatus({ joined: true, bombs, prizes, clicks: demoStatus.clicks + 1, gameOver, message });
   }
 
   return (
-    <main className="shell">
-      <section className="hero">
-        <div className="brand-block">
-          <img className="brand-logo" src={chancyLogo} alt="Chancy logo" />
-          <div>
-            <p className="eyebrow">USDC risk grid on Base</p>
-            <h1>Chancy</h1>
-            <p className="subtitle">Pyth Entropy powered 8×8 game. Swap into USDC, create a session, join, and reveal tiles.</p>
+    <main className="app-shell">
+      {showInfo && <InfoModal onClose={closeInfo} />}
+      <button className="floating-info" aria-label="How Chancy works" type="button" onClick={() => setShowInfo(true)}>?</button>
+
+      <header className="nav-bar">
+        <a className="brand-mark" href="#top" aria-label="Chancy home">
+          <img src={chancyLogo} alt="Chancy logo" />
+          <span>Chancy</span>
+        </a>
+        <nav className="nav-actions" aria-label="Chancy actions">
+          <span className={`pill ${health}`}>API {health}</span>
+          <span className={`pill ${onBase ? 'contract' : 'offline'}`}>{networkName}</span>
+          <a className="secondary-action" href={swapUrl} target="_blank" rel="noreferrer">Get USDC</a>
+          <button className="primary-action" type="button" onClick={connectWallet}>{walletReady ? shortAddress(wallet) : 'Connect wallet'}</button>
+        </nav>
+      </header>
+
+      <section id="top" className="hero-stage">
+        <div className="hero-copy">
+          <p className="mini-label">USDC-first game on Base</p>
+          <h1>Pick tiles. Dodge bombs. Claim USDC.</h1>
+          <p className="hero-subtitle">A light risk game where every player gets a private 8 by 8 board.</p>
+          <div className="hero-actions">
+            <button className="primary-action large" type="button" onClick={joinDemo}>Try demo board</button>
+            <button className="secondary-action large" type="button" onClick={() => setShowInfo(true)}>How it works</button>
           </div>
         </div>
-        <div className="top-actions">
-          <div className={`status ${health}`}>API {health}</div>
-          <div className={`status ${onBase ? 'contract' : 'offline'}`}>Network {networkName}</div>
-          {shortAddress(contractAddress) && <div className="status contract">Contract {shortAddress(contractAddress)}</div>}
-          <a className="wallet-button swap-link" href={swapUrl} target="_blank" rel="noreferrer">Get USDC</a>
-          <button className="wallet-button" onClick={connectWallet}>{walletReady ? shortAddress(wallet) : 'Connect wallet'}</button>
-          {walletReady && !onBase && <button className="wallet-button warning" onClick={switchToBase}>Switch to Base Sepolia</button>}
+        <div className="hero-card" aria-label="Game summary">
+          <div className="card-orbit"><img src={chancyLogo} alt="" /></div>
+          <div className="quick-stats">
+            <div><span>Entry</span><strong>{entryUsdc} USDC</strong></div>
+            <div><span>Prize</span><strong>{rewardUsdc} USDC</strong></div>
+            <div><span>Bomb limit</span><strong>3 hits</strong></div>
+          </div>
+          <p>Simple rule: reveal prizes before your third bomb.</p>
         </div>
       </section>
 
-      <section className="layout">
-        <aside className="panel controls">
-          <h2>USDC session controls</h2>
-          <label>Difficulty<select aria-label="difficulty" value={difficulty} onChange={(event) => { setDifficulty(event.target.value); resetDemo(event.target.value); }}><option>Easy</option><option>Normal</option><option>Hardcore</option></select></label>
-          <label>Session ID<input value={sessionId} onChange={(event) => setSessionId(event.target.value)} /></label>
-          <label>Entry amount (USDC)<input aria-label="entry amount usdc" value={entryUsdc} onChange={(event) => setEntryUsdc(event.target.value)} /></label>
-          <label>Max players<input value={maxPlayers} onChange={(event) => setMaxPlayers(event.target.value)} /></label>
-          <label>Reward per prize (USDC)<input aria-label="reward per prize usdc" value={rewardUsdc} onChange={(event) => setRewardUsdc(event.target.value)} /></label>
-          <label>Entropy fee (wei)<input value={entropyFee} onChange={(event) => setEntropyFee(event.target.value)} /></label>
-          <label>Player address<input value={player} onChange={(event) => setPlayer(event.target.value)} /></label>
-          <div className="usdc-note"><strong>USDC only in v1.</strong><span>Contract still supports future assets; the product keeps play simple.</span><span>Selected USDC: {shortAddress(selectedAsset)} on {networkName}.</span></div>
+      <section className="play-layout">
+        <section className="game-panel">
+          <div className="section-head">
+            <div>
+              <p className="mini-label">Live demo</p>
+              <h2>Reveal your board</h2>
+            </div>
+            <span className="round-badge">{DIFFICULTY_CONFIG[difficulty].bombs} bombs / {DIFFICULTY_CONFIG[difficulty].prizes} prizes</span>
+          </div>
 
-          <button onClick={() => run('/tx/create-session', () => postJson('/tx/create-session', { asset: selectedAsset, difficulty, entryAmount, maxPlayers, rewardPerPrize }))}>Build create session tx</button>
-          <button onClick={() => run('/tx/fund-session-rewards', () => postJson('/tx/fund-session-rewards', { sessionId, asset: selectedAsset, amount: sessionReserve }))}>Build fund tx</button>
-          <button onClick={() => run('/tx/join-session', () => postJson('/tx/join-session', { sessionId, asset: selectedAsset, userRandomNumber: DEFAULT_RANDOM, entropyFee, entryAmount }))}>Build join tx</button>
-          <button onClick={() => run('/tx/claim-rewards', () => postJson('/tx/claim-rewards', { asset: selectedAsset }))}>Build claim tx</button>
-          <button onClick={() => run('/read/session', () => getJson(`/read/session/${sessionId}`))}>Build session read</button>
-          <button onClick={() => run('/read/player-game', () => getJson(`/read/player-game/${sessionId}/${player}`))}>Build player read</button>
-          <button onClick={() => run('/read/claimable-rewards', () => getJson(`/read/claimable-rewards/${player}/${selectedAsset}`))}>Build claimable read</button>
-          <button onClick={() => run('/read/next-session-id', () => getJson('/read/next-session-id'))}>Build next session read</button>
+          <div className="score-board">
+            <div><span>Bombs</span><strong>{demoStatus.bombs}/3</strong></div>
+            <div><span>Prizes</span><strong>{demoStatus.prizes}</strong></div>
+            <div><span>Clicks</span><strong>{demoStatus.clicks}</strong></div>
+            <div><span>Status</span><strong>{demoStatus.joined ? demoStatus.gameOver ? 'Game over' : 'Playing' : 'Ready'}</strong></div>
+          </div>
+
+          <p className="game-message">{demoStatus.message}</p>
+
+          <div className="tile-grid" aria-label="Chancy 8x8 board">
+            {tiles.map((tile) => (
+              <button key={tile} aria-label={`tile ${tile}`} className={`tile ${revealed[tile]}`} onClick={() => { revealDemoTile(tile); run('/tx/click-tile', () => postJson('/tx/click-tile', { sessionId, tileIndex: tile })); }}>
+                {revealed[tile] === 'hidden' ? '' : revealed[tile] === 'bomb' ? '✕' : revealed[tile] === 'prize' ? '$' : '·'}
+              </button>
+            ))}
+          </div>
+
+          <div className="demo-buttons">
+            <button type="button" className="secondary-action" onClick={() => resetDemo()}>Reset board</button>
+            <button type="button" className="primary-action" onClick={joinDemo}>Join demo</button>
+          </div>
+        </section>
+
+        <aside className="room-panel">
+          <div className="section-head compact">
+            <div>
+              <p className="mini-label">Room setup</p>
+              <h2>USDC only for v1</h2>
+            </div>
+          </div>
+
+          <div className="field-stack">
+            <label>Difficulty<select aria-label="difficulty" value={difficulty} onChange={(event) => { setDifficulty(event.target.value); resetDemo(event.target.value); }}><option>Easy</option><option>Normal</option><option>Hardcore</option></select><small>{DIFFICULTY_CONFIG[difficulty].hint}</small></label>
+            <label>Entry amount (USDC)<input aria-label="entry amount usdc" value={entryUsdc} onChange={(event) => setEntryUsdc(event.target.value)} /></label>
+            <label>Reward per prize (USDC)<input aria-label="reward per prize usdc" value={rewardUsdc} onChange={(event) => setRewardUsdc(event.target.value)} /></label>
+            <label>Max players<input aria-label="max players" value={maxPlayers} onChange={(event) => setMaxPlayers(event.target.value)} /></label>
+          </div>
+
+          <div className="asset-card">
+            <strong>Selected asset</strong>
+            <span>{shortAddress(selectedAsset)} on {networkName}</span>
+            {shortAddress(contractAddress) && <span>Contract {shortAddress(contractAddress)}</span>}
+          </div>
+
+          {walletReady && !onBase && <button className="secondary-action wide" type="button" onClick={switchToBase}>Switch to Base Sepolia</button>}
+
+          <div className="tx-actions">
+            <button type="button" onClick={() => run('/tx/create-session', () => postJson('/tx/create-session', { asset: selectedAsset, difficulty, entryAmount, maxPlayers, rewardPerPrize }))}>Build create session tx</button>
+            <button type="button" onClick={() => run('/tx/fund-session-rewards', () => postJson('/tx/fund-session-rewards', { sessionId, asset: selectedAsset, amount: sessionReserve }))}>Build fund tx</button>
+            <button type="button" onClick={() => run('/tx/join-session', () => postJson('/tx/join-session', { sessionId, asset: selectedAsset, userRandomNumber: DEFAULT_RANDOM, entropyFee, entryAmount }))}>Build join tx</button>
+            <button type="button" onClick={() => run('/tx/claim-rewards', () => postJson('/tx/claim-rewards', { asset: selectedAsset }))}>Build claim tx</button>
+          </div>
         </aside>
+      </section>
 
-        <section className="panel board-panel">
-          <div className="panel-head"><h2>Playable demo board</h2><span>{DIFFICULTY_CONFIG[difficulty].bombs} bombs / {DIFFICULTY_CONFIG[difficulty].prizes} prizes</span></div>
-          <div className="demo-actions"><button onClick={() => resetDemo()}>Start demo session</button><button onClick={joinDemo}>Join as player</button></div>
-          <div className="score-strip"><span>Bombs {demoStatus.bombs}/3</span><span>Prizes {demoStatus.prizes}</span><span>Clicks {demoStatus.clicks}</span><span>{demoStatus.joined ? demoStatus.gameOver ? 'Game over' : 'Playing' : 'Not joined'}</span></div>
-          <p className="muted">{demoStatus.message}</p>
-          <div className="grid" aria-label="Chancy 8x8 board">{tiles.map((tile) => <button key={tile} aria-label={`tile ${tile}`} className={`tile ${revealed[tile]}`} onClick={() => { revealDemoTile(tile); run('/tx/click-tile', () => postJson('/tx/click-tile', { sessionId, tileIndex: tile })); }}>{revealed[tile] === 'hidden' ? tile : revealed[tile] === 'bomb' ? '✹' : revealed[tile] === 'prize' ? '◆' : '·'}</button>)}</div>
-        </section>
+      <section className="details-layout">
+        <div className="guide-card">
+          <h2>Mechanics in plain language</h2>
+          <div className="mechanic-list">
+            <div><strong>Private boards</strong><span>Every player gets a separate board generated from entropy.</span></div>
+            <div><strong>Known risk</strong><span>Difficulty sets bombs and prizes before anyone joins.</span></div>
+            <div><strong>USDC math</strong><span>Entries and rewards stay stable, readable, and easy to compare.</span></div>
+          </div>
+        </div>
 
-        <section className="panel payload-panel">
-          <div className="panel-head"><h2>Payload</h2><label className="test-mode"><input type="checkbox" checked={walletTestMode} onChange={(event) => setWalletTestMode(event.target.checked)} />Wallet test mode: simulate writes with eth_call</label><button className="execute-button" disabled={!payload} onClick={executePayload}>{payload?.decodeAs ? 'Run wallet read' : walletTestMode ? 'Simulate with wallet' : 'Send with wallet'}</button></div>
+        <div className="payload-panel">
+          <div className="section-head compact">
+            <div>
+              <p className="mini-label">Transaction preview</p>
+              <h2>Payload builder</h2>
+            </div>
+            <label className="test-mode"><input type="checkbox" checked={walletTestMode} onChange={(event) => setWalletTestMode(event.target.checked)} />Wallet test mode</label>
+          </div>
+
+          <div className="hidden-fields" aria-label="advanced transaction inputs">
+            <label>Session ID<input value={sessionId} onChange={(event) => setSessionId(event.target.value)} /></label>
+            <label>Entropy fee (wei)<input value={entropyFee} onChange={(event) => setEntropyFee(event.target.value)} /></label>
+            <label>Player address<input value={player} onChange={(event) => setPlayer(event.target.value)} /></label>
+          </div>
+
+          <div className="read-actions">
+            <button type="button" onClick={() => run('/read/session', () => getJson(`/read/session/${sessionId}`))}>Build session read</button>
+            <button type="button" onClick={() => run('/read/player-game', () => getJson(`/read/player-game/${sessionId}/${player}`))}>Build player read</button>
+            <button type="button" onClick={() => run('/read/claimable-rewards', () => getJson(`/read/claimable-rewards/${player}/${selectedAsset}`))}>Build claimable read</button>
+            <button type="button" onClick={() => run('/read/next-session-id', () => getJson('/read/next-session-id'))}>Build next session read</button>
+          </div>
+
+          <button className="primary-action wide" disabled={!payload} type="button" onClick={executePayload}>{payload?.decodeAs ? 'Run wallet read' : walletTestMode ? 'Simulate with wallet' : 'Send with wallet'}</button>
           {error && <pre className="error">{error}</pre>}
-          {payload ? <pre>{JSON.stringify(payload, null, 2)}</pre> : <p className="muted">No payload yet. Build a transaction or read call.</p>}
+          {payload ? <pre>{JSON.stringify(payload, null, 2)}</pre> : <p className="soft-copy">Build a transaction or read call to inspect the wallet payload.</p>}
           {execution && <pre className="execution">{JSON.stringify(execution, null, 2)}</pre>}
-        </section>
+        </div>
       </section>
     </main>
   );
