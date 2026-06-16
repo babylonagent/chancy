@@ -34,6 +34,7 @@ Rules:
 - The sum of all 64 block costs cannot exceed the mode cap.
 - The UI shows the next reveal cost on hidden blocks, not block numbers.
 - After each reveal, remaining hidden blocks update to the next cost.
+- Contract tests assert invariants, not a fragile display curve: first reveal cost equals the mode start cost, each later reveal cost is greater than or equal to the previous cost, and the 64-cost sum is less than or equal to the mode cap.
 
 ### Bomb system
 - Easy has 5 bombs.
@@ -66,6 +67,25 @@ This is a contract-breaking redesign. Do not patch the frontend only. The correc
 4. Update UI to show landing → sessions → session detail → active run only after join/create.
 5. Replace placeholder sessions with real on-chain/indexed sessions or an honest empty state until sessions exist.
 6. Update mainnet handoff after contract/API/UI are green.
+
+## Proposed contract surface
+
+The exact Solidity names may change during implementation, but the behavior should fit this API shape:
+
+- `createSession(asset, difficulty, prizePot)` creates a host-owned session and funds the prize pot.
+- `joinSession(sessionId, userRandomNumber)` starts the only active player run for that session.
+- `clickTile(sessionId, tileIndex)` reveals one tile and charges the current reveal cost.
+- `quitSession(sessionId)` ends the active run voluntarily and pays the player's spent amount to the host.
+- `kickIdlePlayer(sessionId)` is callable after more than 1 minute idle and pays the player's spent amount to the host.
+- `claimRewards(asset)` pays accrued player prize rewards.
+- Read helpers expose session state, active run state, and current next reveal cost.
+
+State implications:
+
+- Session stores host, asset, prize pot, mode, active player, active run timestamps, and availability.
+- Run stores bombs hit, prizes found, revealed mask, spent amount, and board-ready randomness state.
+- Player spend is escrowed during the run, then routed to host on quit, idle kick, or game over.
+- Prize rewards accrue to the player when prize tiles are found.
 
 ## Release gate
 
