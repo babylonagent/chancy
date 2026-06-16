@@ -9,6 +9,7 @@ const walletAddress = '0x9999999999999999999999999999999999999999';
 
 describe('Chancy web client', () => {
   beforeEach(() => {
+    localStorage.clear();
     global.fetch = vi.fn(async (url, options = {}) => {
       if (url === '/health') {
         return Response.json({ ok: true, service: 'chancy-api', contractAddress: txPayload.to });
@@ -27,8 +28,7 @@ describe('Chancy web client', () => {
         if (method === 'eth_accounts') return [];
         if (method === 'eth_requestAccounts') return [walletAddress];
         if (method === 'eth_chainId') return '0x2105';
-        if (method === 'eth_sendTransaction') return '0xabc';
-        if (method === 'eth_call') return '0x0000000000000000000000000000000000000000000000000000000000000005';
+        if (method === 'wallet_switchEthereumChain') return null;
         return null;
       }),
       on: vi.fn(),
@@ -36,15 +36,27 @@ describe('Chancy web client', () => {
     };
   });
 
-  it('renders 64 board tiles, wallet action, and controls', async () => {
+  it('renders the final product surface and first-run rules', async () => {
     render(<App />);
 
-    expect(await screen.findByText('Chancy')).toBeInTheDocument();
+    expect(await screen.findByText('Open the board. Beat the bombs.')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: /reveal prizes before your third bomb/i })).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: /tile/i })).toHaveLength(64);
-    expect(screen.getByLabelText(/difficulty/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /connect wallet/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /how chancy works/i })).toBeInTheDocument();
+    expect(await screen.findByText(/API online/i)).toBeInTheDocument();
     expect(await screen.findByText(/Contract 0x1111…1111/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /build create session tx/i })).toBeInTheDocument();
+  });
+
+  it('dismisses and reopens the explanatory rules modal', async () => {
+    render(<App />);
+    await screen.findByText(/API online/i);
+
+    fireEvent.click(screen.getByRole('button', { name: /got it/i }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /how chancy works/i }));
+    expect(screen.getByRole('dialog', { name: /reveal prizes before your third bomb/i })).toBeInTheDocument();
   });
 
   it('connects an injected wallet and uses it as the player address', async () => {
@@ -53,54 +65,39 @@ describe('Chancy web client', () => {
     fireEvent.click(screen.getByRole('button', { name: /connect wallet/i }));
 
     expect(await screen.findByRole('button', { name: /0x9999…9999/i })).toBeInTheDocument();
-    expect(screen.getByDisplayValue(walletAddress)).toBeInTheDocument();
+    await waitFor(() => expect(window.ethereum.request).toHaveBeenCalledWith(expect.objectContaining({ method: 'eth_requestAccounts' })));
   });
 
-  it('builds create-session and click-tile transaction payloads from the API', async () => {
+  it('prepares create, fund, join, claim, and tile transactions through the API', async () => {
     render(<App />);
+    await screen.findByText(/API online/i);
+    fireEvent.click(screen.getByRole('button', { name: /got it/i }));
 
-    fireEvent.click(screen.getByRole('button', { name: /build create session tx/i }));
-    expect(await screen.findByText(/\/tx\/create-session/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /create room/i }));
+    await screen.findByText(/Create room ready for wallet/);
+
+    fireEvent.click(screen.getByRole('button', { name: /fund rewards/i }));
+    await screen.findByText(/Fund rewards ready for wallet/);
+
+    fireEvent.click(screen.getAllByRole('button', { name: /join room/i }).at(-1));
+    await screen.findByText(/Board active/);
 
     fireEvent.click(screen.getByRole('button', { name: 'tile 7' }));
     await waitFor(() => expect(global.fetch).toHaveBeenCalledWith('/tx/click-tile', expect.objectContaining({ method: 'POST' })));
-    expect(await screen.findByText(/\/tx\/click-tile/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /claim usdc/i }));
+    await screen.findByText(/Claim USDC ready for wallet/);
   });
 
-  it('builds join, claim, and read payloads', async () => {
+  it('updates room difficulty and keeps USDC fields visible', async () => {
     render(<App />);
+    await screen.findByText(/API online/i);
+    fireEvent.click(screen.getByRole('button', { name: /got it/i }));
 
-    fireEvent.click(screen.getByRole('button', { name: /build join tx/i }));
-    expect(await screen.findByText(/\/tx\/join-session/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/difficulty/i), { target: { value: 'Hardcore' } });
 
-    fireEvent.click(screen.getByRole('button', { name: /build claim tx/i }));
-    expect(await screen.findByText(/\/tx\/claim-rewards/)).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: /build session read/i }));
-    expect(await screen.findByText(/sessions/)).toBeInTheDocument();
-  });
-
-  it('simulates transactions, can send transactions when test mode is disabled, and runs reads through the wallet provider', async () => {
-    render(<App />);
-
-    fireEvent.click(screen.getByRole('button', { name: /build create session tx/i }));
-    await screen.findByText(/\/tx\/create-session/);
-    fireEvent.click(screen.getByRole('button', { name: /simulate with wallet/i }));
-
-    await waitFor(() => expect(window.ethereum.request).toHaveBeenCalledWith(expect.objectContaining({ method: 'eth_call' })));
-    expect(await screen.findByText(/simulation/)).toBeInTheDocument();
-
-    fireEvent.click(screen.getByLabelText(/wallet test mode/i));
-    fireEvent.click(screen.getByRole('button', { name: /send with wallet/i }));
-
-    await waitFor(() => expect(window.ethereum.request).toHaveBeenCalledWith(expect.objectContaining({ method: 'eth_sendTransaction' })));
-    expect(await screen.findByText(/0xabc/)).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: /build session read/i }));
-    await screen.findByText(/sessions/);
-    fireEvent.click(screen.getByRole('button', { name: /run wallet read/i }));
-
-    await waitFor(() => expect(window.ethereum.request).toHaveBeenCalledWith(expect.objectContaining({ method: 'eth_call' })));
-    expect(await screen.findByText(/0005/)).toBeInTheDocument();
+    expect(screen.getByText(/One prize. Ten bombs/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/entry amount usdc/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/reward per prize usdc/i)).toBeInTheDocument();
   });
 });
