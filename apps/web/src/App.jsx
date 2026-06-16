@@ -3,16 +3,13 @@ import chancyLogo from './assets/chancy-logo.svg';
 
 const API = import.meta.env?.VITE_CHANCY_API_URL || '';
 const BASE_USDC_ADDRESS = import.meta.env?.VITE_CHANCY_BASE_USDC_ADDRESS || '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
-const BASE_SEPOLIA_USDC_ADDRESS = import.meta.env?.VITE_CHANCY_BASE_SEPOLIA_USDC_ADDRESS || '0x036cbd53842c5426634e7929541ec2318f3dcf7e';
 const DEFAULT_RANDOM = '0x1111111111111111111111111111111111111111111111111111111111111111';
 const BASE_CHAIN_ID = '0x2105';
-const BASE_SEPOLIA_CHAIN_ID = '0x14a34';
 const USDC_DECIMALS = 1_000_000n;
 const TILE_HIDDEN = 'hidden';
 
 const CHAIN_CONFIG = {
-  [BASE_CHAIN_ID]: { label: 'Base', usdc: BASE_USDC_ADDRESS, swapUrl: 'https://app.uniswap.org/swap?chain=base&outputCurrency=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' },
-  [BASE_SEPOLIA_CHAIN_ID]: { label: 'Base Sepolia', usdc: BASE_SEPOLIA_USDC_ADDRESS, swapUrl: 'https://faucet.circle.com/' },
+  [BASE_CHAIN_ID]: { label: 'Base', usdc: BASE_USDC_ADDRESS },
 };
 
 const DIFFICULTIES = {
@@ -122,8 +119,7 @@ export default function App() {
   }, []);
 
   const tiles = useMemo(() => Array.from({ length: 64 }, (_, index) => index), []);
-  const selectedAsset = CHAIN_CONFIG[chainId]?.usdc || BASE_SEPOLIA_USDC_ADDRESS;
-  const swapUrl = CHAIN_CONFIG[chainId]?.swapUrl || CHAIN_CONFIG[BASE_SEPOLIA_CHAIN_ID].swapUrl;
+  const selectedAsset = CHAIN_CONFIG[chainId]?.usdc || BASE_USDC_ADDRESS;
   const entryAmount = usdcUnits(entryUsdc);
   const rewardPerPrize = usdcUnits(rewardUsdc);
   const reserveAmount = String(BigInt(rewardPerPrize) * BigInt(maxPlayers || '0') * BigInt(DIFFICULTIES[difficulty].prizes));
@@ -217,7 +213,6 @@ export default function App() {
         <nav className="top-actions" aria-label="Main actions">
           <button className="text-link" type="button" onClick={openSessions}>Sessions</button>
           <button className="text-link" type="button" onClick={() => setShowRules(true)}>Rules</button>
-          <a className="ghost-button" href={swapUrl} target="_blank" rel="noreferrer">Get USDC</a>
           <button className="main-button" type="button" onClick={connectWallet}>{walletLabel}</button>
         </nav>
       </header>
