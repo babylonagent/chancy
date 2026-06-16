@@ -134,12 +134,20 @@ Capabilities:
 
 ## Preview deployment
 
-The Vercel preview uses `vercel.json` to build the web app and expose the Express transaction builder as serverless routes.
+The Vercel preview uses `vercel.json` to build the web app and expose the Express transaction builder as serverless routes. Store public contract/token addresses only; never deploy private keys or RPC API keys to Vercel.
 
 Required preview environment variable:
 
 ```text
 CHANCY_CONTRACT_ADDRESS=0x...
+```
+
+Optional public web config:
+
+```text
+VITE_CHANCY_API_URL=
+VITE_CHANCY_BASE_USDC_ADDRESS=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913
+VITE_CHANCY_BASE_SEPOLIA_USDC_ADDRESS=0x036cbd53842c5426634e7929541ec2318f3dcf7e
 ```
 
 Deploy preview:
@@ -158,7 +166,7 @@ Copy env template:
 cp .env.example .env
 ```
 
-Set:
+Set runtime-only values:
 
 ```text
 PRIVATE_KEY=
@@ -180,6 +188,8 @@ Local smoke deploy:
 ```bash
 npx hardhat run scripts/smoke-local-deploy.js
 ```
+
+For mainnet handoff, see [`docs/mainnet-handoff.md`](docs/mainnet-handoff.md).
 
 ## Commands
 

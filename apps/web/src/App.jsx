@@ -1,9 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
 
 const API = import.meta.env?.VITE_CHANCY_API_URL || '';
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+const BASE_USDC_ADDRESS = import.meta.env?.VITE_CHANCY_BASE_USDC_ADDRESS || '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+const BASE_SEPOLIA_USDC_ADDRESS = import.meta.env?.VITE_CHANCY_BASE_SEPOLIA_USDC_ADDRESS || '0x036cbd53842c5426634e7929541ec2318f3dcf7e';
 const DEFAULT_RANDOM = '0x1111111111111111111111111111111111111111111111111111111111111111';
 const BASE_CHAIN_ID = '0x2105';
 const BASE_SEPOLIA_CHAIN_ID = '0x14a34';
+const CHAIN_CONFIG = {
+  [BASE_CHAIN_ID]: { label: 'Base', usdc: BASE_USDC_ADDRESS },
+  [BASE_SEPOLIA_CHAIN_ID]: { label: 'Base Sepolia', usdc: BASE_SEPOLIA_USDC_ADDRESS },
+};
 const DIFFICULTY_CONFIG = {
   Easy: { bombs: 5, prizes: 3 },
   Normal: { bombs: 7, prizes: 2 },
@@ -53,6 +60,15 @@ function getWalletProvider() {
 function shortAddress(address) {
   if (!address || /^0x0{40}$/i.test(address)) return '';
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
+}
+
+function assetForCurrency(currency, chainId) {
+  if (currency === 'ETH') return ZERO_ADDRESS;
+  return CHAIN_CONFIG[chainId]?.usdc || BASE_SEPOLIA_USDC_ADDRESS;
+}
+
+function chainLabel(chainId) {
+  return CHAIN_CONFIG[chainId]?.label || (chainId ? `Unsupported (${chainId})` : 'Not connected');
 }
 
 export default function App() {
@@ -105,6 +121,9 @@ export default function App() {
   const tiles = useMemo(() => Array.from({ length: 64 }, (_, index) => index), []);
   const walletReady = Boolean(wallet);
   const onBase = chainId === BASE_CHAIN_ID || chainId === BASE_SEPOLIA_CHAIN_ID;
+  const selectedAsset = assetForCurrency(currency, chainId);
+  const networkName = chainLabel(chainId);
+  const sessionReserve = String(BigInt(rewardPerPrize || '0') * BigInt(maxPlayers || '0') * BigInt(DIFFICULTY_CONFIG[difficulty].prizes));
 
   async function run(label, fn) {
     setError('');
@@ -135,7 +154,7 @@ export default function App() {
     setError('');
     try {
       const provider = getWalletProvider();
-      await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: BASE_CHAIN_ID }] });
+      await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: BASE_SEPOLIA_CHAIN_ID }] });
       setChainId(await provider.request({ method: 'eth_chainId' }));
     } catch (err) {
       setError(err.message || String(err));
@@ -209,9 +228,10 @@ export default function App() {
         </div>
         <div className="top-actions">
           <div className={`status ${health}`}>API {health}</div>
+          <div className={`status ${onBase ? 'contract' : 'offline'}`}>Network {networkName}</div>
           {shortAddress(contractAddress) && <div className="status contract">Contract {shortAddress(contractAddress)}</div>}
           <button className="wallet-button" onClick={connectWallet}>{walletReady ? shortAddress(wallet) : 'Connect wallet'}</button>
-          {walletReady && !onBase && <button className="wallet-button warning" onClick={switchToBase}>Switch to Base</button>}
+          {walletReady && !onBase && <button className="wallet-button warning" onClick={switchToBase}>Switch to Base Sepolia</button>}
         </div>
       </section>
 
@@ -239,14 +259,15 @@ export default function App() {
           <label>Reward per prize<input value={rewardPerPrize} onChange={(event) => setRewardPerPrize(event.target.value)} /></label>
           <label>Entropy fee<input value={entropyFee} onChange={(event) => setEntropyFee(event.target.value)} /></label>
           <label>Player address<input value={player} onChange={(event) => setPlayer(event.target.value)} /></label>
+          <p className="muted">Selected asset: {currency === 'ETH' ? 'native ETH' : shortAddress(selectedAsset)} on {networkName}.</p>
 
-          <button onClick={() => run('/tx/create-session', () => postJson('/tx/create-session', { currency, difficulty, entryAmount, maxPlayers, rewardPerPrize }))}>Build create session tx</button>
-          <button onClick={() => run('/tx/fund-session-rewards', () => postJson('/tx/fund-session-rewards', { sessionId, currency, amount: String(BigInt(rewardPerPrize || '0') * BigInt(maxPlayers || '0') * 2n) }))}>Build fund tx</button>
-          <button onClick={() => run('/tx/join-session', () => postJson('/tx/join-session', { sessionId, currency, userRandomNumber: DEFAULT_RANDOM, entropyFee, entryAmount }))}>Build join tx</button>
-          <button onClick={() => run('/tx/claim-rewards', () => postJson('/tx/claim-rewards', { currency }))}>Build claim tx</button>
+          <button onClick={() => run('/tx/create-session', () => postJson('/tx/create-session', { asset: selectedAsset, difficulty, entryAmount, maxPlayers, rewardPerPrize }))}>Build create session tx</button>
+          <button onClick={() => run('/tx/fund-session-rewards', () => postJson('/tx/fund-session-rewards', { sessionId, asset: selectedAsset, amount: sessionReserve }))}>Build fund tx</button>
+          <button onClick={() => run('/tx/join-session', () => postJson('/tx/join-session', { sessionId, asset: selectedAsset, userRandomNumber: DEFAULT_RANDOM, entropyFee, entryAmount }))}>Build join tx</button>
+          <button onClick={() => run('/tx/claim-rewards', () => postJson('/tx/claim-rewards', { asset: selectedAsset }))}>Build claim tx</button>
           <button onClick={() => run('/read/session', () => getJson(`/read/session/${sessionId}`))}>Build session read</button>
           <button onClick={() => run('/read/player-game', () => getJson(`/read/player-game/${sessionId}/${player}`))}>Build player read</button>
-          <button onClick={() => run('/read/claimable-rewards', () => getJson(`/read/claimable-rewards/${currency}/${player}`))}>Build claimable read</button>
+          <button onClick={() => run('/read/claimable-rewards', () => getJson(`/read/claimable-rewards/${player}/${selectedAsset}`))}>Build claimable read</button>
           <button onClick={() => run('/read/next-session-id', () => getJson('/read/next-session-id'))}>Build next session read</button>
         </aside>
 
