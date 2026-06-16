@@ -6,7 +6,6 @@ const { createApp, chancyAbi } = require("../apps/api/server");
 const CONTRACT = "0x1111111111111111111111111111111111111111";
 const PLAYER = "0x2222222222222222222222222222222222222222";
 const USDC_ASSET = "0x3333333333333333333333333333333333333333";
-const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
 describe("agent API", function () {
   it("returns health status", async function () {
@@ -25,12 +24,12 @@ describe("agent API", function () {
     expect(res.body).to.deep.equal({ ok: true, service: "chancy-api", contractAddress: CONTRACT });
   });
 
-  it("builds a createSession transaction (USDC)", async function () {
+  it("builds a createSession transaction with a prize pot", async function () {
     const app = createApp({ contractAddress: CONTRACT });
 
     const res = await request(app)
       .post("/tx/create-session")
-      .send({ asset: USDC_ASSET, difficulty: "Normal", entryAmount: "10000000", maxPlayers: 4, rewardPerPrize: "2000000" })
+      .send({ asset: USDC_ASSET, difficulty: "Normal", prizePot: "100000000" })
       .expect(200);
 
     expect(res.body.to).to.equal(CONTRACT);
@@ -38,50 +37,27 @@ describe("agent API", function () {
 
     const decoded = decodeFunctionData({ abi: chancyAbi, data: res.body.data });
     expect(decoded.functionName).to.equal("createSession");
-    // [asset, difficulty=1(Normal), entry, maxPlayers, rewardPerPrize]
-    expect(decoded.args.map(String)).to.deep.equal([USDC_ASSET, "1", "10000000", "4", "2000000"]);
+    expect(decoded.args.map(String)).to.deep.equal([USDC_ASSET, "1", "100000000"]);
   });
 
-  it("builds a createSession transaction (ETH)", async function () {
-    const app = createApp({ contractAddress: CONTRACT });
-    const res = await request(app)
-      .post("/tx/create-session")
-      .send({ asset: ZERO_ADDRESS, difficulty: "Easy", entryAmount: "10000000000000000", maxPlayers: 2, rewardPerPrize: "20000000000000000" })
-      .expect(200);
-    const decoded = decodeFunctionData({ abi: chancyAbi, data: res.body.data });
-    // [asset=0x0(ETH), difficulty=0(Easy), ...]
-    expect(decoded.args.map(String)).to.deep.equal([ZERO_ADDRESS, "0", "10000000000000000", "2", "20000000000000000"]);
-  });
-
-  it("builds join, click, fund, and claim transactions", async function () {
+  it("builds join, click, quit, idle-kick, and claim transactions", async function () {
     const app = createApp({ contractAddress: CONTRACT });
 
-    // USDC join: entry not added to msg.value, only the entropy fee.
     const join = await request(app)
       .post("/tx/join-session")
-      .send({ sessionId: "1", asset: USDC_ASSET, userRandomNumber: "0x" + "11".repeat(32), entropyFee: "123" })
+      .send({ sessionId: "1", userRandomNumber: "0x" + "11".repeat(32), entropyFee: "123" })
       .expect(200);
     expect(decodeFunctionData({ abi: chancyAbi, data: join.body.data }).functionName).to.equal("joinSession");
     expect(join.body.value).to.equal("123");
 
-    // ETH join: msg.value = entropy fee + entry amount.
-    const joinEth = await request(app)
-      .post("/tx/join-session")
-      .send({ sessionId: "1", asset: ZERO_ADDRESS, userRandomNumber: "0x" + "11".repeat(32), entropyFee: "100", entryAmount: "900" })
-      .expect(200);
-    expect(joinEth.body.value).to.equal("1000");
-
     const click = await request(app).post("/tx/click-tile").send({ sessionId: "1", tileIndex: 7 }).expect(200);
     expect(decodeFunctionData({ abi: chancyAbi, data: click.body.data }).functionName).to.equal("clickTile");
 
-    // USDC fund: value 0 (pulled via approval).
-    const fund = await request(app).post("/tx/fund-session-rewards").send({ sessionId: "1", asset: USDC_ASSET, amount: "16000000" }).expect(200);
-    expect(decodeFunctionData({ abi: chancyAbi, data: fund.body.data }).functionName).to.equal("fundSessionRewards");
-    expect(fund.body.value).to.equal("0");
+    const quit = await request(app).post("/tx/quit-session").send({ sessionId: "1" }).expect(200);
+    expect(decodeFunctionData({ abi: chancyAbi, data: quit.body.data }).functionName).to.equal("quitSession");
 
-    // ETH fund: value = amount.
-    const fundEth = await request(app).post("/tx/fund-session-rewards").send({ sessionId: "1", asset: ZERO_ADDRESS, amount: "80000000000000000" }).expect(200);
-    expect(fundEth.body.value).to.equal("80000000000000000");
+    const kick = await request(app).post("/tx/kick-idle-player").send({ sessionId: "1" }).expect(200);
+    expect(decodeFunctionData({ abi: chancyAbi, data: kick.body.data }).functionName).to.equal("kickIdlePlayer");
 
     const claim = await request(app).post("/tx/claim-rewards").send({ asset: USDC_ASSET }).expect(200);
     const decodedClaim = decodeFunctionData({ abi: chancyAbi, data: claim.body.data });
@@ -89,7 +65,7 @@ describe("agent API", function () {
     expect(decodedClaim.args.map(String)).to.deep.equal([USDC_ASSET]);
   });
 
-  it("builds read-call payloads for session and player state", async function () {
+  it("builds read-call payloads for session, player, rewards, and reveal cost", async function () {
     const app = createApp({ contractAddress: CONTRACT });
 
     const session = await request(app).get("/read/session/1").expect(200);
@@ -109,6 +85,10 @@ describe("agent API", function () {
     const decodedRewards = decodeFunctionData({ abi: chancyAbi, data: rewards.body.data });
     expect(decodedRewards.functionName).to.equal("claimableRewards");
     expect(decodedRewards.args.map(String)).to.deep.equal([PLAYER, USDC_ASSET]);
+
+    const nextCost = await request(app).get("/read/current-reveal-cost/1").expect(200);
+    expect(nextCost.body.decodeAs).to.equal("currentRevealCost");
+    expect(decodeFunctionData({ abi: chancyAbi, data: nextCost.body.data }).functionName).to.equal("currentRevealCost");
 
     const next = await request(app).get("/read/next-session-id").expect(200);
     expect(next.body.decodeAs).to.equal("nextSessionId");

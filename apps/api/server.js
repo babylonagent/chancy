@@ -86,37 +86,17 @@ function createApp({ contractAddress = process.env.CHANCY_CONTRACT_ADDRESS || DE
   app.post("/tx/create-session", validate(z.object({
     asset: addressSchema,
     difficulty: z.enum(["Easy", "Normal", "Hardcore"]),
-    entryAmount: uintString,
-    maxPlayers: uintString,
-    rewardPerPrize: uintString,
+    prizePot: uintString,
   }), (body) => tx(contract, encodeFunctionData({
     abi: chancyAbi,
     functionName: "createSession",
-    args: [body.asset, difficultyMap[body.difficulty], BigInt(body.entryAmount), BigInt(body.maxPlayers), BigInt(body.rewardPerPrize)],
+    args: [body.asset, difficultyMap[body.difficulty], BigInt(body.prizePot)],
   }))));
-
-  app.post("/tx/fund-session-rewards", validate(z.object({
-    sessionId: uintString,
-    amount: uintString,
-    asset: addressSchema,
-  }), (body) => tx(
-    contract,
-    encodeFunctionData({
-      abi: chancyAbi,
-      functionName: "fundSessionRewards",
-      args: [BigInt(body.sessionId), BigInt(body.amount)],
-    }),
-    // ETH sessions fund the reserve with msg.value; ERC20 sessions pull via approval.
-    isNative(body.asset) ? body.amount : "0",
-  )));
 
   app.post("/tx/join-session", validate(z.object({
     sessionId: uintString,
     userRandomNumber: bytes32Schema,
     entropyFee: uintString.default("0"),
-    // For ETH sessions, include the entry amount so it is added to msg.value.
-    entryAmount: uintString.default("0"),
-    asset: addressSchema,
   }), (body) => tx(
     contract,
     encodeFunctionData({
@@ -124,8 +104,7 @@ function createApp({ contractAddress = process.env.CHANCY_CONTRACT_ADDRESS || DE
       functionName: "joinSession",
       args: [BigInt(body.sessionId), body.userRandomNumber],
     }),
-    // msg.value = entropy fee (+ entry amount when the session asset is ETH).
-    (BigInt(body.entropyFee) + (isNative(body.asset) ? BigInt(body.entryAmount) : 0n)).toString(),
+    body.entropyFee,
   )));
 
   app.post("/tx/click-tile", validate(z.object({
@@ -145,6 +124,22 @@ function createApp({ contractAddress = process.env.CHANCY_CONTRACT_ADDRESS || DE
     args: [body.asset],
   }))));
 
+  app.post("/tx/quit-session", validate(z.object({
+    sessionId: uintString,
+  }), (body) => tx(contract, encodeFunctionData({
+    abi: chancyAbi,
+    functionName: "quitSession",
+    args: [BigInt(body.sessionId)],
+  }))));
+
+  app.post("/tx/kick-idle-player", validate(z.object({
+    sessionId: uintString,
+  }), (body) => tx(contract, encodeFunctionData({
+    abi: chancyAbi,
+    functionName: "kickIdlePlayer",
+    args: [BigInt(body.sessionId)],
+  }))));
+
   app.get("/read/session/:sessionId", validateParams(z.object({
     sessionId: uintString,
   }), (params) => readCall(contract, "sessions", [BigInt(params.sessionId)])));
@@ -162,6 +157,10 @@ function createApp({ contractAddress = process.env.CHANCY_CONTRACT_ADDRESS || DE
   app.get("/read/next-session-id", (_req, res) => {
     res.json(readCall(contract, "nextSessionId"));
   });
+
+  app.get("/read/current-reveal-cost/:sessionId", validateParams(z.object({
+    sessionId: uintString,
+  }), (params) => readCall(contract, "currentRevealCost", [BigInt(params.sessionId)])));
 
   return app;
 }

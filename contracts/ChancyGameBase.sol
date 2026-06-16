@@ -7,52 +7,31 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IEntropyConsumer} from "@pythnetwork/entropy-sdk-solidity/IEntropyConsumer.sol";
 import {IEntropyV2} from "@pythnetwork/entropy-sdk-solidity/IEntropyV2.sol";
 
-/// @title ChancyGameBase
-/// @notice Per-player commit-reveal block game on Base. Each session settles in
-///         one asset chosen by its host at creation: native ETH (address(0)) or
-///         an allow-listed ERC20 such as USDC. Board randomness comes from Pyth
-///         Entropy, requested per player on join.
-/// @dev Only ETH and owner-allow-listed ERC20s are accepted. New assets can be
-///      enabled later via setAssetAllowed without redeploying or touching the
-///      game logic.
 abstract contract ChancyGameBase is IEntropyConsumer, Ownable {
     using SafeERC20 for IERC20;
 
     uint32 public constant ENTROPY_CALLBACK_GAS_LIMIT = 350000;
     uint8 public constant BOMBS_TO_GAME_OVER = 3;
-
-    /// @notice Sentinel asset address for native ETH.
+    uint8 public constant BOARD_SIZE = 64;
+    uint256 public constant BPS = 10000;
+    uint256 public constant IDLE_TIMEOUT = 60;
     address public constant NATIVE_ASSET = address(0);
 
     IEntropyV2 public immutable entropy;
-
-    /// @notice ERC20 assets allowed for new sessions. ETH is always allowed.
     mapping(address => bool) public allowedAssets;
 
-    enum Difficulty {
-        Easy,
-        Normal,
-        Hardcore
-    }
-
-    enum TileOutcome {
-        Empty,
-        Prize,
-        Bomb
-    }
+    enum Difficulty { Easy, Normal, Hardcore }
+    enum TileOutcome { Empty, Prize, Bomb }
 
     struct Session {
         address host;
-        address asset; // NATIVE_ASSET (ETH) or an allow-listed ERC20 (e.g. USDC)
+        address asset;
         Difficulty difficulty;
+        uint256 prizePot;
+        address activePlayer;
         uint8 bombCount;
         uint8 prizeCount;
-        uint256 entryAmount;
-        uint256 maxPlayers;
-        uint256 joinedPlayers;
-        uint256 rewardPerPrize;
-        uint256 totalRewardReserve;
-        bool rewardReserveFunded;
+        bool open;
     }
 
     struct PlayerGame {
@@ -65,6 +44,8 @@ abstract contract ChancyGameBase is IEntropyConsumer, Ownable {
         uint64 clickedMask;
         uint8 bombsHit;
         uint8 prizesFound;
+        uint256 spentAmount;
+        uint256 lastActionAt;
     }
 
     uint256 public nextSessionId = 1;
@@ -73,7 +54,6 @@ abstract contract ChancyGameBase is IEntropyConsumer, Ownable {
     mapping(uint256 => mapping(address => PlayerGame)) public playerGames;
     mapping(uint64 => uint256) public entropySequenceToSessionId;
     mapping(uint64 => address) public entropySequenceToPlayer;
-    /// @notice Claimable rewards keyed by player then asset.
     mapping(address => mapping(address => uint256)) public claimableRewards;
 
     event AssetAllowed(address indexed asset, bool allowed);
@@ -82,16 +62,18 @@ abstract contract ChancyGameBase is IEntropyConsumer, Ownable {
         address indexed host,
         address indexed asset,
         Difficulty difficulty,
+        uint256 prizePot,
         uint8 bombCount,
         uint8 prizeCount
     );
-    event SessionRewardsFunded(uint256 indexed sessionId, address indexed host, uint256 amount);
     event PlayerJoined(uint256 indexed sessionId, address indexed player);
     event EntropyRequested(uint256 indexed sessionId, address indexed player, address indexed provider, uint64 sequenceNumber);
     event PlayerBoardReady(uint256 indexed sessionId, address indexed player, uint64 bombMask, uint64 prizeMask);
-    event TileClicked(uint256 indexed sessionId, address indexed player, uint8 tileIndex);
-    event TileResolved(uint256 indexed sessionId, address indexed player, uint8 tileIndex, TileOutcome outcome);
-    event PlayerGameOver(uint256 indexed sessionId, address indexed player);
+    event TileClicked(uint256 indexed sessionId, address indexed player, uint8 tileIndex, uint256 cost);
+    event TileResolved(uint256 indexed sessionId, address indexed player, uint8 tileIndex, TileOutcome outcome, uint256 cost);
+    event PlayerGameOver(uint256 indexed sessionId, address indexed player, uint256 hostPayout);
+    event PlayerExited(uint256 indexed sessionId, address indexed player, uint256 hostPayout);
+    event PlayerKickedIdle(uint256 indexed sessionId, address indexed player, uint256 hostPayout);
     event RewardsClaimed(address indexed player, address indexed asset, uint256 amount);
 
     constructor(address entropyAddress, address initialAllowedAsset) Ownable(msg.sender) {
@@ -103,116 +85,76 @@ abstract contract ChancyGameBase is IEntropyConsumer, Ownable {
         }
     }
 
-    /// @notice Owner enables/disables an ERC20 asset for new sessions.
     function setAssetAllowed(address asset, bool allowed) external onlyOwner {
         require(asset != NATIVE_ASSET, "NATIVE_ALWAYS_ALLOWED");
         allowedAssets[asset] = allowed;
         emit AssetAllowed(asset, allowed);
     }
 
-    /// @notice True if an asset can be used to create a session.
     function isAssetAllowed(address asset) public view returns (bool) {
         return asset == NATIVE_ASSET || allowedAssets[asset];
     }
 
-    function createSession(
-        address asset,
-        Difficulty difficulty,
-        uint256 entryAmount,
-        uint256 maxPlayers,
-        uint256 rewardPerPrize
-    ) external returns (uint256 sessionId) {
-        require(entryAmount > 0, "INVALID_ENTRY_AMOUNT");
-        require(maxPlayers > 0, "INVALID_MAX_PLAYERS");
+    function createSession(address asset, Difficulty difficulty, uint256 prizePot) external payable returns (uint256 sessionId) {
+        require(prizePot > 0, "INVALID_PRIZE_POT");
         require(isAssetAllowed(asset), "ASSET_NOT_ALLOWED");
 
         (uint8 bombCount, uint8 prizeCount) = _difficultyConfig(difficulty);
-        uint256 totalRewardReserve = rewardPerPrize * prizeCount * maxPlayers;
-
         sessionId = nextSessionId++;
         sessions[sessionId] = Session({
             host: msg.sender,
             asset: asset,
             difficulty: difficulty,
+            prizePot: prizePot,
+            activePlayer: address(0),
             bombCount: bombCount,
             prizeCount: prizeCount,
-            entryAmount: entryAmount,
-            maxPlayers: maxPlayers,
-            joinedPlayers: 0,
-            rewardPerPrize: rewardPerPrize,
-            totalRewardReserve: totalRewardReserve,
-            rewardReserveFunded: totalRewardReserve == 0
+            open: true
         });
 
-        emit SessionCreated(sessionId, msg.sender, asset, difficulty, bombCount, prizeCount);
-    }
-
-    /// @notice Host funds the exact maximum reward exposure for a session.
-    /// @dev ERC20 sessions: approve this contract and pass `amount` (msg.value 0).
-    ///      ETH sessions: send `amount` as msg.value and pass it as `amount`.
-    function fundSessionRewards(uint256 sessionId, uint256 amount) external payable {
-        Session storage session = sessions[sessionId];
-        require(session.host != address(0), "SESSION_NOT_FOUND");
-        require(msg.sender == session.host, "ONLY_HOST");
-        require(!session.rewardReserveFunded, "SESSION_REWARDS_ALREADY_FUNDED");
-        require(amount == session.totalRewardReserve, "INVALID_REWARD_RESERVE");
-
-        session.rewardReserveFunded = true;
-
-        if (session.asset == NATIVE_ASSET) {
-            require(msg.value == amount, "INVALID_ETH_RESERVE");
+        if (asset == NATIVE_ASSET) {
+            require(msg.value == prizePot, "INVALID_ETH_PRIZE_POT");
         } else {
             require(msg.value == 0, "UNEXPECTED_ETH");
-            IERC20(session.asset).safeTransferFrom(msg.sender, address(this), amount);
+            IERC20(asset).safeTransferFrom(msg.sender, address(this), prizePot);
         }
 
-        emit SessionRewardsFunded(sessionId, msg.sender, amount);
+        emit SessionCreated(sessionId, msg.sender, asset, difficulty, prizePot, bombCount, prizeCount);
     }
 
-    /// @notice Join a funded session, pay the entry amount, and request a board.
-    /// @dev msg.value must cover the Pyth entropy fee, plus the entry amount when
-    ///      the session asset is ETH. Any ETH overpayment is refunded.
     function joinSession(uint256 sessionId, bytes32 userRandomNumber) external payable {
         Session storage session = sessions[sessionId];
         require(session.host != address(0), "SESSION_NOT_FOUND");
-        require(session.rewardReserveFunded, "SESSION_REWARDS_NOT_FUNDED");
-
-        PlayerGame storage game = playerGames[sessionId][msg.sender];
-        require(!game.joined, "ALREADY_JOINED");
-        require(session.joinedPlayers < session.maxPlayers, "SESSION_FULL");
+        require(msg.sender != session.host, "HOST_CANNOT_PLAY");
+        require(session.activePlayer == address(0), "ACTIVE_PLAYER_EXISTS");
 
         address provider = entropy.getDefaultProvider();
         uint128 fee = entropy.getFeeV2(provider, ENTROPY_CALLBACK_GAS_LIMIT);
+        require(msg.value >= fee, "INSUFFICIENT_VALUE");
 
-        uint256 entryNative = session.asset == NATIVE_ASSET ? session.entryAmount : 0;
-        require(msg.value >= entryNative + fee, "INSUFFICIENT_VALUE");
-
-        session.joinedPlayers += 1;
+        session.activePlayer = msg.sender;
+        PlayerGame storage game = playerGames[sessionId][msg.sender];
+        _clearGame(game);
         game.joined = true;
-
-        if (session.asset != NATIVE_ASSET) {
-            IERC20(session.asset).safeTransferFrom(msg.sender, address(this), session.entryAmount);
-        }
+        game.lastActionAt = block.timestamp;
 
         uint64 sequenceNumber = entropy.requestV2{value: fee}(provider, userRandomNumber, ENTROPY_CALLBACK_GAS_LIMIT);
         game.entropySequenceNumber = sequenceNumber;
         entropySequenceToSessionId[sequenceNumber] = sessionId;
         entropySequenceToPlayer[sequenceNumber] = msg.sender;
 
-        uint256 refund = msg.value - entryNative - fee;
-        if (refund > 0) {
-            (bool ok, ) = payable(msg.sender).call{value: refund}("");
-            require(ok, "REFUND_FAILED");
-        }
+        uint256 refund = msg.value - fee;
+        if (refund > 0) _sendNative(payable(msg.sender), refund);
 
         emit PlayerJoined(sessionId, msg.sender);
         emit EntropyRequested(sessionId, msg.sender, provider, sequenceNumber);
     }
 
-    function clickTile(uint256 sessionId, uint8 tileIndex) external {
+    function clickTile(uint256 sessionId, uint8 tileIndex) external payable {
         Session storage session = sessions[sessionId];
         require(session.host != address(0), "SESSION_NOT_FOUND");
-        require(tileIndex < 64, "INVALID_TILE");
+        require(session.activePlayer == msg.sender, "NOT_ACTIVE_PLAYER");
+        require(tileIndex < BOARD_SIZE, "INVALID_TILE");
 
         PlayerGame storage game = playerGames[sessionId][msg.sender];
         require(game.joined, "PLAYER_NOT_JOINED");
@@ -222,7 +164,11 @@ abstract contract ChancyGameBase is IEntropyConsumer, Ownable {
         uint64 tileBit = uint64(1) << tileIndex;
         require(game.clickedMask & tileBit == 0, "TILE_ALREADY_CLICKED");
 
+        uint256 cost = currentRevealCost(sessionId);
+        _collectRevealCost(session.asset, cost);
+        game.spentAmount += cost;
         game.clickedMask |= tileBit;
+        game.lastActionAt = block.timestamp;
 
         TileOutcome outcome = TileOutcome.Empty;
         if (game.bombMask & tileBit != 0) {
@@ -230,46 +176,76 @@ abstract contract ChancyGameBase is IEntropyConsumer, Ownable {
             outcome = TileOutcome.Bomb;
             if (game.bombsHit >= BOMBS_TO_GAME_OVER) {
                 game.gameOver = true;
-                emit PlayerGameOver(sessionId, msg.sender);
+                uint256 payout = _paySpentToHost(session, game);
+                session.activePlayer = address(0);
+                emit PlayerGameOver(sessionId, msg.sender, payout);
             }
         } else if (game.prizeMask & tileBit != 0) {
             game.prizesFound += 1;
-            claimableRewards[msg.sender][session.asset] += session.rewardPerPrize;
+            claimableRewards[msg.sender][session.asset] += session.prizePot / session.prizeCount;
             outcome = TileOutcome.Prize;
         }
 
-        emit TileClicked(sessionId, msg.sender, tileIndex);
-        emit TileResolved(sessionId, msg.sender, tileIndex, outcome);
+        emit TileClicked(sessionId, msg.sender, tileIndex, cost);
+        emit TileResolved(sessionId, msg.sender, tileIndex, outcome, cost);
     }
 
-    /// @notice Claim accrued rewards for a given settlement asset.
+    function quitSession(uint256 sessionId) external {
+        Session storage session = sessions[sessionId];
+        require(session.activePlayer == msg.sender, "NOT_ACTIVE_PLAYER");
+        PlayerGame storage game = playerGames[sessionId][msg.sender];
+        uint256 payout = _paySpentToHost(session, game);
+        game.gameOver = true;
+        session.activePlayer = address(0);
+        emit PlayerExited(sessionId, msg.sender, payout);
+    }
+
+    function kickIdlePlayer(uint256 sessionId) external {
+        Session storage session = sessions[sessionId];
+        address player = session.activePlayer;
+        require(player != address(0), "NO_ACTIVE_PLAYER");
+        PlayerGame storage game = playerGames[sessionId][player];
+        require(block.timestamp > game.lastActionAt + IDLE_TIMEOUT, "PLAYER_NOT_IDLE");
+        uint256 payout = _paySpentToHost(session, game);
+        game.gameOver = true;
+        session.activePlayer = address(0);
+        emit PlayerKickedIdle(sessionId, player, payout);
+    }
+
+    function revealCostAt(uint256 sessionId, uint256 revealIndex) public view returns (uint256) {
+        require(revealIndex < BOARD_SIZE, "INVALID_REVEAL_INDEX");
+        Session storage session = sessions[sessionId];
+        require(session.host != address(0), "SESSION_NOT_FOUND");
+        (uint256 startBps, uint256 capBps,) = _modeCostConfig(session.difficulty);
+        uint256 baseTotalBps = startBps * BOARD_SIZE;
+        uint256 board = uint256(BOARD_SIZE);
+        uint256 stepBps = capBps > baseTotalBps ? ((capBps - baseTotalBps) * 2) / (board * (board - 1)) : 0;
+        uint256 costBps = startBps + (stepBps * revealIndex);
+        return (session.prizePot * costBps) / BPS;
+    }
+
+    function currentRevealCost(uint256 sessionId) public view returns (uint256) {
+        Session storage session = sessions[sessionId];
+        require(session.activePlayer != address(0), "NO_ACTIVE_PLAYER");
+        PlayerGame storage game = playerGames[sessionId][session.activePlayer];
+        return revealCostAt(sessionId, _popcount(game.clickedMask));
+    }
+
     function claimRewards(address asset) external {
         uint256 amount = claimableRewards[msg.sender][asset];
         require(amount > 0, "NO_REWARDS");
-
         claimableRewards[msg.sender][asset] = 0;
-
-        if (asset == NATIVE_ASSET) {
-            (bool ok, ) = payable(msg.sender).call{value: amount}("");
-            require(ok, "ETH_TRANSFER_FAILED");
-        } else {
-            IERC20(asset).safeTransfer(msg.sender, amount);
-        }
-
+        _transferAsset(asset, msg.sender, amount);
         emit RewardsClaimed(msg.sender, asset, amount);
     }
 
     function entropyCallback(uint64 sequenceNumber, address, bytes32 randomNumber) internal override {
         uint256 sessionId = entropySequenceToSessionId[sequenceNumber];
         address player = entropySequenceToPlayer[sequenceNumber];
-        if (sessionId == 0 || player == address(0)) {
-            return;
-        }
+        if (sessionId == 0 || player == address(0)) return;
 
         PlayerGame storage game = playerGames[sessionId][player];
-        if (!game.joined || game.boardReady) {
-            return;
-        }
+        if (!game.joined || game.boardReady) return;
 
         Session storage session = sessions[sessionId];
         (uint64 bombMask, uint64 prizeMask) = _deriveBoard(
@@ -284,12 +260,53 @@ abstract contract ChancyGameBase is IEntropyConsumer, Ownable {
         game.bombMask = bombMask;
         game.prizeMask = prizeMask;
         game.boardReady = true;
-
+        game.lastActionAt = block.timestamp;
         emit PlayerBoardReady(sessionId, player, bombMask, prizeMask);
     }
 
     function getEntropy() internal view override returns (address) {
         return address(entropy);
+    }
+
+    function _collectRevealCost(address asset, uint256 cost) internal {
+        if (asset == NATIVE_ASSET) {
+            require(msg.value == cost, "INVALID_REVEAL_VALUE");
+        } else {
+            require(msg.value == 0, "UNEXPECTED_ETH");
+            IERC20(asset).safeTransferFrom(msg.sender, address(this), cost);
+        }
+    }
+
+    function _paySpentToHost(Session storage session, PlayerGame storage game) internal returns (uint256 payout) {
+        payout = game.spentAmount;
+        if (payout == 0) return 0;
+        game.spentAmount = 0;
+        _transferAsset(session.asset, session.host, payout);
+    }
+
+    function _transferAsset(address asset, address to, uint256 amount) internal {
+        if (amount == 0) return;
+        if (asset == NATIVE_ASSET) _sendNative(payable(to), amount);
+        else IERC20(asset).safeTransfer(to, amount);
+    }
+
+    function _sendNative(address payable to, uint256 amount) internal {
+        (bool ok,) = to.call{value: amount}("");
+        require(ok, "ETH_TRANSFER_FAILED");
+    }
+
+    function _clearGame(PlayerGame storage game) internal {
+        game.joined = false;
+        game.boardReady = false;
+        game.gameOver = false;
+        game.entropySequenceNumber = 0;
+        game.bombMask = 0;
+        game.prizeMask = 0;
+        game.clickedMask = 0;
+        game.bombsHit = 0;
+        game.prizesFound = 0;
+        game.spentAmount = 0;
+        game.lastActionAt = 0;
     }
 
     function _deriveBoard(
@@ -302,7 +319,6 @@ abstract contract ChancyGameBase is IEntropyConsumer, Ownable {
     ) internal pure returns (uint64 bombMask, uint64 prizeMask) {
         uint8 placedBombs = 0;
         uint256 nonce = 0;
-
         while (placedBombs < bombCount) {
             uint8 tile = uint8(uint256(keccak256(abi.encode(randomNumber, sessionId, player, difficulty, "BOMB", nonce))) % 64);
             uint64 bit = uint64(1) << tile;
@@ -330,5 +346,18 @@ abstract contract ChancyGameBase is IEntropyConsumer, Ownable {
         if (difficulty == Difficulty.Easy) return (5, 3);
         if (difficulty == Difficulty.Normal) return (7, 2);
         return (10, 1);
+    }
+
+    function _modeCostConfig(Difficulty difficulty) internal pure returns (uint256 startBps, uint256 capBps, uint8 bombCount) {
+        if (difficulty == Difficulty.Easy) return (150, 15000, 5);
+        if (difficulty == Difficulty.Normal) return (250, 20000, 7);
+        return (350, 25000, 10);
+    }
+
+    function _popcount(uint64 value) internal pure returns (uint256 count) {
+        while (value != 0) {
+            count += value & 1;
+            value >>= 1;
+        }
     }
 }

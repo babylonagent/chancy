@@ -162,6 +162,37 @@
         "internalType": "address",
         "name": "player",
         "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "hostPayout",
+        "type": "uint256"
+      }
+    ],
+    "name": "PlayerExited",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "sessionId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "hostPayout",
+        "type": "uint256"
       }
     ],
     "name": "PlayerGameOver",
@@ -184,6 +215,31 @@
       }
     ],
     "name": "PlayerJoined",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "sessionId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "hostPayout",
+        "type": "uint256"
+      }
+    ],
+    "name": "PlayerKickedIdle",
     "type": "event"
   },
   {
@@ -240,6 +296,12 @@
       },
       {
         "indexed": false,
+        "internalType": "uint256",
+        "name": "prizePot",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
         "internalType": "uint8",
         "name": "bombCount",
         "type": "uint8"
@@ -266,31 +328,6 @@
       {
         "indexed": true,
         "internalType": "address",
-        "name": "host",
-        "type": "address"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "amount",
-        "type": "uint256"
-      }
-    ],
-    "name": "SessionRewardsFunded",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "uint256",
-        "name": "sessionId",
-        "type": "uint256"
-      },
-      {
-        "indexed": true,
-        "internalType": "address",
         "name": "player",
         "type": "address"
       },
@@ -299,6 +336,12 @@
         "internalType": "uint8",
         "name": "tileIndex",
         "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "cost",
+        "type": "uint256"
       }
     ],
     "name": "TileClicked",
@@ -330,10 +373,29 @@
         "internalType": "enum ChancyGameBase.TileOutcome",
         "name": "outcome",
         "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "cost",
+        "type": "uint256"
       }
     ],
     "name": "TileResolved",
     "type": "event"
+  },
+  {
+    "inputs": [],
+    "name": "BOARD_SIZE",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
   },
   {
     "inputs": [],
@@ -350,12 +412,38 @@
   },
   {
     "inputs": [],
+    "name": "BPS",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "ENTROPY_CALLBACK_GAS_LIMIT",
     "outputs": [
       {
         "internalType": "uint32",
         "name": "",
         "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "IDLE_TIMEOUT",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
       }
     ],
     "stateMutability": "view",
@@ -468,7 +556,7 @@
     ],
     "name": "clickTile",
     "outputs": [],
-    "stateMutability": "nonpayable",
+    "stateMutability": "payable",
     "type": "function"
   },
   {
@@ -485,17 +573,7 @@
       },
       {
         "internalType": "uint256",
-        "name": "entryAmount",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "maxPlayers",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "rewardPerPrize",
+        "name": "prizePot",
         "type": "uint256"
       }
     ],
@@ -507,7 +585,26 @@
         "type": "uint256"
       }
     ],
-    "stateMutability": "nonpayable",
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "sessionId",
+        "type": "uint256"
+      }
+    ],
+    "name": "currentRevealCost",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -564,24 +661,6 @@
   {
     "inputs": [
       {
-        "internalType": "uint256",
-        "name": "sessionId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "amount",
-        "type": "uint256"
-      }
-    ],
-    "name": "fundSessionRewards",
-    "outputs": [],
-    "stateMutability": "payable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
         "internalType": "address",
         "name": "asset",
         "type": "address"
@@ -614,6 +693,19 @@
     "name": "joinSession",
     "outputs": [],
     "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "sessionId",
+        "type": "uint256"
+      }
+    ],
+    "name": "kickIdlePlayer",
+    "outputs": [],
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
@@ -701,9 +793,32 @@
         "internalType": "uint8",
         "name": "prizesFound",
         "type": "uint8"
+      },
+      {
+        "internalType": "uint256",
+        "name": "spentAmount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "lastActionAt",
+        "type": "uint256"
       }
     ],
     "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "sessionId",
+        "type": "uint256"
+      }
+    ],
+    "name": "quitSession",
+    "outputs": [],
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
@@ -711,6 +826,30 @@
     "name": "renounceOwnership",
     "outputs": [],
     "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "sessionId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "revealIndex",
+        "type": "uint256"
+      }
+    ],
+    "name": "revealCostAt",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -739,6 +878,16 @@
         "type": "uint8"
       },
       {
+        "internalType": "uint256",
+        "name": "prizePot",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "activePlayer",
+        "type": "address"
+      },
+      {
         "internalType": "uint8",
         "name": "bombCount",
         "type": "uint8"
@@ -749,33 +898,8 @@
         "type": "uint8"
       },
       {
-        "internalType": "uint256",
-        "name": "entryAmount",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "maxPlayers",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "joinedPlayers",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "rewardPerPrize",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "totalRewardReserve",
-        "type": "uint256"
-      },
-      {
         "internalType": "bool",
-        "name": "rewardReserveFunded",
+        "name": "open",
         "type": "bool"
       }
     ],
