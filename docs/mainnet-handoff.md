@@ -20,6 +20,16 @@ Mainnet can be deployed by a disposable funded deployer while assigning contract
 - Base Sepolia Pyth Entropy used: `0x41c9e39574f40ad34c79f1c99b66a45efb830d4c`
 - Testnet result: final controller owner verified, ETH + USDC host-funded sessions created successfully (`sessionId` 3 and 4 on the final deployment).
 
+## Verified mainnet deployment
+
+- Network: Base (`8453`)
+- ChancyGame: `0x2Cd96e21f3f3008ec6daFb464F12fa91C54DF36c`
+- Constructor: `(entropyAddress, initialAllowedAsset, initialOwner)`
+- Controller owner: `0xebb5d4628dc10981432e7bc3a0ee336884701afe`
+- Base USDC: `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`
+- Pyth Entropy: `0x6E7D74FA7d5c90FEF9F0512987605a6d546181Bb`
+- Verification result: code exists, owner matches, USDC allowed, ETH allowed, entropy matches, `nextSessionId = 1`.
+
 ## Verified Base mainnet inputs
 
 These were checked on Base mainnet (`8453`) using the deployment RPC without printing the RPC URL:
