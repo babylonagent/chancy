@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import App from './App.jsx';
 
@@ -42,7 +42,7 @@ describe('Chancy web client', () => {
     expect(screen.getByRole('dialog', { name: /find prizes before your third bomb/i })).toBeInTheDocument();
     expect(screen.queryByLabelText(/Chancy 8x8 board/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Contract 0x/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/Browse open rooms by difficulty/i)).toBeInTheDocument();
+    expect(screen.getByText(/Sessions are host-funded/i)).toBeInTheDocument();
   });
 
   it('dismisses and reopens the explanatory rules modal', async () => {
@@ -56,29 +56,30 @@ describe('Chancy web client', () => {
     expect(screen.getByRole('dialog', { name: /find prizes before your third bomb/i })).toBeInTheDocument();
   });
 
-  it('shows sessions list before any board is visible', async () => {
+  it('shows the real-session console before any board is visible', async () => {
     render(<App />);
     await screen.findByText(/Game API online/i);
     fireEvent.click(screen.getByRole('button', { name: /got it/i }));
 
     fireEvent.click(screen.getByRole('button', { name: /browse sessions/i }));
 
-    expect(screen.getByText('Choose where to play.')).toBeInTheDocument();
-    expect(screen.getByText('Room #1')).toBeInTheDocument();
+    expect(screen.getByText('Create or join a real room.')).toBeInTheDocument();
+    expect(screen.getByText(/No indexed sessions yet/i)).toBeInTheDocument();
+    expect(screen.queryByText('Room #1')).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/Chancy 8x8 board/i)).not.toBeInTheDocument();
   });
 
-  it('joining a listed session opens the player board', async () => {
+  it('joining an entered session opens the player board', async () => {
     render(<App />);
     await screen.findByText(/Game API online/i);
     fireEvent.click(screen.getByRole('button', { name: /got it/i }));
     fireEvent.click(screen.getByRole('button', { name: /browse sessions/i }));
 
-    const room = screen.getByText('Room #1').closest('article');
-    fireEvent.click(within(room).getByRole('button', { name: /join room/i }));
+    fireEvent.click(screen.getByRole('button', { name: /join entered room/i }));
 
     expect(await screen.findByText('Your board')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: /tile/i })).toHaveLength(64);
+    expect(screen.getByText(/Next reveal/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'tile 7' }));
     await waitFor(() => expect(global.fetch).toHaveBeenCalledWith('/tx/click-tile', expect.objectContaining({ method: 'POST' })));
   });
@@ -92,7 +93,7 @@ describe('Chancy web client', () => {
     fireEvent.click(screen.getByRole('button', { name: /^create room$/i }));
 
     expect(await screen.findByText('Host view')).toBeInTheDocument();
-    expect(screen.getByText(/hosts cannot play their own room/i)).toBeInTheDocument();
+    expect(screen.getByText(/hosts cannot play/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Chancy 8x8 board/i)).toBeInTheDocument();
   });
 

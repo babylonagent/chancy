@@ -13,10 +13,12 @@ async function main() {
   const contractAddress = process.env.CHANCY_CONTRACT_ADDRESS;
   const usdc = process.env.CHANCY_USDC_ADDRESS;
   const entropyExpected = process.env.PYTH_ENTROPY_ADDRESS;
+  const ownerExpected = process.env.CHANCY_OWNER_ADDRESS;
 
   if (!contractAddress) throw new Error('CHANCY_CONTRACT_ADDRESS is required');
   if (!usdc) throw new Error('CHANCY_USDC_ADDRESS is required');
   if (!entropyExpected) throw new Error('PYTH_ENTROPY_ADDRESS is required');
+  if (!ownerExpected) throw new Error('CHANCY_OWNER_ADDRESS is required');
 
   const chancy = new hre.ethers.Contract(contractAddress, abi, provider);
   const [network, code, entropy, usdcAllowed, ethAllowed, owner, nextSessionId] = await Promise.all([
@@ -38,6 +40,7 @@ async function main() {
     usdcAllowed,
     ethAllowed,
     owner,
+    ownerMatchesEnv: owner.toLowerCase() === ownerExpected.toLowerCase(),
     nextSessionId: nextSessionId.toString(),
   }, null, 2));
 }

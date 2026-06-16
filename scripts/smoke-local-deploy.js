@@ -2,7 +2,7 @@ const hre = require("hardhat");
 const { deployChancyGame } = require("./deploy-chancy-game");
 
 async function main() {
-  const [deployer, entropyProvider] = await hre.ethers.getSigners();
+  const [deployer, entropyProvider, owner] = await hre.ethers.getSigners();
 
   const MockUSDC = await hre.ethers.getContractFactory("MockUSDC");
   const usdc = await MockUSDC.deploy();
@@ -16,12 +16,14 @@ async function main() {
     ethers: hre.ethers,
     entropyAddress: await entropy.getAddress(),
     usdcAddress: await usdc.getAddress(),
+    ownerAddress: owner.address,
   });
 
   const assetOk = await deployment.contract.isAssetAllowed(await usdc.getAddress());
   const entropyOk = await deployment.contract.entropy() === await entropy.getAddress();
+  const ownerOk = await deployment.contract.owner() === owner.address;
 
-  if (!assetOk || !entropyOk) {
+  if (!assetOk || !entropyOk || !ownerOk) {
     throw new Error("Smoke verification failed");
   }
 
@@ -30,6 +32,7 @@ async function main() {
     network: hre.network.name,
     deployer: deployer.address,
     chancyGame: deployment.contractAddress,
+    owner: owner.address,
     usdc: await usdc.getAddress(),
     entropy: await entropy.getAddress(),
   }, null, 2));

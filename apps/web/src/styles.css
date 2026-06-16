@@ -51,7 +51,7 @@ h2 { font-size: clamp(30px, 4vw, 52px); line-height: .95; }
 .hero-visual span { position: absolute; left: 22px; bottom: 22px; border-radius: 999px; background: rgba(255,253,247,.92); color: #20221e; padding: 10px 13px; font-weight: 950; }
 
 .info-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 18px; }
-.info-grid div, .guide-list p, .session-card, .create-card, .board-card, .run-card, .landing-guide, .app-footer { min-width: 0; border: 1px solid rgba(32,34,30,.12); border-radius: 28px; background: rgba(255,253,247,.82); box-shadow: 0 22px 64px rgba(68, 53, 22, .09); }
+.info-grid div, .guide-list p, .session-card, .empty-state, .create-card, .board-card, .run-card, .landing-guide, .app-footer { min-width: 0; border: 1px solid rgba(32,34,30,.12); border-radius: 28px; background: rgba(255,253,247,.82); box-shadow: 0 22px 64px rgba(68, 53, 22, .09); }
 .info-grid div { display: grid; gap: 8px; padding: 18px; }
 .info-grid strong, .guide-list strong { color: #20221e; font-size: 18px; }
 .info-grid span, .guide-list p, .note { color: #625f55; line-height: 1.45; }
@@ -63,6 +63,8 @@ h2 { font-size: clamp(30px, 4vw, 52px); line-height: .95; }
 .page-head { display: grid; gap: 14px; padding: 54px 0 28px; }
 .sessions-layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 18px; align-items: start; }
 .session-list { display: grid; gap: 12px; }
+.empty-state { min-height: 360px; display: grid; align-content: center; justify-items: start; gap: 14px; padding: 28px; }
+.empty-state p { max-width: 560px; margin: 0; color: #625f55; line-height: 1.45; }
 .session-card { display: grid; grid-template-columns: 1.1fr repeat(4, minmax(90px, .7fr)) auto; align-items: center; gap: 12px; padding: 14px; transition: transform .18s ease, box-shadow .18s ease; }
 .session-card div { display: grid; gap: 4px; }
 .session-card span, .stat-list span { color: #746f64; font-size: 13px; font-weight: 850; }

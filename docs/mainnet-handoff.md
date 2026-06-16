@@ -1,6 +1,6 @@
 # Chancy Mainnet Handoff
 
-Babylon does **not** deploy Chancy mainnet. Alireza deploys mainnet manually with a fresh wallet.
+Mainnet can be deployed by a disposable funded deployer while assigning contract ownership to Alireza's controller wallet. Do not use the testnet tool wallet for mainnet.
 
 ## V1 production scope
 
@@ -13,11 +13,12 @@ Babylon does **not** deploy Chancy mainnet. Alireza deploys mainnet manually wit
 ## Verified testnet deployment
 
 - Network: Base Sepolia (`84532`)
-- ChancyGame: `0x2Cd96e21f3f3008ec6daFb464F12fa91C54DF36c`
-- Constructor: `(entropyAddress, initialAllowedAsset)`
+- ChancyGame: `0x6a6b80984daECc75999C58707821cBdb44008A99`
+- Constructor: `(entropyAddress, initialAllowedAsset, initialOwner)`
+- Controller owner: `0xebb5d4628dc10981432e7bc3a0ee336884701afe`
 - Base Sepolia USDC: `0x036cbd53842c5426634e7929541ec2318f3dcf7e`
 - Base Sepolia Pyth Entropy used: `0x41c9e39574f40ad34c79f1c99b66a45efb830d4c`
-- Testnet result: USDC sessions created/joined, Entropy callbacks completed, board clicks succeeded.
+- Testnet result: final controller owner verified, ETH + USDC host-funded sessions created successfully (`sessionId` 3 and 4 on the final deployment).
 
 ## Verified Base mainnet inputs
 
@@ -35,8 +36,9 @@ These were checked on Base mainnet (`8453`) using the deployment RPC without pri
 Set these only on your deployment machine. Do not put real values in Git, Vercel, GitHub, screenshots, docs, or chats.
 
 ```text
-PRIVATE_KEY=<fresh mainnet deployer wallet>
+PRIVATE_KEY=<disposable funded deployer wallet>
 BASE_RPC_URL=<Base mainnet RPC URL>
+CHANCY_OWNER_ADDRESS=<controller/owner wallet address>
 CHANCY_USDC_ADDRESS=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913
 PYTH_ENTROPY_ADDRESS=0x6E7D74FA7d5c90FEF9F0512987605a6d546181Bb
 ```
@@ -83,7 +85,7 @@ Expected:
 - `hasCode: true`
 - `entropyMatchesEnv: true`
 - `usdcAllowed: true`
-- `owner` equals your fresh deployer wallet
+- `owner` equals `CHANCY_OWNER_ADDRESS`
 
 ## Optional tiny-value smoke
 

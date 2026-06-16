@@ -76,8 +76,9 @@ abstract contract ChancyGameBase is IEntropyConsumer, Ownable {
     event PlayerKickedIdle(uint256 indexed sessionId, address indexed player, uint256 hostPayout);
     event RewardsClaimed(address indexed player, address indexed asset, uint256 amount);
 
-    constructor(address entropyAddress, address initialAllowedAsset) Ownable(msg.sender) {
+    constructor(address entropyAddress, address initialAllowedAsset, address initialOwner) Ownable(initialOwner) {
         require(entropyAddress != address(0), "INVALID_ENTROPY");
+        require(initialOwner != address(0), "INVALID_OWNER");
         entropy = IEntropyV2(entropyAddress);
         if (initialAllowedAsset != NATIVE_ASSET) {
             allowedAssets[initialAllowedAsset] = true;

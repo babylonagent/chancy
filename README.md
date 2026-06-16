@@ -6,7 +6,7 @@ Commit-reveal-style block game for Base, using **Pyth Entropy** for per-player b
 
 - `contracts/ChancyGame.sol`
   - Production contract.
-  - Constructor: `(entropyAddress, initialAllowedAsset)`.
+  - Constructor: `(entropyAddress, initialAllowedAsset, initialOwner)`.
   - Multi-asset by address: native ETH is `address(0)`; ERC20 settlement assets
     (e.g. USDC) are allow-listed by the owner via `setAssetAllowed`. New assets
     need no redeploy.
@@ -49,18 +49,14 @@ sessionId + player => PlayerGame
 - Duplicate tile clicks are rejected.
 - Player cannot click until their Pyth Entropy board is ready.
 - 3 bombs marks the player's game over and blocks further clicks.
-- Prize clicks accrue `rewardPerPrize` into claimable rewards.
-- Token selection is not a host/session parameter.
+- Prize clicks accrue a pro-rata share of the host-funded prize pot into claimable rewards.
+- Settlement asset is a host/session parameter. Native ETH is `address(0)`; USDC is allow-listed.
 
-## Reward funding
+## Host-funded prize pot
 
-Sessions calculate maximum reward exposure at creation:
+Hosts fund the full session prize pot during `createSession(asset, difficulty, prizePot)`.
 
-```text
-totalRewardReserve = rewardPerPrize × prizeCount × maxPlayers
-```
-
-Players cannot join until the host funds that reserve with `fundSessionRewards(...)`.
+Players reveal tiles with progressive per-tile costs based on the prize pot. If a player quits, hits 3 bombs, or becomes idle for more than one minute, the host receives the player's spent reveal costs.
 
 ## Pyth Entropy integration
 
@@ -89,17 +85,19 @@ Endpoints:
 Transaction builders:
 
 - `POST /tx/create-session`
-- `POST /tx/fund-session-rewards`
 - `POST /tx/join-session`
 - `POST /tx/click-tile`
+- `POST /tx/quit-session`
+- `POST /tx/kick-idle-player`
 - `POST /tx/claim-rewards`
 
 Read-call builders:
 
 - `GET /read/session/:sessionId`
 - `GET /read/player-game/:sessionId/:player`
-- `GET /read/claimable-rewards/:player`
+- `GET /read/claimable-rewards/:player/:asset`
 - `GET /read/next-session-id`
+- `GET /read/current-reveal-cost/:sessionId`
 
 Each transaction endpoint returns:
 
@@ -125,11 +123,8 @@ Capabilities:
 
 - Connect an injected Base-compatible wallet.
 - Show API health and the configured Chancy contract address.
-- Build create/fund/join/click/claim transaction payloads.
-- Send built transaction payloads through the connected wallet.
-- Keep wallet test mode enabled by default to simulate write payloads with `eth_call` before any real send.
-- Build session/player/claimable/next-session read payloads.
-- Run built read payloads with `eth_call` through the wallet provider.
+- Build create/join/click/quit/idle-kick/claim transaction payloads.
+- Build session/player/claimable/next-session/reveal-cost read payloads.
 - No private keys in UI.
 
 ## Preview deployment
@@ -172,6 +167,7 @@ Set runtime-only values:
 PRIVATE_KEY=
 BASE_RPC_URL=
 BASE_SEPOLIA_RPC_URL=
+CHANCY_OWNER_ADDRESS=
 CHANCY_USDC_ADDRESS=
 PYTH_ENTROPY_ADDRESS=
 CHANCY_CONTRACT_ADDRESS=

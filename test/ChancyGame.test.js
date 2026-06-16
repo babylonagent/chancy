@@ -37,7 +37,7 @@ async function deployFixture() {
   const entropy = await MockEntropy.deploy(entropyProvider.address);
 
   const ChancyGame = await ethers.getContractFactory("ChancyGame");
-  const chancy = await ChancyGame.deploy(await entropy.getAddress(), await usdc.getAddress());
+  const chancy = await ChancyGame.deploy(await entropy.getAddress(), await usdc.getAddress(), host.address);
 
   for (const signer of [host, player, otherPlayer]) {
     await usdc.mint(signer.address, USDC(1000));

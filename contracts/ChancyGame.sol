@@ -8,7 +8,7 @@ import {ChancyGameBase} from "./ChancyGameBase.sol";
 ///      ERC20. Pass the Pyth Entropy address and the initial allow-listed asset
 ///      (USDC on Base) at deployment; manage more assets via setAssetAllowed.
 contract ChancyGame is ChancyGameBase {
-    constructor(address entropyAddress, address initialAllowedAsset)
-        ChancyGameBase(entropyAddress, initialAllowedAsset)
+    constructor(address entropyAddress, address initialAllowedAsset, address initialOwner)
+        ChancyGameBase(entropyAddress, initialAllowedAsset, initialOwner)
     {}
 }

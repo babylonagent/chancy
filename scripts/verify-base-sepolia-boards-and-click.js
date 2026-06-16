@@ -2,7 +2,7 @@ require('dotenv').config();
 const hre = require('hardhat');
 
 const abi = [
-  'function playerGames(uint256,address) view returns (bool joined,bool boardReady,bool gameOver,uint64 entropySequenceNumber,uint64 bombMask,uint64 prizeMask,uint64 clickedMask,uint8 bombsHit,uint8 prizesFound)',
+  'function playerGames(uint256,address) view returns (bool joined,bool boardReady,bool gameOver,uint64 entropySequenceNumber,uint64 bombMask,uint64 prizeMask,uint64 clickedMask,uint8 bombsHit,uint8 prizesFound,uint256 spentAmount,uint256 lastActionAt)',
   'function clickTile(uint256,uint8)',
 ];
 
