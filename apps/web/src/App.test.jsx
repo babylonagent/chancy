@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import App from './App.jsx';
 
@@ -28,7 +28,6 @@ describe('Chancy web client', () => {
         if (method === 'eth_accounts') return [];
         if (method === 'eth_requestAccounts') return [walletAddress];
         if (method === 'eth_chainId') return '0x2105';
-        if (method === 'wallet_switchEthereumChain') return null;
         return null;
       }),
       on: vi.fn(),
@@ -36,68 +35,73 @@ describe('Chancy web client', () => {
     };
   });
 
-  it('renders the final product surface and first-run rules', async () => {
+  it('renders landing content without a board or contract noise', async () => {
     render(<App />);
 
-    expect(await screen.findByText('Open the board. Beat the bombs.')).toBeInTheDocument();
-    expect(screen.getByRole('dialog', { name: /reveal prizes before your third bomb/i })).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: /tile/i })).toHaveLength(64);
-    expect(screen.getByRole('button', { name: /connect wallet/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /how chancy works/i })).toBeInTheDocument();
-    expect(await screen.findByText(/API online/i)).toBeInTheDocument();
-    expect(await screen.findByText(/Contract 0x1111…1111/i)).toBeInTheDocument();
+    expect(await screen.findByText('Pick a room. Reveal tiles. Dodge the third bomb.')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: /find prizes before your third bomb/i })).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Chancy 8x8 board/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Contract 0x/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/Browse open rooms by difficulty/i)).toBeInTheDocument();
   });
 
   it('dismisses and reopens the explanatory rules modal', async () => {
     render(<App />);
-    await screen.findByText(/API online/i);
+    await screen.findByText(/Game API online/i);
 
     fireEvent.click(screen.getByRole('button', { name: /got it/i }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /how chancy works/i }));
-    expect(screen.getByRole('dialog', { name: /reveal prizes before your third bomb/i })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: /find prizes before your third bomb/i })).toBeInTheDocument();
   });
 
-  it('connects an injected wallet and uses it as the player address', async () => {
+  it('shows sessions list before any board is visible', async () => {
+    render(<App />);
+    await screen.findByText(/Game API online/i);
+    fireEvent.click(screen.getByRole('button', { name: /got it/i }));
+
+    fireEvent.click(screen.getByRole('button', { name: /browse sessions/i }));
+
+    expect(screen.getByText('Choose where to play.')).toBeInTheDocument();
+    expect(screen.getByText('Room #1')).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Chancy 8x8 board/i)).not.toBeInTheDocument();
+  });
+
+  it('joining a listed session opens the player board', async () => {
+    render(<App />);
+    await screen.findByText(/Game API online/i);
+    fireEvent.click(screen.getByRole('button', { name: /got it/i }));
+    fireEvent.click(screen.getByRole('button', { name: /browse sessions/i }));
+
+    const room = screen.getByText('Room #1').closest('article');
+    fireEvent.click(within(room).getByRole('button', { name: /join room/i }));
+
+    expect(await screen.findByText('Your board')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /tile/i })).toHaveLength(64);
+    fireEvent.click(screen.getByRole('button', { name: 'tile 7' }));
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledWith('/tx/click-tile', expect.objectContaining({ method: 'POST' })));
+  });
+
+  it('creating a room opens host view with a locked board', async () => {
+    render(<App />);
+    await screen.findByText(/Game API online/i);
+    fireEvent.click(screen.getByRole('button', { name: /got it/i }));
+    fireEvent.click(screen.getByRole('button', { name: /browse sessions/i }));
+
+    fireEvent.click(screen.getByRole('button', { name: /^create room$/i }));
+
+    expect(await screen.findByText('Host view')).toBeInTheDocument();
+    expect(screen.getByText(/hosts cannot play their own room/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Chancy 8x8 board/i)).toBeInTheDocument();
+  });
+
+  it('connects an injected wallet', async () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole('button', { name: /connect wallet/i }));
 
     expect(await screen.findByRole('button', { name: /0x9999…9999/i })).toBeInTheDocument();
     await waitFor(() => expect(window.ethereum.request).toHaveBeenCalledWith(expect.objectContaining({ method: 'eth_requestAccounts' })));
-  });
-
-  it('prepares create, fund, join, claim, and tile transactions through the API', async () => {
-    render(<App />);
-    await screen.findByText(/API online/i);
-    fireEvent.click(screen.getByRole('button', { name: /got it/i }));
-
-    fireEvent.click(screen.getByRole('button', { name: /create room/i }));
-    await screen.findByText(/Create room ready for wallet/);
-
-    fireEvent.click(screen.getByRole('button', { name: /fund rewards/i }));
-    await screen.findByText(/Fund rewards ready for wallet/);
-
-    fireEvent.click(screen.getAllByRole('button', { name: /join room/i }).at(-1));
-    await screen.findByText(/Board active/);
-
-    fireEvent.click(screen.getByRole('button', { name: 'tile 7' }));
-    await waitFor(() => expect(global.fetch).toHaveBeenCalledWith('/tx/click-tile', expect.objectContaining({ method: 'POST' })));
-
-    fireEvent.click(screen.getByRole('button', { name: /claim usdc/i }));
-    await screen.findByText(/Claim USDC ready for wallet/);
-  });
-
-  it('updates room difficulty and keeps USDC fields visible', async () => {
-    render(<App />);
-    await screen.findByText(/API online/i);
-    fireEvent.click(screen.getByRole('button', { name: /got it/i }));
-
-    fireEvent.change(screen.getByLabelText(/difficulty/i), { target: { value: 'Hardcore' } });
-
-    expect(screen.getByText(/One prize. Ten bombs/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/entry amount usdc/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/reward per prize usdc/i)).toBeInTheDocument();
   });
 });
