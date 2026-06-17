@@ -1,10 +1,19 @@
 # Chancy Project Status
 
-Updated: 2026-06-17T02:02:38Z
+Updated: 2026-06-17T08:41:03Z
 
 ## Current state
 
-Chancy V1 is deployed on Base mainnet and the live app/API are deployed on the VPS for `www.chancy.cash`. DNS is not yet pointed, so public HTTPS cannot be issued or verified until the domain resolves to the VPS.
+Chancy V1 is live on Base mainnet and publicly deployed on the VPS domain with HTTPS enabled.
+
+- Public apex: `https://chancy.cash`
+- Public www: `https://www.chancy.cash`
+- VPS: `167.233.22.140`
+- Static web root: `/var/www/chancy.cash`
+- API service: `chancy-api.service`
+- API port: `8788`
+- nginx routes: `/health`, `/data/*`, `/tx/*`, `/read/*`
+- TLS: Let's Encrypt certificate issued for `chancy.cash` and `www.chancy.cash`, auto-renew scheduled by certbot.
 
 ## Production contract
 
@@ -18,33 +27,25 @@ Chancy V1 is deployed on Base mainnet and the live app/API are deployed on the V
 ## App/API status
 
 - Vercel preview remains available: `https://chancy-preview.vercel.app`
-- VPS deployment target: `www.chancy.cash`
-- VPS IP for DNS: `167.233.22.140`
-- Static web root: `/var/www/chancy.cash`
-- API service: `chancy-api.service`
-- API port: `8788`
-- nginx routes configured: `/health`, `/data/*`, `/tx/*`, `/read/*`
-
-## Implemented after mainnet deploy
-
-- Restored full API route surface removed during Vercel Hobby workaround:
-  - `/api/read/[...path]`
-  - `/api/tx/[...path]`
-- Added real live session discovery:
-  - `/data/sessions` queries the Base mainnet contract instead of showing fake rooms.
-  - Frontend loads real sessions and displays empty state when none exist.
-- Verified with local and VPS Host-header checks.
+- Primary production domain is now the VPS-hosted `https://chancy.cash` / `https://www.chancy.cash` deployment.
+- Frontend loads real sessions from `/data/sessions`.
+- `/data/sessions` queries the Base mainnet contract instead of showing fake rooms.
+- Full API route surface is preserved on VPS deployment; do not reduce functionality to fit Vercel limits.
 
 ## Latest verification
 
-- Contract/API tests: `16 passing`
-- Web tests: `6 passing`
-- Web build: passed
-- Secret scan: clean
-- VPS Host-header checks:
-  - UI includes `Chancy`
-  - `/health` returns mainnet contract
-  - `/data/sessions` returns contract-backed session data
+- Public DNS:
+  - `chancy.cash A -> 167.233.22.140`
+  - `www.chancy.cash A -> 167.233.22.140` observed via public resolvers; local resolver may lag.
+- HTTPS certificate: issued successfully for `chancy.cash` and `www.chancy.cash`.
+- `https://chancy.cash/` returns `200 OK`.
+- `https://www.chancy.cash/` verified with explicit resolve to VPS because local resolver still lagged at verification time.
+- `https://chancy.cash/health` returns mainnet contract `0x2Cd96e21f3f3008ec6daFb464F12fa91C54DF36c`.
+- `https://chancy.cash/data/sessions` returns contract-backed session data: `nextSessionId = 1`, no fake sessions.
+- `https://chancy.cash/tx/create-session` builds a transaction to the mainnet contract.
+- `https://chancy.cash/read/session/1` builds read payload.
+- `https://chancy.cash/read/current-reveal-cost/1` builds read payload.
+- Browser smoke: `https://chancy.cash` loads `Chancy`; sessions page shows live contract-backed empty state and room controls.
 
 ## Kanban state
 
@@ -53,26 +54,14 @@ Completed:
 - C17 Rebuild web flow for corrected mechanics
 - C18 Base Sepolia redeploy and smoke corrected game
 - C19 Final V1 mainnet handoff refresh
-
-Open:
-
 - C20 DNS cutover + HTTPS verification
 
-## Next steps when DNS is set
+Open / future work:
 
-1. Point DNS for `chancy.cash` and `www.chancy.cash` to `167.233.22.140`.
-2. Issue HTTPS certificate on the VPS.
-3. Verify live public domain:
-   - `https://www.chancy.cash`
-   - `/health`
-   - `/data/sessions`
-   - `/tx/create-session`
-   - `/read/session/:id`
-   - `/read/current-reveal-cost/:id`
-4. Commit any final docs/config deltas.
+- Optional mainnet gameplay smoke only after explicit approval because it spends real assets.
+- Optional production polish: create real first room, add public room examples, improve wallet/approval UX, monitor uptime.
 
 ## Safety notes
 
 - No private keys belong in Git, Vercel, docs, screenshots, or chats.
-- Do not reduce functionality to satisfy Vercel limits. If hosting limits block deployment, use the VPS/main domain path instead.
 - Mainnet gameplay smoke was not run because it spends real assets; only run it after explicit approval.
