@@ -40,8 +40,17 @@ describe("agent API", function () {
     expect(decoded.args.map(String)).to.deep.equal([USDC_ASSET, "1", "100000000"]);
   });
 
-  it("builds join, click, quit, idle-kick, and claim transactions", async function () {
+  it("builds approve, join, click, quit, idle-kick, and claim transactions", async function () {
     const app = createApp({ contractAddress: CONTRACT });
+
+    const approve = await request(app)
+      .post("/tx/approve-usdc")
+      .send({ asset: USDC_ASSET, amount: "100000000" })
+      .expect(200);
+    const decodedApprove = decodeFunctionData({ abi: [{ type: "function", name: "approve", stateMutability: "nonpayable", inputs: [{ name: "spender", type: "address" }, { name: "amount", type: "uint256" }], outputs: [{ type: "bool" }] }], data: approve.body.data });
+    expect(approve.body.to).to.equal(USDC_ASSET);
+    expect(decodedApprove.functionName).to.equal("approve");
+    expect(decodedApprove.args.map(String)).to.deep.equal([CONTRACT, "100000000"]);
 
     const join = await request(app)
       .post("/tx/join-session")

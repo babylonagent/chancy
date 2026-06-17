@@ -26,6 +26,7 @@ describe('Chancy web client', () => {
           { sessionId: '2', host: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', difficulty: 'Normal', prizePot: '25000000', activePlayer: '0x0000000000000000000000000000000000000000', bombCount: 7, prizeCount: 2, open: true },
         ] });
       }
+      if (url.startsWith('/data/entropy-fee')) return Response.json({ fee: '123', provider: '0x4444444444444444444444444444444444444444', entropyAddress: '0x5555555555555555555555555555555555555555' });
       if (url.startsWith('/tx/')) return Response.json({ ...txPayload, route: url, body: JSON.parse(options.body || '{}') });
       if (url.startsWith('/read/')) return Response.json({ ...txPayload, decodeAs: 'sessions' });
       return new Response('not found', { status: 404 });
@@ -35,6 +36,7 @@ describe('Chancy web client', () => {
         if (method === 'eth_accounts') return [];
         if (method === 'eth_requestAccounts') return [walletAddress];
         if (method === 'eth_chainId') return '0x2105';
+        if (method === 'eth_sendTransaction') return '0x' + 'aa'.repeat(32);
         return null;
       }),
       on: vi.fn(),
@@ -54,7 +56,7 @@ describe('Chancy web client', () => {
 
   it('dismisses and reopens the explanatory rules modal with difficulty copy', async () => {
     render(<App />);
-    await screen.findByText(/Game API online/i);
+    await screen.findByText(/Chancy live/i);
 
     closeRules();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -66,7 +68,7 @@ describe('Chancy web client', () => {
 
   it('routes through player choice before showing live rooms', async () => {
     render(<App />);
-    await screen.findByText(/Game API online/i);
+    await screen.findByText(/Chancy live/i);
     closeRules();
 
     await openRoleChoice();
@@ -80,7 +82,7 @@ describe('Chancy web client', () => {
 
   it('joining a listed session opens the player board', async () => {
     render(<App />);
-    await screen.findByText(/Game API online/i);
+    await screen.findByText(/Chancy live/i);
     closeRules();
     await openRoleChoice();
     fireEvent.click(screen.getByRole('button', { name: /continue as player/i }));
@@ -89,25 +91,25 @@ describe('Chancy web client', () => {
 
     expect(await screen.findByText('Your board')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: /tile/i })).toHaveLength(64);
-    expect(screen.getByText(/Mode bombs/i)).toBeInTheDocument();
+    expect(screen.getByText(/Bombs hidden/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'tile 7' }));
     await waitFor(() => expect(global.fetch).toHaveBeenCalledWith('/tx/click-tile', expect.objectContaining({ method: 'POST' })));
   });
 
   it('host flow creates a room without asking for room id', async () => {
     render(<App />);
-    await screen.findByText(/Game API online/i);
+    await screen.findByText(/Chancy live/i);
     closeRules();
     await openRoleChoice();
 
     fireEvent.click(screen.getByRole('button', { name: /continue as host/i }));
-    expect(screen.getByText('Create a contract-assigned room.')).toBeInTheDocument();
+    expect(screen.getByText('Create a prize room.')).toBeInTheDocument();
     expect(screen.queryByLabelText(/session id/i)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /^create room$/i }));
 
     expect(await screen.findByText('Host view')).toBeInTheDocument();
-    expect(screen.getAllByText(/contract assigns the room ID/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/contract assigns/i)).not.toBeInTheDocument();
     expect(screen.getByLabelText(/Chancy 8x8 board/i)).toBeInTheDocument();
   });
 

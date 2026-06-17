@@ -1,7 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const { z } = require("zod");
-const { encodeFunctionData, createPublicClient, http } = require("viem");
+const { encodeFunctionData, createPublicClient, http, parseAbi } = require("viem");
 const chancyAbiJson = require("../../abi/ChancyGame.json");
 const chancyAbi = chancyAbiJson.abi || chancyAbiJson;
 
@@ -10,6 +10,12 @@ const difficultyMap = {
   Normal: 1,
   Hardcore: 2,
 };
+const erc20Abi = parseAbi(["function approve(address spender, uint256 amount) returns (bool)"]);
+const entropyAbi = parseAbi([
+  "function getDefaultProvider() view returns (address)",
+  "function getFeeV2(address provider, uint32 gasLimit) view returns (uint128)",
+]);
+const ENTROPY_CALLBACK_GAS_LIMIT = 500000;
 
 // Settlement asset is an address: native ETH is the zero address, USDC (or any
 // allow-listed ERC20) is its token address. New assets need no API change.
@@ -97,6 +103,14 @@ async function listSessions({ contract, rpcUrl, limit = 24 }) {
   return { sessions: rows, nextSessionId: nextSessionId.toString(), source: "contract" };
 }
 
+async function getEntropyFee({ contract, rpcUrl }) {
+  const client = createPublicClient({ transport: http(rpcUrl || DEFAULT_BASE_RPC_URL) });
+  const entropyAddress = await client.readContract({ address: contract, abi: chancyAbi, functionName: "entropy" });
+  const provider = await client.readContract({ address: entropyAddress, abi: entropyAbi, functionName: "getDefaultProvider" });
+  const fee = await client.readContract({ address: entropyAddress, abi: entropyAbi, functionName: "getFeeV2", args: [provider, ENTROPY_CALLBACK_GAS_LIMIT] });
+  return { fee: fee.toString(), provider, entropyAddress };
+}
+
 function createApp({ contractAddress = process.env.CHANCY_CONTRACT_ADDRESS || DEFAULT_CONTRACT_ADDRESS, rpcUrl = process.env.BASE_RPC_URL || process.env.CHANCY_RPC_URL || DEFAULT_BASE_RPC_URL } = {}) {
   const contract = addressSchema.parse(contractAddress);
   const app = express();
@@ -120,6 +134,23 @@ function createApp({ contractAddress = process.env.CHANCY_CONTRACT_ADDRESS || DE
       res.status(502).json({ error: "SESSION_DISCOVERY_FAILED", message: error.message });
     }
   });
+
+  app.get("/data/entropy-fee", async (_req, res) => {
+    try {
+      res.json(await getEntropyFee({ contract, rpcUrl }));
+    } catch (error) {
+      res.status(502).json({ error: "ENTROPY_FEE_FAILED", message: error.message });
+    }
+  });
+
+  app.post("/tx/approve-usdc", validate(z.object({
+    asset: addressSchema,
+    amount: uintString,
+  }), (body) => tx(body.asset, encodeFunctionData({
+    abi: erc20Abi,
+    functionName: "approve",
+    args: [contract, BigInt(body.amount)],
+  }))));
 
   app.post("/tx/create-session", validate(z.object({
     asset: addressSchema,
@@ -215,4 +246,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { createApp, chancyAbi, readCall, listSessions };
+module.exports = { createApp, chancyAbi, readCall, listSessions, getEntropyFee };
