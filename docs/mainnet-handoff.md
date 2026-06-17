@@ -22,6 +22,8 @@ Mainnet can be deployed by a disposable funded deployer while assigning contract
 
 ## Verified mainnet deployment
 
+Current resumable status is tracked in `docs/project-status.md`.
+
 - Network: Base (`8453`)
 - ChancyGame: `0x2Cd96e21f3f3008ec6daFb464F12fa91C54DF36c`
 - Constructor: `(entropyAddress, initialAllowedAsset, initialOwner)`
