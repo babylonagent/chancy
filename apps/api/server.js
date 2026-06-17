@@ -15,7 +15,7 @@ const entropyAbi = parseAbi([
   "function getDefaultProvider() view returns (address)",
   "function getFeeV2(address provider, uint32 gasLimit) view returns (uint128)",
 ]);
-const ENTROPY_CALLBACK_GAS_LIMIT = 500000;
+const ENTROPY_CALLBACK_GAS_LIMIT = 350000;
 
 // Settlement asset is an address: native ETH is the zero address, USDC (or any
 // allow-listed ERC20) is its token address. New assets need no API change.
