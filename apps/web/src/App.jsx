@@ -131,8 +131,13 @@ export default function App() {
     setSessionsLoading(true);
     try {
       const data = await getJson('/data/sessions?limit=24');
-      setSessions(data.sessions || []);
-      setLastAction(data.sessions?.length ? 'Rooms loaded' : 'No rooms open');
+      const openUsdcRooms = (data.sessions || []).filter((session) => (
+        session.open
+        && session.activePlayer === ZERO_ADDRESS
+        && session.asset?.toLowerCase() === BASE_USDC_ADDRESS.toLowerCase()
+      ));
+      setSessions(openUsdcRooms);
+      setLastAction(openUsdcRooms.length ? 'Rooms loaded' : 'No rooms open');
     } catch (err) {
       setError(err.message || String(err));
       setLastAction('Session discovery failed');
@@ -237,7 +242,7 @@ export default function App() {
         <div><p className="kicker">Game flow</p><h2>Clear roles before any room action.</h2></div>
         <div className="guide-list">
           <p><strong>Players browse rooms.</strong> Pick an open room, connect wallet, and reveal tiles.</p>
-          <p><strong>Hosts create rooms.</strong> Choose difficulty and prize pot. The contract assigns the room ID automatically.</p>
+          <p><strong>Hosts create rooms.</strong> Choose difficulty and prize pot. Once it opens, players can find it in the lobby.</p>
           <p><strong>Difficulty matters.</strong> Easy has fewer bombs and more prizes. Hardcore has more bombs and one prize.</p>
         </div>
       </section>
@@ -281,6 +286,6 @@ export default function App() {
       <div className="room-layout"><section className={`board-card ${run.role === 'host' ? 'locked' : ''}`}><div className="meter-row"><div><span>Bombs hit</span><strong>{run.bombs}/3</strong></div><div><span>Bombs hidden</span><strong>{mode.bombs}</strong></div><div><span>Next reveal</span><strong>{formatUsdc(nextRevealCost)} USDC</strong></div></div><p className="status-line">{run.message}</p><div className="tile-board" aria-label="Chancy 8x8 board">{tiles.map((tile) => <button key={tile} aria-label={`tile ${tile}`} className={`tile ${revealed[tile]}`} onClick={() => revealTile(tile)}>{revealed[tile] === 'hidden' ? formatUsdc(nextRevealCost) : revealed[tile] === 'bomb' ? '×' : revealed[tile] === 'prize' ? '$' : '·'}</button>)}</div></section><aside className="run-card"><h2>{run.role === 'host' ? 'Room is waiting' : 'Run details'}</h2><div className="stat-list"><div><span>Prize pot</span><strong>{prizePotUsdc} USDC</strong></div><div><span>Mode</span><strong>{difficulty}: {mode.bombs} bombs / {mode.prizes} prize{mode.prizes === 1 ? '' : 's'}</strong></div><div><span>Player</span><strong>{run.role === 'player' ? 'You' : 'Waiting'}</strong></div></div>{run.role === 'host' ? <p className="note">Host cannot play this room. Wait for a player to join.</p> : <><button className="main-button full" type="button" onClick={claimRewards}>Claim USDC</button><button className="ghost-button full" type="button" onClick={quitSession}>Quit run</button></>}</aside></div>
     </section>}
 
-    <footer className="app-footer"><span>{health === 'online' ? 'Chancy live' : 'Chancy unavailable'}</span><span>{CHAIN_CONFIG[chainId]?.label || 'Base'}</span><span>{lastAction}</span>{error && <strong className="error-text">{error}</strong>}</footer>
+    <footer className="app-footer"><span>{health === 'online' ? 'Chancy live' : 'Chancy unavailable'}</span><span>{wallet ? `Wallet ${walletLabel}` : 'Wallet not connected'}</span><span>{lastAction}</span>{error && <strong className="error-text">{error}</strong>}</footer>
   </main>;
 }

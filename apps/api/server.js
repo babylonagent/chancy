@@ -99,8 +99,17 @@ async function listSessions({ contract, rpcUrl, limit = 24 }) {
   const start = latestId > count ? latestId - count + 1n : 1n;
   const ids = [];
   for (let id = latestId; id >= start; id -= 1n) ids.push(id);
-  const rows = await Promise.all(ids.map(async (id) => normalizeSession(id, await client.readContract({ address: contract, abi: chancyAbi, functionName: "sessions", args: [id] }))));
-  return { sessions: rows, nextSessionId: nextSessionId.toString(), source: "contract" };
+  const rows = [];
+  const errors = [];
+  for (const id of ids) {
+    try {
+      const raw = await client.readContract({ address: contract, abi: chancyAbi, functionName: "sessions", args: [id] });
+      rows.push(normalizeSession(id, raw));
+    } catch (error) {
+      errors.push({ sessionId: id.toString(), message: error.shortMessage || error.message });
+    }
+  }
+  return { sessions: rows, nextSessionId: nextSessionId.toString(), source: "contract", errors };
 }
 
 async function getEntropyFee({ contract, rpcUrl }) {

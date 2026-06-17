@@ -22,7 +22,9 @@ describe('Chancy web client', () => {
     global.fetch = vi.fn(async (url, options = {}) => {
       if (url === '/health') return Response.json({ ok: true, service: 'chancy-api', contractAddress: txPayload.to });
       if (url.startsWith('/data/sessions')) {
-        return Response.json({ source: 'contract', nextSessionId: '3', sessions: [
+        return Response.json({ source: 'contract', nextSessionId: '5', sessions: [
+          { sessionId: '4', host: '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', asset: '0x0000000000000000000000000000000000000000', difficulty: 'Easy', prizePot: '20000000000000', activePlayer: '0x0000000000000000000000000000000000000000', bombCount: 5, prizeCount: 3, open: true },
+          { sessionId: '3', host: '0xcccccccccccccccccccccccccccccccccccccccc', asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', difficulty: 'Hardcore', prizePot: '1000000', activePlayer: '0x9999999999999999999999999999999999999999', bombCount: 10, prizeCount: 1, open: true },
           { sessionId: '2', host: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', difficulty: 'Normal', prizePot: '25000000', activePlayer: '0x0000000000000000000000000000000000000000', bombCount: 7, prizeCount: 2, open: true },
         ] });
       }
@@ -76,6 +78,8 @@ describe('Chancy web client', () => {
 
     expect(await screen.findByText('Choose an open room.')).toBeInTheDocument();
     expect(await screen.findByText('Room #2')).toBeInTheDocument();
+    expect(screen.queryByText('Room #3')).not.toBeInTheDocument();
+    expect(screen.queryByText('Room #4')).not.toBeInTheDocument();
     expect(screen.getByText('7')).toBeInTheDocument();
     expect(screen.queryByLabelText(/Chancy 8x8 board/i)).not.toBeInTheDocument();
   });
