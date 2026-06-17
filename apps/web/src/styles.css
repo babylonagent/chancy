@@ -50,15 +50,25 @@ h2 { font-size: clamp(30px, 4vw, 52px); line-height: .95; }
 .hero-visual img { width: min(62%, 250px); filter: drop-shadow(0 22px 28px rgba(0,0,0,.24)); }
 .hero-visual span { position: absolute; left: 22px; bottom: 22px; border-radius: 999px; background: rgba(255,253,247,.92); color: #20221e; padding: 10px 13px; font-weight: 950; }
 
-.info-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 18px; }
-.info-grid div, .guide-list p, .session-card, .empty-state, .create-card, .board-card, .run-card, .landing-guide, .app-footer { min-width: 0; border: 1px solid rgba(32,34,30,.12); border-radius: 28px; background: rgba(255,253,247,.82); box-shadow: 0 22px 64px rgba(68, 53, 22, .09); }
+.info-grid, .mode-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 18px; }
+.info-grid div, .mode-grid article, .guide-list p, .session-card, .empty-state, .create-card, .board-card, .run-card, .landing-guide, .app-footer, .choice-card, .wallet-panel { min-width: 0; border: 1px solid rgba(32,34,30,.12); border-radius: 28px; background: rgba(255,253,247,.82); box-shadow: 0 22px 64px rgba(68, 53, 22, .09); }
 .info-grid div { display: grid; gap: 8px; padding: 18px; }
+.mode-grid article { display: grid; gap: 8px; padding: 18px; }
+.mode-grid strong { color: #20221e; font-size: 22px; letter-spacing: -.04em; }
+.mode-grid span { color: #625f55; font-weight: 900; }
 .info-grid strong, .guide-list strong { color: #20221e; font-size: 18px; }
-.info-grid span, .guide-list p, .note { color: #625f55; line-height: 1.45; }
+.info-grid span, .guide-list p, .note, .choice-card p, .wallet-panel p { color: #625f55; line-height: 1.45; }
 .landing-guide { display: grid; grid-template-columns: .9fr 1.1fr; gap: 28px; padding: 22px; align-items: start; }
 .landing-guide .kicker { margin-bottom: 12px; }
 .guide-list { display: grid; gap: 10px; }
 .guide-list p { margin: 0; padding: 16px; }
+
+.role-grid, .host-layout { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: stretch; }
+.role-grid .wallet-panel { grid-column: 1 / -1; }
+.choice-card, .wallet-panel { display: grid; gap: 16px; padding: 22px; align-content: space-between; }
+.choice-card span { color: #73530e; font-size: 12px; font-weight: 950; letter-spacing: .06em; text-transform: uppercase; }
+.choice-card h2, .wallet-panel h2 { font-size: clamp(28px, 3.4vw, 44px); }
+.wallet-panel { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
 
 .page-head { display: grid; gap: 14px; padding: 54px 0 28px; }
 .sessions-layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 18px; align-items: start; }
@@ -114,7 +124,7 @@ input:focus, select:focus { border-color: #ffaa00; box-shadow: 0 0 0 4px rgba(25
   .product-shell { width: min(100% - 24px, 1180px); padding-top: 10px; }
   .topbar { position: static; align-items: flex-start; border-radius: 22px; }
   .top-actions { justify-content: flex-start; }
-  .landing-hero, .landing-guide, .sessions-layout, .room-layout, .info-grid { grid-template-columns: 1fr; }
+  .landing-hero, .landing-guide, .sessions-layout, .room-layout, .info-grid, .mode-grid, .role-grid, .host-layout, .wallet-panel { grid-template-columns: 1fr; }
   .landing-hero { min-height: auto; padding: 28px 0 34px; gap: 22px; }
   h1 { font-size: clamp(42px, 14vw, 68px); }
   .hero-visual { min-height: 300px; }
