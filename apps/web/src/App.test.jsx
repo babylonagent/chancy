@@ -14,6 +14,11 @@ describe('Chancy web client', () => {
       if (url === '/health') {
         return Response.json({ ok: true, service: 'chancy-api', contractAddress: txPayload.to });
       }
+      if (url.startsWith('/data/sessions')) {
+        return Response.json({ source: 'contract', nextSessionId: '3', sessions: [
+          { sessionId: '2', host: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', difficulty: 'Normal', prizePot: '25000000', activePlayer: '0x0000000000000000000000000000000000000000', bombCount: 7, prizeCount: 2, open: true },
+        ] });
+      }
       if (url.startsWith('/tx/')) {
         return Response.json({ ...txPayload, route: url, body: JSON.parse(options.body || '{}') });
       }
@@ -64,8 +69,8 @@ describe('Chancy web client', () => {
     fireEvent.click(screen.getByRole('button', { name: /browse sessions/i }));
 
     expect(screen.getByText('Create or join a real room.')).toBeInTheDocument();
-    expect(screen.getByText(/No indexed sessions yet/i)).toBeInTheDocument();
-    expect(screen.queryByText('Room #1')).not.toBeInTheDocument();
+    expect(await screen.findByText('Room #2')).toBeInTheDocument();
+    expect(screen.getByText('25 USDC')).toBeInTheDocument();
     expect(screen.queryByLabelText(/Chancy 8x8 board/i)).not.toBeInTheDocument();
   });
 

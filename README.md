@@ -91,8 +91,9 @@ Transaction builders:
 - `POST /tx/kick-idle-player`
 - `POST /tx/claim-rewards`
 
-Read-call builders:
+Read/data endpoints:
 
+- `GET /data/sessions`
 - `GET /read/session/:sessionId`
 - `GET /read/player-game/:sessionId/:player`
 - `GET /read/claimable-rewards/:player/:asset`

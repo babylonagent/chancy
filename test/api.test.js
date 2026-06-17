@@ -95,6 +95,14 @@ describe("agent API", function () {
     expect(decodeFunctionData({ abi: chancyAbi, data: next.body.data }).functionName).to.equal("nextSessionId");
   });
 
+  it("returns discovered session data from the contract reader", async function () {
+    const app = createApp({ contractAddress: "0x0000000000000000000000000000000000000000" });
+
+    const res = await request(app).get("/data/sessions").expect(200);
+
+    expect(res.body).to.deep.equal({ sessions: [], nextSessionId: "1", source: "unconfigured" });
+  });
+
   it("rejects invalid request bodies and read params", async function () {
     const app = createApp({ contractAddress: CONTRACT });
 

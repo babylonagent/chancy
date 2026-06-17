@@ -29,7 +29,7 @@ Mainnet can be deployed by a disposable funded deployer while assigning contract
 - Base USDC: `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`
 - Pyth Entropy: `0x6E7D74FA7d5c90FEF9F0512987605a6d546181Bb`
 - Verification result: code exists, owner matches, USDC allowed, ETH allowed, entropy matches, `nextSessionId = 1`.
-- Live app/API: `https://chancy-preview.vercel.app` points at this mainnet contract and verified `/health`, `/tx/create-session`, `/read/session/:id`, and `/read/current-reveal-cost/:id`.
+- Live app/API: `https://chancy-preview.vercel.app` and VPS/nginx config for `www.chancy.cash` point at this mainnet contract. Verified `/health`, `/data/sessions`, `/tx/create-session`, `/read/session/:id`, and `/read/current-reveal-cost/:id`. DNS for `www.chancy.cash` must point at the VPS before public HTTPS can be issued.
 
 ## Verified Base mainnet inputs
 

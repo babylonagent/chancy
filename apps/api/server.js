@@ -1,7 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const { z } = require("zod");
-const { encodeFunctionData } = require("viem");
+const { encodeFunctionData, createPublicClient, http } = require("viem");
 const chancyAbiJson = require("../../abi/ChancyGame.json");
 const chancyAbi = chancyAbiJson.abi || chancyAbiJson;
 
@@ -67,8 +67,37 @@ function validateParams(schema, handler) {
 }
 
 const DEFAULT_CONTRACT_ADDRESS = "0x0000000000000000000000000000000000000000";
+const DEFAULT_BASE_RPC_URL = "https://mainnet.base.org";
 
-function createApp({ contractAddress = process.env.CHANCY_CONTRACT_ADDRESS || DEFAULT_CONTRACT_ADDRESS } = {}) {
+function normalizeSession(sessionId, raw) {
+  return {
+    sessionId: sessionId.toString(),
+    host: raw[0],
+    asset: raw[1],
+    difficulty: ["Easy", "Normal", "Hardcore"][Number(raw[2])] || String(raw[2]),
+    prizePot: raw[3].toString(),
+    activePlayer: raw[4],
+    bombCount: Number(raw[5]),
+    prizeCount: Number(raw[6]),
+    open: raw[7],
+  };
+}
+
+async function listSessions({ contract, rpcUrl, limit = 24 }) {
+  if (contract === DEFAULT_CONTRACT_ADDRESS) return { sessions: [], nextSessionId: "1", source: "unconfigured" };
+  const client = createPublicClient({ transport: http(rpcUrl || DEFAULT_BASE_RPC_URL) });
+  const nextSessionId = await client.readContract({ address: contract, abi: chancyAbi, functionName: "nextSessionId" });
+  const latestId = nextSessionId - 1n;
+  if (latestId === 0n) return { sessions: [], nextSessionId: nextSessionId.toString(), source: "contract" };
+  const count = BigInt(Math.max(1, Math.min(Number(limit) || 24, 50)));
+  const start = latestId > count ? latestId - count + 1n : 1n;
+  const ids = [];
+  for (let id = latestId; id >= start; id -= 1n) ids.push(id);
+  const rows = await Promise.all(ids.map(async (id) => normalizeSession(id, await client.readContract({ address: contract, abi: chancyAbi, functionName: "sessions", args: [id] }))));
+  return { sessions: rows, nextSessionId: nextSessionId.toString(), source: "contract" };
+}
+
+function createApp({ contractAddress = process.env.CHANCY_CONTRACT_ADDRESS || DEFAULT_CONTRACT_ADDRESS, rpcUrl = process.env.BASE_RPC_URL || process.env.CHANCY_RPC_URL || DEFAULT_BASE_RPC_URL } = {}) {
   const contract = addressSchema.parse(contractAddress);
   const app = express();
 
@@ -81,6 +110,15 @@ function createApp({ contractAddress = process.env.CHANCY_CONTRACT_ADDRESS || DE
 
   app.get("/health", (_req, res) => {
     res.json({ ok: true, service: "chancy-api", contractAddress: contract });
+  });
+
+  app.get("/data/sessions", async (req, res) => {
+    try {
+      const limit = Math.min(Number(req.query.limit || 24), 50);
+      res.json(await listSessions({ contract, rpcUrl, limit }));
+    } catch (error) {
+      res.status(502).json({ error: "SESSION_DISCOVERY_FAILED", message: error.message });
+    }
   });
 
   app.post("/tx/create-session", validate(z.object({
@@ -177,4 +215,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { createApp, chancyAbi, readCall };
+module.exports = { createApp, chancyAbi, readCall, listSessions };

@@ -88,6 +88,8 @@ export default function App() {
   const [board, setBoard] = useState(() => makeBoard('Normal', 'chancy'));
   const [revealed, setRevealed] = useState(() => Array.from({ length: 64 }, () => TILE_HIDDEN));
   const [run, setRun] = useState({ role: '', bombs: 0, prizes: 0, active: false, ended: false, message: 'Create or join a session to reveal a board.' });
+  const [sessions, setSessions] = useState([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
   const [lastAction, setLastAction] = useState('Ready');
   const [error, setError] = useState('');
 
@@ -112,7 +114,21 @@ export default function App() {
 
   function closeRules() { localStorage.setItem('chancy_rules_seen', '1'); setShowRules(false); }
   async function connectWallet() { setError(''); try { const provider = getWalletProvider(); const accounts = await provider.request({ method: 'eth_requestAccounts' }); const nextChainId = await provider.request({ method: 'eth_chainId' }); setWallet(accounts[0] || ''); setChainId(nextChainId); setLastAction('Wallet connected'); } catch (err) { setError(err.message || String(err)); } }
-  function openSessions() { setError(''); setView('sessions'); setLastAction('Session console ready'); }
+  async function openSessions() {
+    setError('');
+    setView('sessions');
+    setSessionsLoading(true);
+    try {
+      const data = await getJson('/data/sessions?limit=24');
+      setSessions(data.sessions || []);
+      setLastAction(`Loaded ${data.sessions?.length || 0} real sessions`);
+    } catch (err) {
+      setError(err.message || String(err));
+      setLastAction('Session discovery failed');
+    } finally {
+      setSessionsLoading(false);
+    }
+  }
 
   async function createSession() {
     setError('');
@@ -125,11 +141,17 @@ export default function App() {
     } catch (err) { setError(err.message || String(err)); }
   }
 
-  async function joinSession() {
+  async function joinSession(session = null) {
     setError('');
     try {
-      await postJson('/tx/join-session', { sessionId, userRandomNumber: DEFAULT_RANDOM, entropyFee: '0' });
-      setBoard(makeBoard(difficulty, wallet || `player-${sessionId}`));
+      const nextId = session?.sessionId || sessionId;
+      const nextDifficulty = session?.difficulty || difficulty;
+      const nextPrizePot = session?.asset?.toLowerCase() === selectedAsset.toLowerCase() ? formatUsdc(session.prizePot) : prizePotUsdc;
+      setSessionId(nextId);
+      setDifficulty(nextDifficulty);
+      setPrizePotUsdc(nextPrizePot);
+      await postJson('/tx/join-session', { sessionId: nextId, userRandomNumber: DEFAULT_RANDOM, entropyFee: '0' });
+      setBoard(makeBoard(nextDifficulty, wallet || `player-${nextId}`));
       setRevealed(Array.from({ length: 64 }, () => TILE_HIDDEN));
       setRun({ role: 'player', bombs: 0, prizes: 0, active: true, ended: false, message: 'You joined. Reveal tiles carefully.' });
       setView('room'); setLastAction('Join-session transaction ready');
@@ -158,7 +180,7 @@ export default function App() {
 
     {view === 'landing' && <><section className="landing-hero"><div className="hero-copy"><p className="kicker">Prize rooms</p><h1>Pick a room. Reveal tiles. Dodge the third bomb.</h1><p className="lede">Chancy is a simple risk game: join one host-funded room, uncover your private board, and claim prizes before the bombs end your run.</p><div className="hero-buttons"><button className="main-button large" type="button" onClick={openSessions}>Browse sessions</button><button className="ghost-button large" type="button" onClick={() => setShowRules(true)}>How it works</button></div></div><div className="hero-visual" aria-label="Chancy game preview"><img src={chancyLogo} alt="" /><span>3 bombs ends the run</span></div></section><section className="info-grid" aria-label="Game guide"><div><strong>1. Choose a room</strong><span>Sessions are host-funded and accept one active player at a time.</span></div><div><strong>2. Reveal with USDC</strong><span>Every hidden tile shows its next reveal cost before you click.</span></div><div><strong>3. Claim prizes</strong><span>Prize tiles accrue rewards. Quit, claim, or risk the third bomb.</span></div></section><section className="landing-guide"><div><p className="kicker">Game aspects</p><h2>Fast decisions, clear math, private boards.</h2></div><div className="guide-list"><p><strong>No fake rooms.</strong> Mainnet shows real sessions only; use the console to create or enter a room ID.</p><p><strong>Hosts fund the pot.</strong> Hosts create rooms but cannot play their own room.</p><p><strong>Progressive cost.</strong> Reveal costs rise through the run, so waiting too long has teeth.</p></div></section></>}
 
-    {view === 'sessions' && <section className="sessions-page"><div className="page-head"><p className="kicker">Session console</p><h1>Create or join a real room.</h1><p className="lede">No fake active sessions, fren. Until the indexer is connected, enter a known room ID or create a new host-funded room.</p></div><div className="sessions-layout"><div className="session-list"><article className="empty-state"><h2>No indexed sessions yet.</h2><p>After deployment, this area should be fed by a real indexer or contract reads. For now, use the controls beside it.</p><button className="ghost-button" type="button" onClick={kickIdlePlayer}>Kick idle player in entered room</button></article></div><aside className="create-card"><h2>Room controls</h2><div className="fields"><label>Difficulty<select aria-label="difficulty" value={difficulty} onChange={(event) => setDifficulty(event.target.value)}><option>Easy</option><option>Normal</option><option>Hardcore</option></select><small>{DIFFICULTIES[difficulty].copy}</small></label><label>Prize pot USDC<input aria-label="prize pot usdc" inputMode="decimal" value={prizePotUsdc} onChange={(event) => setPrizePotUsdc(event.target.value)} /></label><label>Room ID<input aria-label="session id" inputMode="numeric" value={sessionId} onChange={(event) => setSessionId(event.target.value)} /></label></div><div className="stat-list"><div><span>First reveal</span><strong>{formatUsdc(revealCostUnits(prizePot, difficulty, 0))} USDC</strong></div><div><span>Mode</span><strong>{DIFFICULTIES[difficulty].bombs} bombs · {DIFFICULTIES[difficulty].prizes} prizes</strong></div></div><button className="main-button full" type="button" onClick={createSession}>Create room</button><button className="ghost-button full" type="button" onClick={joinSession}>Join entered room</button></aside></div></section>}
+    {view === 'sessions' && <section className="sessions-page"><div className="page-head"><p className="kicker">Live sessions</p><h1>Create or join a real room.</h1><p className="lede">Session discovery reads the mainnet contract directly. No fake rooms, no sand-table illusions.</p></div><div className="sessions-layout"><div className="session-list">{sessionsLoading && <article className="empty-state"><h2>Loading sessions…</h2><p>Reading the latest Chancy rooms from Base.</p></article>}{!sessionsLoading && sessions.length === 0 && <article className="empty-state"><h2>No live sessions yet.</h2><p>Create the first host-funded room, then it will appear here from contract reads.</p><button className="ghost-button" type="button" onClick={kickIdlePlayer}>Kick idle player in entered room</button></article>}{!sessionsLoading && sessions.map((session) => <article className="session-card" key={session.sessionId}><div><strong>Room #{session.sessionId}</strong><span>{session.open ? session.activePlayer === '0x0000000000000000000000000000000000000000' ? 'Open' : 'Occupied' : 'Closed'}</span></div><div><span>Difficulty</span><strong>{session.difficulty}</strong></div><div><span>Prize pot</span><strong>{formatUsdc(session.prizePot)} USDC</strong></div><div><span>Bombs</span><strong>{session.bombCount}</strong></div><div><span>Prizes</span><strong>{session.prizeCount}</strong></div><button className="main-button" type="button" disabled={!session.open || session.activePlayer !== '0x0000000000000000000000000000000000000000'} onClick={() => joinSession(session)}>Join room</button></article>)}</div><aside className="create-card"><h2>Room controls</h2><div className="fields"><label>Difficulty<select aria-label="difficulty" value={difficulty} onChange={(event) => setDifficulty(event.target.value)}><option>Easy</option><option>Normal</option><option>Hardcore</option></select><small>{DIFFICULTIES[difficulty].copy}</small></label><label>Prize pot USDC<input aria-label="prize pot usdc" inputMode="decimal" value={prizePotUsdc} onChange={(event) => setPrizePotUsdc(event.target.value)} /></label><label>Room ID<input aria-label="session id" inputMode="numeric" value={sessionId} onChange={(event) => setSessionId(event.target.value)} /></label></div><div className="stat-list"><div><span>First reveal</span><strong>{formatUsdc(revealCostUnits(prizePot, difficulty, 0))} USDC</strong></div><div><span>Mode</span><strong>{DIFFICULTIES[difficulty].bombs} bombs · {DIFFICULTIES[difficulty].prizes} prizes</strong></div></div><button className="main-button full" type="button" onClick={createSession}>Create room</button><button className="ghost-button full" type="button" onClick={() => joinSession()}>Join entered room</button></aside></div></section>}
 
     {view === 'room' && <section className="room-page"><div className="room-header"><button className="ghost-button" type="button" onClick={openSessions}>Back to sessions</button><div><p className="kicker">Room #{sessionId}</p><h1>{run.role === 'host' ? 'Host view' : 'Your board'}</h1></div></div><div className="room-layout"><section className={`board-card ${run.role === 'host' ? 'locked' : ''}`}><div className="meter-row"><div><span>Bombs</span><strong>{run.bombs}/3</strong></div><div><span>Prizes</span><strong>{run.prizes}</strong></div><div><span>Next reveal</span><strong>{formatUsdc(nextRevealCost)} USDC</strong></div></div><p className="status-line">{run.message}</p><div className="tile-board" aria-label="Chancy 8x8 board">{tiles.map((tile) => <button key={tile} aria-label={`tile ${tile}`} className={`tile ${revealed[tile]}`} onClick={() => revealTile(tile)}>{revealed[tile] === 'hidden' ? formatUsdc(nextRevealCost) : revealed[tile] === 'bomb' ? '×' : revealed[tile] === 'prize' ? '$' : '·'}</button>)}</div></section><aside className="run-card"><h2>{run.role === 'host' ? 'Room is live' : 'Run details'}</h2><div className="stat-list"><div><span>Prize pot</span><strong>{prizePotUsdc} USDC</strong></div><div><span>Mode</span><strong>{difficulty}</strong></div><div><span>Active player</span><strong>{run.role === 'player' ? 'You' : 'Waiting'}</strong></div></div>{run.role === 'host' ? <p className="note">Host cannot play. Share the room ID after the create transaction lands.</p> : <><button className="main-button full" type="button" onClick={claimRewards}>Claim USDC</button><button className="ghost-button full" type="button" onClick={quitSession}>Quit run</button></>}</aside></div></section>}
 
