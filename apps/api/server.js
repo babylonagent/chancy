@@ -3,6 +3,7 @@ const cors = require("cors");
 const { z } = require("zod");
 const { encodeFunctionData, createPublicClient, http, parseAbi } = require("viem");
 const chancyAbiJson = require("../../abi/ChancyGame.json");
+const { installV2Routes, loadV2Store } = require("./v2");
 const chancyAbi = chancyAbiJson.abi || chancyAbiJson;
 
 const difficultyMap = {
@@ -120,7 +121,11 @@ async function getEntropyFee({ contract, rpcUrl }) {
   return { fee: fee.toString(), provider, entropyAddress };
 }
 
-function createApp({ contractAddress = process.env.CHANCY_CONTRACT_ADDRESS || DEFAULT_CONTRACT_ADDRESS, rpcUrl = process.env.BASE_RPC_URL || process.env.CHANCY_RPC_URL || DEFAULT_BASE_RPC_URL } = {}) {
+function createApp({
+  contractAddress = process.env.CHANCY_CONTRACT_ADDRESS || DEFAULT_CONTRACT_ADDRESS,
+  rpcUrl = process.env.BASE_RPC_URL || process.env.CHANCY_RPC_URL || DEFAULT_BASE_RPC_URL,
+  v2StorePath = process.env.CHANCY_V2_STORE_PATH || "",
+} = {}) {
   const contract = addressSchema.parse(contractAddress);
   const app = express();
 
@@ -130,6 +135,7 @@ function createApp({ contractAddress = process.env.CHANCY_CONTRACT_ADDRESS || DE
   });
   app.use(cors());
   app.use(express.json());
+  installV2Routes(app, { store: loadV2Store(v2StorePath), storePath: v2StorePath });
 
   app.get("/health", (_req, res) => {
     res.json({ ok: true, service: "chancy-api", contractAddress: contract });
