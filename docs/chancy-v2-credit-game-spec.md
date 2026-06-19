@@ -61,6 +61,38 @@ Current implementation is an API/engine foundation using in-process storage for 
 - Admin/reconciliation tooling: total credits liabilities must match deposits minus withdrawals plus game outcomes.
 - Frontend redesign for deposit, play, exit, fairness receipt, and withdrawal.
 
+## Wallet and money-flow model before contract deployment
+
+No V2 contract should be deployed until these addresses are provided explicitly:
+
+- `CHANCY_CONTROLLER_ADDRESS` — owner/admin/controller. Separate from hot and cold wallets.
+- `CHANCY_HOT_WALLET_ADDRESS` — limited withdrawal liquidity only.
+- `CHANCY_COLD_WALLET_ADDRESS` — treasury/reserve wallet for most funds.
+- `CHANCY_USDC_ADDRESS` — Base USDC.
+
+Recommended V2 custody flow:
+
+1. Player deposits USDC into a `ChancyVault` contract, not directly into the hot wallet.
+2. The vault emits a deposit event.
+3. Backend waits for confirmation and credits the player in-game USD 1:1.
+4. Vault/controller treasury policy keeps only operating liquidity in the hot wallet.
+5. Surplus funds are swept to the cold wallet.
+6. Player withdrawals are queued in the backend ledger.
+7. Normal withdrawals are paid from the hot wallet.
+8. Large/suspicious withdrawals pause for manual review or cold-wallet refill.
+9. Controller wallet owns contract settings and emergency controls, but does not act as hot withdrawal liquidity.
+
+This separates roles:
+
+| Role | Holds funds? | Purpose |
+| --- | --- | --- |
+| Controller wallet | No routine funds | Owns contract/admin settings, pause, treasury policies |
+| Vault contract | Yes, initially | Receives player deposits and emits auditable deposit events |
+| Hot wallet | Limited | Pays normal withdrawals only |
+| Cold wallet | Majority | Long-term treasury/reserve |
+
+Security rule: hot wallet compromise should not drain cold wallet or controller ownership. Controller compromise should be protected by multisig/timelock later, but V2 should already keep it separate from day-to-day withdrawal funds.
+
 ## ZK later
 
 Future ZK proofs can target:
