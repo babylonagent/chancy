@@ -46,11 +46,20 @@ Current V2 foundation endpoints:
 
 - `POST /v2/credits/deposit`
 - `GET /v2/credits/:player`
+- `POST /v2/withdrawals/request`
+- `GET /v2/withdrawals/:player`
+- `POST /v2/withdrawals/:withdrawalId/mark-paid`
 - `POST /v2/sessions`
 - `POST /v2/sessions/:sessionId/click`
 - `POST /v2/sessions/:sessionId/exit`
 
-Current implementation is an API/engine foundation using in-process storage for tests. Production must replace this with durable storage before real funds.
+Withdrawal queue behavior:
+
+- Requesting a withdrawal creates a `pending` withdrawal and reduces `withdrawable` credits, but does not immediately change the total credit balance.
+- Marking a withdrawal `paid` requires a hot-wallet transaction hash and then deducts the amount from the player credit balance.
+- Production must restrict `mark-paid` behind admin auth before live use.
+
+Current implementation is an API/engine foundation using file-backed JSON storage when `CHANCY_V2_STORE_PATH` is configured. Production should replace this with a real database before serious funds.
 
 ## Production requirements still open
 

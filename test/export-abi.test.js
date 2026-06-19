@@ -16,4 +16,18 @@ describe("ABI export", function () {
     expect(names).to.include("clickTile");
     expect(names).to.include("claimRewards");
   });
+
+  it("writes ChancyVault ABI JSON for vault deposit clients", async function () {
+    const { exportAbi } = require("../scripts/export-abi");
+
+    const outputPath = await exportAbi({ contractName: "ChancyVault" });
+    const abi = JSON.parse(fs.readFileSync(outputPath, "utf8"));
+    const names = abi.map((item) => item.name).filter(Boolean);
+
+    expect(outputPath).to.equal(path.join(process.cwd(), "abi", "ChancyVault.json"));
+    expect(names).to.include("deposit");
+    expect(names).to.include("sweepToCold");
+    expect(names).to.include("hotWallet");
+    expect(names).to.include("coldWallet");
+  });
 });

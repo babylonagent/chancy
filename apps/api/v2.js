@@ -45,27 +45,31 @@ function boardCommitHash({ entropy, sessionId, player, mode, board }) {
 }
 
 function createV2Store() {
-  return { balances: new Map(), sessions: new Map(), nextSessionId: 1 };
+  return { balances: new Map(), sessions: new Map(), withdrawals: new Map(), nextSessionId: 1, nextWithdrawalId: 1 };
 }
 
 function serializeStore(store) {
   return {
     nextSessionId: store.nextSessionId,
+    nextWithdrawalId: store.nextWithdrawalId,
     balances: Object.fromEntries([...store.balances.entries()].map(([key, value]) => [key, value.toString()])),
     sessions: Object.fromEntries([...store.sessions.entries()].map(([id, session]) => [id, {
       ...session,
       clicked: [...session.clicked.entries()],
     }])),
+    withdrawals: Object.fromEntries(store.withdrawals.entries()),
   };
 }
 
 function hydrateStore(raw) {
   const store = createV2Store();
   store.nextSessionId = Number(raw?.nextSessionId || 1);
+  store.nextWithdrawalId = Number(raw?.nextWithdrawalId || 1);
   for (const [key, value] of Object.entries(raw?.balances || {})) store.balances.set(key, BigInt(value));
   for (const [id, session] of Object.entries(raw?.sessions || {})) {
     store.sessions.set(id, { ...session, clicked: new Map(session.clicked || []) });
   }
+  for (const [id, withdrawal] of Object.entries(raw?.withdrawals || {})) store.withdrawals.set(id, withdrawal);
   return store;
 }
 
@@ -90,6 +94,18 @@ function setBalance(store, player, amount) {
   store.balances.set(player.toLowerCase(), BigInt(amount));
 }
 
+function pendingWithdrawals(store, player) {
+  return [...store.withdrawals.values()]
+    .filter((withdrawal) => withdrawal.player.toLowerCase() === player.toLowerCase() && withdrawal.status === "pending")
+    .reduce((sum, withdrawal) => sum + BigInt(withdrawal.amount), 0n);
+}
+
+function withdrawableBalance(store, player) {
+  const balance = getBalance(store, player);
+  const pending = pendingWithdrawals(store, player);
+  return balance > pending ? balance - pending : 0n;
+}
+
 function installV2Routes(app, { store = createV2Store(), storePath = "" } = {}) {
   app.post("/v2/credits/deposit", (req, res) => {
     const parsed = z.object({ player: addressSchema, amount: uintString, txHash: bytes32Schema }).safeParse(req.body || {});
@@ -105,7 +121,47 @@ function installV2Routes(app, { store = createV2Store(), storePath = "" } = {}) 
     const parsed = z.object({ player: addressSchema }).safeParse(req.params || {});
     if (!parsed.success) return res.status(400).json({ error: "INVALID_PARAMS", details: parsed.error.flatten() });
     const balance = getBalance(store, parsed.data.player).toString();
-    return res.json({ player: parsed.data.player, balance, withdrawable: balance });
+    const withdrawable = withdrawableBalance(store, parsed.data.player).toString();
+    return res.json({ player: parsed.data.player, balance, withdrawable });
+  });
+
+  app.post("/v2/withdrawals/request", (req, res) => {
+    const parsed = z.object({ player: addressSchema, amount: uintString, destination: addressSchema }).safeParse(req.body || {});
+    if (!parsed.success) return res.status(400).json({ error: "INVALID_REQUEST", details: parsed.error.flatten() });
+    const { player, amount, destination } = parsed.data;
+    const requested = BigInt(amount);
+    if (requested <= 0n) return res.status(400).json({ error: "INVALID_AMOUNT" });
+    if (withdrawableBalance(store, player) < requested) return res.status(402).json({ error: "INSUFFICIENT_WITHDRAWABLE_CREDITS" });
+    const withdrawalId = `wd_${store.nextWithdrawalId++}`;
+    const withdrawal = { withdrawalId, player, amount: requested.toString(), destination, status: "pending", createdAt: new Date().toISOString() };
+    store.withdrawals.set(withdrawalId, withdrawal);
+    persistStore(store, storePath);
+    return res.json(withdrawal);
+  });
+
+  app.get("/v2/withdrawals/:player", (req, res) => {
+    const parsed = z.object({ player: addressSchema }).safeParse(req.params || {});
+    if (!parsed.success) return res.status(400).json({ error: "INVALID_PARAMS", details: parsed.error.flatten() });
+    const withdrawals = [...store.withdrawals.values()].filter((withdrawal) => withdrawal.player.toLowerCase() === parsed.data.player.toLowerCase());
+    return res.json({ player: parsed.data.player, withdrawals });
+  });
+
+  app.post("/v2/withdrawals/:withdrawalId/mark-paid", (req, res) => {
+    const paramParse = z.object({ withdrawalId: z.string().regex(/^wd_\d+$/) }).safeParse(req.params || {});
+    const bodyParse = z.object({ txHash: bytes32Schema }).safeParse(req.body || {});
+    if (!paramParse.success || !bodyParse.success) return res.status(400).json({ error: "INVALID_REQUEST" });
+    const withdrawal = store.withdrawals.get(paramParse.data.withdrawalId);
+    if (!withdrawal) return res.status(404).json({ error: "WITHDRAWAL_NOT_FOUND" });
+    if (withdrawal.status !== "pending") return res.status(409).json({ error: "WITHDRAWAL_NOT_PENDING", status: withdrawal.status });
+    const balance = getBalance(store, withdrawal.player);
+    const amount = BigInt(withdrawal.amount);
+    if (balance < amount) return res.status(409).json({ error: "LEDGER_UNDERFUNDED" });
+    setBalance(store, withdrawal.player, balance - amount);
+    withdrawal.status = "paid";
+    withdrawal.txHash = bodyParse.data.txHash;
+    withdrawal.paidAt = new Date().toISOString();
+    persistStore(store, storePath);
+    return res.json(withdrawal);
   });
 
   app.post("/v2/sessions", (req, res) => {

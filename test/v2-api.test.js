@@ -82,4 +82,42 @@ describe("Chancy V2 credit game API", function () {
     const exit = await request(secondApp).post(`/v2/sessions/${started.body.sessionId}/exit`).send({ player: PLAYER }).expect(200);
     expect(exit.body.board.prizePositions).to.have.length(2);
   });
+
+  it("queues withdrawals against withdrawable credit without immediately touching vault funds", async function () {
+    const app = createApp({ contractAddress: "0x1111111111111111111111111111111111111111" });
+    await request(app).post("/v2/credits/deposit").send({ player: PLAYER, amount: "50000000", txHash: "0x" + "06".repeat(32) }).expect(200);
+
+    const queued = await request(app)
+      .post("/v2/withdrawals/request")
+      .send({ player: PLAYER, amount: "12000000", destination: PLAYER })
+      .expect(200);
+
+    expect(queued.body).to.include({ player: PLAYER, amount: "12000000", destination: PLAYER, status: "pending" });
+    expect(queued.body.withdrawalId).to.match(/^wd_/);
+
+    const balance = await request(app).get(`/v2/credits/${PLAYER}`).expect(200);
+    expect(balance.body.balance).to.equal("50000000");
+    expect(balance.body.withdrawable).to.equal("38000000");
+
+    const list = await request(app).get(`/v2/withdrawals/${PLAYER}`).expect(200);
+    expect(list.body.withdrawals).to.have.length(1);
+  });
+
+  it("marks queued withdrawals paid with a hot-wallet transaction hash", async function () {
+    const app = createApp({ contractAddress: "0x1111111111111111111111111111111111111111" });
+    await request(app).post("/v2/credits/deposit").send({ player: PLAYER, amount: "50000000", txHash: "0x" + "07".repeat(32) }).expect(200);
+    const queued = await request(app).post("/v2/withdrawals/request").send({ player: PLAYER, amount: "12000000", destination: PLAYER }).expect(200);
+
+    const paid = await request(app)
+      .post(`/v2/withdrawals/${queued.body.withdrawalId}/mark-paid`)
+      .send({ txHash: "0x" + "08".repeat(32) })
+      .expect(200);
+
+    expect(paid.body.status).to.equal("paid");
+    expect(paid.body.txHash).to.equal("0x" + "08".repeat(32));
+
+    const balance = await request(app).get(`/v2/credits/${PLAYER}`).expect(200);
+    expect(balance.body.balance).to.equal("38000000");
+    expect(balance.body.withdrawable).to.equal("38000000");
+  });
 });
