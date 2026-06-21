@@ -12,6 +12,8 @@ const modeConfig = {
 const addressSchema = z.string().regex(/^0x[0-9a-fA-F]{40}$/);
 const bytes32Schema = z.string().regex(/^0x[0-9a-fA-F]{64}$/);
 const uintString = z.union([z.string().regex(/^\d+$/), z.number().int().nonnegative()]).transform(String);
+const WITHDRAWAL_FEE_BPS = 500n;
+const BPS_DENOMINATOR = 10_000n;
 
 function sha256Hex(value) {
   return "0x" + crypto.createHash("sha256").update(value).digest("hex");
@@ -133,7 +135,18 @@ function installV2Routes(app, { store = createV2Store(), storePath = "" } = {}) 
     if (requested <= 0n) return res.status(400).json({ error: "INVALID_AMOUNT" });
     if (withdrawableBalance(store, player) < requested) return res.status(402).json({ error: "INSUFFICIENT_WITHDRAWABLE_CREDITS" });
     const withdrawalId = `wd_${store.nextWithdrawalId++}`;
-    const withdrawal = { withdrawalId, player, amount: requested.toString(), destination, status: "pending", createdAt: new Date().toISOString() };
+    const feeAmount = requested * WITHDRAWAL_FEE_BPS / BPS_DENOMINATOR;
+    const payoutAmount = requested - feeAmount;
+    const withdrawal = {
+      withdrawalId,
+      player,
+      amount: requested.toString(),
+      payoutAmount: payoutAmount.toString(),
+      feeAmount: feeAmount.toString(),
+      destination,
+      status: "pending",
+      createdAt: new Date().toISOString(),
+    };
     store.withdrawals.set(withdrawalId, withdrawal);
     persistStore(store, storePath);
     return res.json(withdrawal);

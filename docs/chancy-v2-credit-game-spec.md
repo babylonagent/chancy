@@ -10,16 +10,17 @@ V2 is server-side gameplay with after-the-fact fairness verification. ZK is inte
 
 ## Core flow
 
-1. Player deposits USDC.
-2. Backend credits USD balance 1:1.
-3. Player starts a session with a stake.
-4. Session consumes Pyth Entropy randomness once.
-5. Server deterministically derives a 64-tile board from entropy, session id, player, and mode.
-6. Server stores board privately and publishes `boardCommitHash`.
-7. Player clicks tiles instantly through the API.
-8. Duplicate clicks are idempotent and never charged twice.
-9. Session ends on 3 bombs, all prizes found, or player exit.
-10. Server reveals entropy, full board, clicked history, and commit hash for verification.
+1. Player deposits USDC into `ChancyVault`.
+2. Vault sends a 5% deposit fee to the controller and emits gross/net/fee amounts.
+3. Backend credits USD balance from the net `creditedAmount`.
+4. Player starts a session with a stake.
+5. Session consumes Pyth Entropy randomness once.
+6. Server deterministically derives a 64-tile board from entropy, session id, player, and mode.
+7. Server stores board privately and publishes `boardCommitHash`.
+8. Player clicks tiles instantly through the API.
+9. Duplicate clicks are idempotent and never charged twice.
+10. Session ends on 3 bombs, all prizes found, or player exit.
+11. Server reveals entropy, full board, clicked history, and commit hash for verification.
 
 ## Mode config
 
@@ -55,8 +56,9 @@ Current V2 foundation endpoints:
 
 Withdrawal queue behavior:
 
-- Requesting a withdrawal creates a `pending` withdrawal and reduces `withdrawable` credits, but does not immediately change the total credit balance.
-- Marking a withdrawal `paid` requires a hot-wallet transaction hash and then deducts the amount from the player credit balance.
+- Requesting a withdrawal creates a `pending` withdrawal and reduces `withdrawable` credits by the gross requested `amount`, but does not immediately change the total credit balance.
+- Each withdrawal records `amount`, `payoutAmount`, and `feeAmount` using 5% fee accounting: `payoutAmount = amount * 95%`, `feeAmount = amount * 5%`.
+- Marking a withdrawal `paid` requires a hot-wallet transaction hash and then deducts the gross `amount` from the player credit balance.
 - Production must restrict `mark-paid` behind admin auth before live use.
 
 Current implementation is an API/engine foundation using file-backed JSON storage when `CHANCY_V2_STORE_PATH` is configured. Production should replace this with a real database before serious funds.

@@ -92,7 +92,14 @@ describe("Chancy V2 credit game API", function () {
       .send({ player: PLAYER, amount: "12000000", destination: PLAYER })
       .expect(200);
 
-    expect(queued.body).to.include({ player: PLAYER, amount: "12000000", destination: PLAYER, status: "pending" });
+    expect(queued.body).to.include({
+      player: PLAYER,
+      amount: "12000000",
+      payoutAmount: "11400000",
+      feeAmount: "600000",
+      destination: PLAYER,
+      status: "pending",
+    });
     expect(queued.body.withdrawalId).to.match(/^wd_/);
 
     const balance = await request(app).get(`/v2/credits/${PLAYER}`).expect(200);
@@ -115,6 +122,8 @@ describe("Chancy V2 credit game API", function () {
 
     expect(paid.body.status).to.equal("paid");
     expect(paid.body.txHash).to.equal("0x" + "08".repeat(32));
+    expect(paid.body.payoutAmount).to.equal("11400000");
+    expect(paid.body.feeAmount).to.equal("600000");
 
     const balance = await request(app).get(`/v2/credits/${PLAYER}`).expect(200);
     expect(balance.body.balance).to.equal("38000000");
