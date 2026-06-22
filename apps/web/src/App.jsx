@@ -1,27 +1,47 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import chancyLogo from './assets/chancy-logo.svg';
 
 const API = import.meta.env?.VITE_CHANCY_API_URL || '';
 const BASE_USDC_ADDRESS = import.meta.env?.VITE_CHANCY_BASE_USDC_ADDRESS || '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
-const DEFAULT_RANDOM = '0x1111111111111111111111111111111111111111111111111111111111111111';
-const BASE_CHAIN_ID = '0x2105';
+const BASE_SEPOLIA_USDC_ADDRESS = import.meta.env?.VITE_CHANCY_BASE_SEPOLIA_USDC_ADDRESS || '0x036cbd53842c5426634e7929541ec2318f3dcf7e';
+
+const BASE_CHAIN_ID = '0x2105';        // Base mainnet (8453)
+const BASE_SEPOLIA_CHAIN_ID = '0x14a34'; // Base Sepolia (84532)
+// Which Base network this build targets. Default Base Sepolia until mainnet cutover.
+const TARGET_CHAIN_ID = (import.meta.env?.VITE_CHANCY_CHAIN_ID || BASE_SEPOLIA_CHAIN_ID).toLowerCase();
+
 const USDC_DECIMALS = 1_000_000n;
-const TILE_HIDDEN = 'hidden';
+const STAKE_UNITS = '50000'; // $0.05 session entry, debited from credits — no wallet tx.
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
-const CHAIN_CONFIG = { [BASE_CHAIN_ID]: { label: 'Base', usdc: BASE_USDC_ADDRESS } };
-const DIFFICULTIES = {
-  Easy: { bombs: 5, prizes: 3, startBps: 150, capBps: 15000, copy: '5 bombs on the board, 3 prize tiles. Third bomb still ends the run.' },
-  Normal: { bombs: 7, prizes: 2, startBps: 250, capBps: 20000, copy: '7 bombs on the board, 2 prize tiles. Balanced risk.' },
-  Hardcore: { bombs: 10, prizes: 1, startBps: 350, capBps: 25000, copy: '10 bombs on the board, 1 prize tile. Sharp teeth.' },
+// House/host for credit sessions. Configurable; falls back to the player so the
+// engine always has a valid host without exposing protocol plumbing to players.
+const GAME_HOST = import.meta.env?.VITE_CHANCY_GAME_HOST || '';
+
+const CHAIN_PARAMS = {
+  [BASE_CHAIN_ID]: {
+    chainId: BASE_CHAIN_ID,
+    chainName: 'Base',
+    nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+    rpcUrls: ['https://mainnet.base.org'],
+    blockExplorerUrls: ['https://basescan.org'],
+  },
+  [BASE_SEPOLIA_CHAIN_ID]: {
+    chainId: BASE_SEPOLIA_CHAIN_ID,
+    chainName: 'Base Sepolia',
+    nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+    rpcUrls: ['https://sepolia.base.org'],
+    blockExplorerUrls: ['https://sepolia.basescan.org'],
+  },
 };
 
-function usdcUnits(value) {
-  const clean = String(value || '0').trim();
-  if (!/^\d+(\.\d{0,6})?$/.test(clean)) return '0';
-  const [whole, fraction = ''] = clean.split('.');
-  return (BigInt(whole || '0') * USDC_DECIMALS + BigInt((fraction + '000000').slice(0, 6))).toString();
-}
+const MODES = {
+  Easy: { bombs: 5, prizes: 3, multiplier: '1.5', copy: '5 bombs, 3 prizes. Find all 3 prizes to win.' },
+  Normal: { bombs: 7, prizes: 2, multiplier: '2.5', copy: '7 bombs, 2 prizes. Balanced risk.' },
+  Hardcore: { bombs: 10, prizes: 1, multiplier: '5', copy: '10 bombs, 1 prize. Sharp teeth, big payout.' },
+};
+
+const TILES = Array.from({ length: 64 }, (_, i) => i + 1); // tiles are 1-indexed (1..64)
 
 function formatUsdc(units) {
   const value = BigInt(units || '0');
@@ -30,25 +50,19 @@ function formatUsdc(units) {
   return fraction ? `${whole}.${fraction}` : String(whole);
 }
 
-function revealCostUnits(prizePot, difficulty, revealIndex) {
-  const config = DIFFICULTIES[difficulty];
-  const board = 64n;
-  const baseTotal = BigInt(config.startBps) * board;
-  const cap = BigInt(config.capBps);
-  const step = cap > baseTotal ? ((cap - baseTotal) * 2n) / (board * (board - 1n)) : 0n;
-  const bps = BigInt(config.startBps) + step * BigInt(revealIndex);
-  return ((BigInt(prizePot || '0') * bps) / 10000n).toString();
+function usdcUnits(value) {
+  const clean = String(value || '0').trim();
+  if (!/^\d+(\.\d{0,6})?$/.test(clean)) return '0';
+  const [whole, fraction = ''] = clean.split('.');
+  return (BigInt(whole || '0') * USDC_DECIMALS + BigInt((fraction + '000000').slice(0, 6))).toString();
 }
 
-function makeBoard(difficulty, seed) {
-  const config = DIFFICULTIES[difficulty];
-  let state = Array.from(`${seed}:${difficulty}`).reduce((acc, char) => (acc * 31 + char.charCodeAt(0)) >>> 0, 2166136261);
-  const used = new Set();
-  const pick = () => { do { state = (state * 1664525 + 1013904223) >>> 0; } while (used.has(state % 64)); const tile = state % 64; used.add(tile); return tile; };
-  const board = Array.from({ length: 64 }, () => 'empty');
-  for (let i = 0; i < config.bombs; i += 1) board[pick()] = 'bomb';
-  for (let i = 0; i < config.prizes; i += 1) board[pick()] = 'prize';
-  return board;
+function dollars(units) { return `$${formatUsdc(units)}`; }
+
+function randomEntropy() {
+  const bytes = new Uint8Array(32);
+  (globalThis.crypto || window.crypto).getRandomValues(bytes);
+  return '0x' + [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 async function postJson(path, body) {
@@ -56,22 +70,37 @@ async function postJson(path, body) {
   if (!response.ok) throw new Error(await response.text());
   return response.json();
 }
-async function getJson(path) { const response = await fetch(`${API}${path}`); if (!response.ok) throw new Error(await response.text()); return response.json(); }
-function getWalletProvider() { if (!window.ethereum) throw new Error('No wallet found. Install a supported wallet first.'); return window.ethereum; }
-function shortAddress(address) { return !address || /^0x0{40}$/i.test(address) ? '' : `${address.slice(0, 6)}…${address.slice(-4)}`; }
+async function getJson(path) {
+  const response = await fetch(`${API}${path}`);
+  if (!response.ok) throw new Error(await response.text());
+  return response.json();
+}
+function getWalletProvider() {
+  if (!window.ethereum) throw new Error('No wallet found. Install a supported wallet first.');
+  return window.ethereum;
+}
+function shortAddress(address) {
+  return !address || /^0x0{40}$/i.test(address) ? '' : `${address.slice(0, 6)}…${address.slice(-4)}`;
+}
 
 function RulesModal({ onClose }) {
-  return <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="rules-title">
-    <section className="rules-modal">
+  // Lock body scroll while the modal is open (mobile fix).
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previous; };
+  }, []);
+  return <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="rules-title" onClick={onClose}>
+    <section className="rules-modal" onClick={(event) => event.stopPropagation()}>
       <button className="icon-button close" type="button" aria-label="Close rules" onClick={onClose}>×</button>
       <img src={chancyLogo} alt="" />
       <p className="kicker">Chancy in 20 seconds</p>
-      <h2 id="rules-title">Find prizes before your third bomb.</h2>
+      <h2 id="rules-title">Find the prizes before your third bomb.</h2>
       <div className="rule-list">
-        <p><strong>Pick a host room.</strong> One player runs a session at a time.</p>
-        <p><strong>Difficulty changes the board.</strong> Easy has 5 bombs and 3 prizes. Normal has 7 bombs and 2 prizes. Hardcore has 10 bombs and 1 prize.</p>
-        <p><strong>Reveal tiles.</strong> Each hidden tile shows the next reveal cost before you click.</p>
-        <p><strong>Exit on your terms.</strong> Prize tiles accrue rewards. Three bombs ends the run.</p>
+        <p><strong>Add credits once.</strong> Top up USDC and play as long as you like — no pop-ups mid-game.</p>
+        <p><strong>Each round costs $0.05.</strong> Reveal tiles one at a time looking for prizes.</p>
+        <p><strong>Easy</strong> has 5 bombs and 3 prizes. <strong>Normal</strong> 7 bombs, 2 prizes. <strong>Hardcore</strong> 10 bombs, 1 prize.</p>
+        <p><strong>Win the round</strong> by uncovering every prize. Three bombs ends the run. Cash out your credits any time.</p>
       </div>
       <button className="main-button full" type="button" onClick={onClose}>Got it</button>
     </section>
@@ -79,213 +108,397 @@ function RulesModal({ onClose }) {
 }
 
 export default function App() {
-  const [view, setView] = useState('landing');
+  const [view, setView] = useState('landing'); // landing | play | round
   const [health, setHealth] = useState('checking');
-  const [difficulty, setDifficulty] = useState('Normal');
-  const [prizePotUsdc, setPrizePotUsdc] = useState('25');
-  const [sessionId, setSessionId] = useState('');
   const [wallet, setWallet] = useState('');
   const [chainId, setChainId] = useState('');
   const [showRules, setShowRules] = useState(() => !localStorage.getItem('chancy_rules_seen'));
-  const [board, setBoard] = useState(() => makeBoard('Normal', 'chancy'));
-  const [revealed, setRevealed] = useState(() => Array.from({ length: 64 }, () => TILE_HIDDEN));
-  const [run, setRun] = useState({ role: '', bombs: 0, prizes: 0, active: false, ended: false, message: 'Choose player or host to begin.' });
-  const [sessions, setSessions] = useState([]);
-  const [sessionsLoading, setSessionsLoading] = useState(false);
+
+  const [mode, setMode] = useState('Normal');
+  const [depositUsdc, setDepositUsdc] = useState('5');
+  const [withdrawUsdc, setWithdrawUsdc] = useState('');
+
+  const [balance, setBalance] = useState('0');       // total credits (6-dec USDC units)
+  const [withdrawable, setWithdrawable] = useState('0');
+
+  const [session, setSession] = useState(null); // { sessionId, mode }
+  const [revealed, setRevealed] = useState({});  // { [tile]: 'empty'|'prize'|'bomb' }
+  const [run, setRun] = useState({ bombsHit: 0, prizesCollected: 0, status: 'idle', payout: '0' });
+
+  const [busy, setBusy] = useState(false);
   const [lastAction, setLastAction] = useState('Ready');
   const [error, setError] = useState('');
 
-  useEffect(() => { getJson('/health').then((data) => setHealth(data.ok ? 'online' : 'offline')).catch(() => setHealth('offline')); }, []);
+  const host = GAME_HOST || wallet || ZERO_ADDRESS;
+  const targetLabel = CHAIN_PARAMS[TARGET_CHAIN_ID]?.chainName || 'Base';
+  const onTargetChain = chainId.toLowerCase() === TARGET_CHAIN_ID;
+  const modeConfig = MODES[mode];
+  const potentialWin = (BigInt(STAKE_UNITS) * BigInt(Math.round(parseFloat(modeConfig.multiplier) * 10)) / 10n).toString();
+
+  useEffect(() => {
+    getJson('/health').then((data) => setHealth(data.ok ? 'online' : 'offline')).catch(() => setHealth('offline'));
+  }, []);
+
   useEffect(() => {
     if (!window.ethereum) return undefined;
     const handleAccounts = (accounts) => setWallet(accounts?.[0] || '');
-    const handleChain = (nextChainId) => setChainId(nextChainId || '');
+    const handleChain = (next) => setChainId(next || '');
     window.ethereum.request({ method: 'eth_accounts' }).then(handleAccounts).catch(() => {});
     window.ethereum.request({ method: 'eth_chainId' }).then(handleChain).catch(() => {});
     window.ethereum.on?.('accountsChanged', handleAccounts);
     window.ethereum.on?.('chainChanged', handleChain);
-    return () => { window.ethereum.removeListener?.('accountsChanged', handleAccounts); window.ethereum.removeListener?.('chainChanged', handleChain); };
+    return () => {
+      window.ethereum.removeListener?.('accountsChanged', handleAccounts);
+      window.ethereum.removeListener?.('chainChanged', handleChain);
+    };
   }, []);
 
-  const tiles = useMemo(() => Array.from({ length: 64 }, (_, index) => index), []);
-  const selectedAsset = CHAIN_CONFIG[chainId]?.usdc || BASE_USDC_ADDRESS;
-  const prizePot = usdcUnits(prizePotUsdc);
-  const revealCount = revealed.filter((tile) => tile !== TILE_HIDDEN).length;
-  const nextRevealCost = revealCostUnits(prizePot, difficulty, revealCount);
-  const walletLabel = wallet ? shortAddress(wallet) : 'Connect wallet';
-  const mode = DIFFICULTIES[difficulty];
+  const refreshCredits = useCallback(async (address) => {
+    const player = address || wallet;
+    if (!player) return '0';
+    try {
+      const data = await getJson(`/v2/credits/${player}`);
+      setBalance(data.balance || '0');
+      setWithdrawable(data.withdrawable || '0');
+      return data.balance || '0';
+    } catch { return '0'; /* balance stays as-is on transient failure */ }
+  }, [wallet]);
+
+  useEffect(() => { if (wallet) refreshCredits(wallet); }, [wallet, refreshCredits]);
 
   function closeRules() { localStorage.setItem('chancy_rules_seen', '1'); setShowRules(false); }
-  async function connectWallet() { setError(''); try { const provider = getWalletProvider(); const accounts = await provider.request({ method: 'eth_requestAccounts' }); const nextChainId = await provider.request({ method: 'eth_chainId' }); setWallet(accounts[0] || ''); setChainId(nextChainId); setLastAction('Wallet connected'); return accounts[0] || ''; } catch (err) { setError(err.message || String(err)); return ''; } }
-  async function sendBuiltTransaction(payload) {
-    const provider = getWalletProvider();
-    const accounts = await provider.request({ method: 'eth_requestAccounts' });
-    const from = accounts[0];
-    const txHash = await provider.request({ method: 'eth_sendTransaction', params: [{ from, to: payload.to, data: payload.data, value: `0x${BigInt(payload.value || '0').toString(16)}` }] });
-    setWallet(from || '');
-    return txHash;
-  }
-  async function openPlayerSessions() {
-    setError('');
-    setView('player');
-    setSessionsLoading(true);
+
+  async function ensureTargetChain(provider) {
+    const current = await provider.request({ method: 'eth_chainId' });
+    if (current?.toLowerCase() === TARGET_CHAIN_ID) return;
     try {
-      const data = await getJson('/data/sessions?limit=24');
-      const openUsdcRooms = (data.sessions || []).filter((session) => (
-        session.open
-        && session.activePlayer === ZERO_ADDRESS
-        && session.asset?.toLowerCase() === BASE_USDC_ADDRESS.toLowerCase()
-      ));
-      setSessions(openUsdcRooms);
-      setLastAction(openUsdcRooms.length ? 'Rooms loaded' : 'No rooms open');
+      await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: TARGET_CHAIN_ID }] });
+    } catch (err) {
+      if (err?.code === 4902 && CHAIN_PARAMS[TARGET_CHAIN_ID]) {
+        await provider.request({ method: 'wallet_addEthereumChain', params: [CHAIN_PARAMS[TARGET_CHAIN_ID]] });
+        await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: TARGET_CHAIN_ID }] });
+      } else {
+        throw err;
+      }
+    }
+    setChainId(TARGET_CHAIN_ID);
+  }
+
+  async function connectWallet() {
+    setError('');
+    try {
+      const provider = getWalletProvider();
+      const accounts = await provider.request({ method: 'eth_requestAccounts' });
+      const next = accounts[0] || '';
+      setWallet(next);
+      await ensureTargetChain(provider);
+      setLastAction('Wallet connected');
+      await refreshCredits(next);
+      return next;
     } catch (err) {
       setError(err.message || String(err));
-      setLastAction('Session discovery failed');
-    } finally {
-      setSessionsLoading(false);
+      return '';
     }
   }
 
-  async function createSession() {
+  async function depositCredits() {
     setError('');
+    const amount = usdcUnits(depositUsdc);
+    if (BigInt(amount) <= 0n) { setError('Enter an amount to add.'); return; }
+    setBusy(true);
     try {
-      setLastAction('Opening wallet approval');
-      await sendBuiltTransaction(await postJson('/tx/approve-usdc', { asset: selectedAsset, amount: prizePot }));
-      setLastAction('Opening wallet to create room');
-      await sendBuiltTransaction(await postJson('/tx/create-session', { asset: selectedAsset, difficulty, prizePot }));
-      setSessionId('pending');
-      setBoard(makeBoard(difficulty, wallet || `host-${Date.now()}`));
-      setRevealed(Array.from({ length: 64 }, () => TILE_HIDDEN));
-      setRun({ role: 'host', bombs: 0, prizes: 0, active: false, ended: false, message: 'Room creation sent. It will appear in the lobby after confirmation.' });
-      setView('room'); setLastAction('Room creation sent');
-    } catch (err) { setError(err.message || String(err)); }
+      const provider = getWalletProvider();
+      const player = wallet || await connectWallet();
+      if (!player) return;
+      await ensureTargetChain(provider);
+      setLastAction('Approving USDC…');
+      const approveTx = await postJson('/v2/tx/approve-usdc', { amount });
+      await provider.request({ method: 'eth_sendTransaction', params: [{ from: player, to: approveTx.to, data: approveTx.data, value: approveTx.value || '0x0' }] });
+      setLastAction('Depositing…');
+      const depositTx = await postJson('/v2/tx/deposit', { amount });
+      const txHash = await provider.request({ method: 'eth_sendTransaction', params: [{ from: player, to: depositTx.to, data: depositTx.data, value: depositTx.value || '0x0' }] });
+      setLastAction('Confirming credits…');
+      // Server reads the on-chain receipt and credits the real net amount. We send only the txHash.
+      const credit = await postJson('/v2/credits/deposit', { player, txHash });
+      setBalance(credit.balance || '0');
+      await refreshCredits(player);
+      setLastAction(`Credits added — balance ${dollars(credit.balance || '0')}`);
+    } catch (err) {
+      setError(err.message || String(err));
+      setLastAction('Deposit failed');
+    } finally {
+      setBusy(false);
+    }
   }
 
-  async function joinSession(session) {
-    if (!session) return;
+  async function startRound() {
     setError('');
+    const player = wallet || await connectWallet();
+    if (!player) return;
+    // Read fresh balance — local state may lag the async credit load after connect.
+    const freshBalance = await refreshCredits(player);
+    if (BigInt(freshBalance) < BigInt(STAKE_UNITS)) { setError('Not enough credits — add at least $0.05.'); return; }
+    setBusy(true);
     try {
-      const nextId = session.sessionId;
-      const nextDifficulty = session.difficulty || difficulty;
-      const nextPrizePot = session.asset?.toLowerCase() === selectedAsset.toLowerCase() ? formatUsdc(session.prizePot) : prizePotUsdc;
-      setSessionId(nextId);
-      setDifficulty(nextDifficulty);
-      setPrizePotUsdc(nextPrizePot);
-      const fee = await getJson('/data/entropy-fee');
-      await sendBuiltTransaction(await postJson('/tx/join-session', { sessionId: nextId, userRandomNumber: DEFAULT_RANDOM, entropyFee: fee.fee }));
-      setBoard(makeBoard(nextDifficulty, wallet || `player-${nextId}`));
-      setRevealed(Array.from({ length: 64 }, () => TILE_HIDDEN));
-      setRun({ role: 'player', bombs: 0, prizes: 0, active: true, ended: false, message: 'You joined. Reveal tiles carefully.' });
-      setView('room'); setLastAction('Join sent');
-    } catch (err) { setError(err.message || String(err)); }
+      // Server-side session. Debits $0.05 from credits. No wallet tx, no pop-up.
+      const created = await postJson('/v2/sessions', {
+        player,
+        host: host === ZERO_ADDRESS ? player : host,
+        mode,
+        stake: STAKE_UNITS,
+        entropy: randomEntropy(),
+      });
+      setSession({ sessionId: created.sessionId, mode });
+      setRevealed({});
+      setRun({ bombsHit: 0, prizesCollected: 0, status: 'active', payout: '0' });
+      setView('round');
+      setLastAction(`Round started — ${mode}`);
+      await refreshCredits(player);
+    } catch (err) {
+      setError(err.message || String(err));
+    } finally {
+      setBusy(false);
+    }
   }
 
-  async function claimRewards() { setError(''); try { await sendBuiltTransaction(await postJson('/tx/claim-rewards', { asset: selectedAsset })); setLastAction('Claim sent'); } catch (err) { setError(err.message || String(err)); } }
-  async function quitSession() { setError(''); try { await sendBuiltTransaction(await postJson('/tx/quit-session', { sessionId })); setRun({ ...run, active: false, ended: true, message: 'Quit sent. Your run is ending.' }); setLastAction('Quit sent'); } catch (err) { setError(err.message || String(err)); } }
-  function revealTile(tile) {
-    if (run.role !== 'player' || !run.active || run.ended || revealed[tile] !== TILE_HIDDEN) return;
-    const outcome = board[tile];
-    const nextRevealed = [...revealed]; nextRevealed[tile] = outcome;
-    const bombs = run.bombs + (outcome === 'bomb' ? 1 : 0);
-    const prizes = run.prizes + (outcome === 'prize' ? 1 : 0);
-    const ended = bombs >= 3;
-    const message = ended ? 'Run ended. 3 bombs hit.' : outcome === 'prize' ? 'Prize found. Keep hunting or claim.' : outcome === 'bomb' ? 'Bomb hit. Stay sharp.' : 'Safe tile.';
-    setRevealed(nextRevealed); setRun({ ...run, bombs, prizes, ended, active: !ended, message });
-    postJson('/tx/approve-usdc', { asset: selectedAsset, amount: nextRevealCost })
-      .then((approve) => sendBuiltTransaction(approve))
-      .then(() => postJson('/tx/click-tile', { sessionId, tileIndex: tile }))
-      .then((click) => sendBuiltTransaction(click))
-      .then(() => setLastAction('Reveal sent'))
-      .catch((err) => setError(err.message || String(err)));
+  async function clickTile(tile) {
+    if (!session || run.status !== 'active' || revealed[tile] || busy) return;
+    setBusy(true);
+    try {
+      // No wallet tx. Pure server call.
+      const result = await postJson(`/v2/sessions/${session.sessionId}/click`, { player: wallet, tile });
+      setRevealed((prev) => ({ ...prev, [result.tile]: result.outcome }));
+      setRun({ bombsHit: result.bombsHit, prizesCollected: result.prizesCollected, status: result.status, payout: result.payout });
+      if (result.status === 'won') {
+        setLastAction(`You win — ${dollars(result.payout)} credited!`);
+        await refreshCredits(wallet);
+      } else if (result.status === 'lost') {
+        setLastAction('Three bombs — run over.');
+      } else if (result.outcome === 'prize') {
+        setLastAction('Prize found!');
+      } else if (result.outcome === 'bomb') {
+        setLastAction(`Bomb — ${result.bombsHit}/3.`);
+      } else {
+        setLastAction('Empty tile.');
+      }
+    } catch (err) {
+      setError(err.message || String(err));
+    } finally {
+      setBusy(false);
+    }
   }
 
-  const WalletPanel = () => <aside className="wallet-panel">
-    <div>
-      <h2>Connect wallet</h2>
-      <p>Connect wallet to manage your rooms.</p>
-    </div>
-    <button className="main-button" type="button" onClick={connectWallet}>{walletLabel}</button>
-  </aside>;
+  async function endRound() {
+    if (session) {
+      try {
+        const final = await postJson(`/v2/sessions/${session.sessionId}/exit`, { player: wallet });
+        // Reveal the full board so the player sees what was where.
+        if (final.board) {
+          const full = {};
+          (final.board.bombPositions || []).forEach((t) => { full[t] = 'bomb'; });
+          (final.board.prizePositions || []).forEach((t) => { full[t] = 'prize'; });
+          setRevealed((prev) => ({ ...full, ...prev }));
+        }
+      } catch { /* exit is best-effort */ }
+    }
+    await refreshCredits(wallet);
+    setSession(null);
+    setView('play');
+    setLastAction('Ready');
+  }
 
-  return <main className="product-shell">
-    {showRules && <RulesModal onClose={closeRules} />}
-    <button className="help-button" type="button" aria-label="How Chancy works" onClick={() => setShowRules(true)}>?</button>
+  async function requestWithdrawal() {
+    setError('');
+    const amount = usdcUnits(withdrawUsdc);
+    if (BigInt(amount) <= 0n) { setError('Enter an amount to cash out.'); return; }
+    if (BigInt(amount) > BigInt(withdrawable)) { setError('Amount exceeds your withdrawable credits.'); return; }
+    setBusy(true);
+    try {
+      const player = wallet || await connectWallet();
+      if (!player) return;
+      const result = await postJson('/v2/withdrawals/request', { player, amount, destination: player });
+      setWithdrawUsdc('');
+      await refreshCredits(player);
+      setLastAction(`Cash-out requested — ${dollars(result.payoutAmount)} to your wallet shortly.`);
+    } catch (err) {
+      setError(err.message || String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const walletLabel = wallet ? shortAddress(wallet) : 'Connect wallet';
+
+  const TopBar = (
     <header className="topbar">
-      <button className="brand" type="button" onClick={() => setView('landing')}><img src={chancyLogo} alt="Chancy logo" /><span>Chancy</span></button>
-      <nav className="top-actions" aria-label="Main actions">
-        <button className="text-link" type="button" onClick={() => setView('role')}>Play</button>
-        <button className="text-link" type="button" onClick={() => setShowRules(true)}>Rules</button>
+      <button className="brand" type="button" onClick={() => setView('landing')}>
+        <img src={chancyLogo} alt="" /> Chancy
+      </button>
+      <div className="top-actions">
+        {wallet && <span className="text-link">{dollars(balance)} credits</span>}
+        <button className="ghost-button" type="button" onClick={() => setShowRules(true)}>How Chancy works</button>
         <button className="main-button" type="button" onClick={connectWallet}>{walletLabel}</button>
-      </nav>
+      </div>
     </header>
+  );
 
-    {view === 'landing' && <>
-      <section className="landing-hero">
-        <div className="hero-copy">
-          <p className="kicker">Onchain risk rooms</p>
-          <h1>One game. Two paths: play or host.</h1>
-          <p className="lede">Chancy is a simple Base game: hosts fund prize rooms, players reveal private boards, and the third bomb ends the run.</p>
-          <div className="hero-buttons">
-            <button className="main-button large" type="button" onClick={() => setView('role')}>Play</button>
-            <button className="ghost-button large" type="button" onClick={() => setShowRules(true)}>How it works</button>
+  return (
+    <div className="product-shell">
+      {TopBar}
+
+      {error && <p className="error-text" role="alert">{error}</p>}
+
+      {view === 'landing' && (
+        <>
+          <section className="landing-hero">
+            <div className="hero-copy">
+              <p className="kicker">Chancy live · {health}</p>
+              <h1>Tap tiles. Dodge bombs. Bank the prizes.</h1>
+              <p className="lede">Add credits once, then play instantly — every move is a single tap, no wallet pop-ups, no waiting. Cash out whenever you want.</p>
+              <div className="hero-buttons">
+                <button className="main-button large" type="button" onClick={() => setView('play')}>Play</button>
+                <button className="ghost-button large" type="button" onClick={() => setShowRules(true)}>How it works</button>
+              </div>
+            </div>
+            <div className="hero-visual">
+              <img src={chancyLogo} alt="Chancy" />
+              <span>$0.05 a round</span>
+            </div>
+          </section>
+
+          <section className="mode-grid">
+            {Object.entries(MODES).map(([name, cfg]) => (
+              <article key={name}>
+                <strong>{name}</strong>
+                <span>{cfg.bombs} bombs · {cfg.prizes} {cfg.prizes === 1 ? 'prize' : 'prizes'}</span>
+                <span>Win pays {cfg.multiplier}× your stake</span>
+              </article>
+            ))}
+          </section>
+        </>
+      )}
+
+      {view === 'play' && (
+        <>
+          <div className="page-head">
+            <p className="kicker">Your wallet</p>
+            <h2>{wallet ? 'Pick a mode and play.' : 'Connect to start playing.'}</h2>
           </div>
-        </div>
-        <div className="hero-visual" aria-label="Chancy game preview"><img src={chancyLogo} alt="" /><span>3 bombs ends the run</span></div>
-      </section>
-      <section className="mode-grid" aria-label="Difficulty modes">
-        {Object.entries(DIFFICULTIES).map(([name, config]) => <article key={name}>
-          <strong>{name}</strong>
-          <span>{config.bombs} bombs · {config.prizes} prize{config.prizes === 1 ? '' : 's'}</span>
-        </article>)}
-      </section>
-      <section className="landing-guide">
-        <div><p className="kicker">Game flow</p><h2>Clear roles before any room action.</h2></div>
-        <div className="guide-list">
-          <p><strong>Players browse rooms.</strong> Pick an open room, connect wallet, and reveal tiles.</p>
-          <p><strong>Hosts create rooms.</strong> Choose difficulty and prize pot. Once it opens, players can find it in the lobby.</p>
-          <p><strong>Difficulty matters.</strong> Easy has fewer bombs and more prizes. Hardcore has more bombs and one prize.</p>
-        </div>
-      </section>
-    </>}
 
-    {view === 'role' && <section className="role-page">
-      <div className="page-head"><p className="kicker">Choose your side</p><h1>Play a room or host one.</h1><p className="lede">Join an open room to hunt prizes, or host one and put up the prize pot.</p></div>
-      <div className="role-grid">
-        <article className="choice-card"><span>As player</span><h2>Browse open rooms.</h2><p>Join a host-funded room, reveal your private board, and claim before the third bomb.</p><button className="main-button full" type="button" onClick={openPlayerSessions}>Continue as player</button></article>
-        <article className="choice-card"><span>As host</span><h2>Create a prize room.</h2><p>Pick difficulty, set the USDC prize pot, and open the room for players.</p><button className="ghost-button full" type="button" onClick={() => setView('host')}>Continue as host</button></article>
-        <WalletPanel />
-      </div>
-    </section>}
+          <section className="sessions-layout">
+            <div className="run-card">
+              <p className="kicker">Choose your mode</p>
+              <div className="mode-grid">
+                {Object.entries(MODES).map(([name, cfg]) => (
+                  <article
+                    key={name}
+                    onClick={() => setMode(name)}
+                    style={{ cursor: 'pointer', outline: mode === name ? '2px solid #ffaa00' : 'none' }}
+                  >
+                    <strong>{name}</strong>
+                    <span>{cfg.copy}</span>
+                    <span>Win pays {cfg.multiplier}× · {dollars((BigInt(STAKE_UNITS) * BigInt(Math.round(parseFloat(cfg.multiplier) * 10)) / 10n).toString())}</span>
+                  </article>
+                ))}
+              </div>
+              <button className="main-button large full" type="button" disabled={busy} onClick={startRound}>
+                Play {mode} — $0.05
+              </button>
+              <p className="status-line">{lastAction}</p>
+              {!onTargetChain && wallet && <p className="note">You'll be switched to {targetLabel} when you play or add credits.</p>}
+            </div>
 
-    {view === 'player' && <section className="sessions-page">
-      <div className="page-head"><p className="kicker">Player lobby</p><h1>Choose an open room.</h1><p className="lede">Pick a room, reveal tiles, and cash out before the third bomb ends your run.</p></div>
-      <div className="session-list">
-        {sessionsLoading && <article className="empty-state"><h2>Loading sessions…</h2><p>Reading the latest Chancy rooms from Base.</p></article>}
-        {!sessionsLoading && sessions.length === 0 && <article className="empty-state"><h2>No open rooms yet.</h2><p>There are no host-funded rooms to join right now. Come back later or switch to host mode and create one.</p><button className="ghost-button" type="button" onClick={() => setView('host')}>Create a room as host</button></article>}
-        {!sessionsLoading && sessions.map((session) => <article className="session-card" key={session.sessionId}>
-          <div><strong>Room #{session.sessionId}</strong><span>{session.open ? session.activePlayer === ZERO_ADDRESS ? 'Open' : 'Occupied' : 'Closed'}</span></div>
-          <div><span>Difficulty</span><strong>{session.difficulty}</strong></div>
-          <div><span>Prize pot</span><strong>{formatUsdc(session.prizePot)} USDC</strong></div>
-          <div><span>Bombs</span><strong>{session.bombCount}</strong></div>
-          <div><span>Prizes</span><strong>{session.prizeCount}</strong></div>
-          <button className="main-button" type="button" disabled={!session.open || session.activePlayer !== ZERO_ADDRESS} onClick={() => joinSession(session)}>Join room</button>
-        </article>)}
-      </div>
-    </section>}
+            <aside className="stat-list">
+              <div>
+                <span>Credit balance</span>
+                <strong>{dollars(balance)}</strong>
+              </div>
+              <div>
+                <span>Withdrawable</span>
+                <strong>{dollars(withdrawable)}</strong>
+              </div>
 
-    {view === 'host' && <section className="host-page">
-      <div className="page-head"><p className="kicker">Host room</p><h1>Create a prize room.</h1><p className="lede">Choose the difficulty, set the prize pot, and open the room for the next player.</p></div>
-      <div className="host-layout">
-        <aside className="create-card"><h2>Room setup</h2><div className="fields"><label>Difficulty<select aria-label="difficulty" value={difficulty} onChange={(event) => setDifficulty(event.target.value)}><option>Easy</option><option>Normal</option><option>Hardcore</option></select><small>{mode.copy}</small></label><label>Prize pot USDC<input aria-label="prize pot usdc" inputMode="decimal" value={prizePotUsdc} onChange={(event) => setPrizePotUsdc(event.target.value)} /></label></div><button className="main-button full" type="button" onClick={createSession}>Create room</button><p className="note">Players will see the room in the lobby after it opens.</p></aside>
-        <WalletPanel />
-      </div>
-    </section>}
+              <div className="create-card">
+                <label htmlFor="deposit">
+                  Add credits (USDC)
+                  <small>One deposit funds many rounds. 5% network fee applies.</small>
+                </label>
+                <input id="deposit" inputMode="decimal" value={depositUsdc} onChange={(e) => setDepositUsdc(e.target.value)} placeholder="5" />
+                <button className="main-button full" type="button" disabled={busy} onClick={depositCredits}>Add credits</button>
+              </div>
 
-    {view === 'room' && <section className="room-page">
-      <div className="room-header"><button className="ghost-button" type="button" onClick={run.role === 'host' ? () => setView('host') : openPlayerSessions}>Back</button><div><p className="kicker">{sessionId === 'pending' ? 'Room pending' : `Room #${sessionId}`}</p><h1>{run.role === 'host' ? 'Host view' : 'Your board'}</h1></div></div>
-      <div className="room-layout"><section className={`board-card ${run.role === 'host' ? 'locked' : ''}`}><div className="meter-row"><div><span>Bombs hit</span><strong>{run.bombs}/3</strong></div><div><span>Bombs hidden</span><strong>{mode.bombs}</strong></div><div><span>Next reveal</span><strong>{formatUsdc(nextRevealCost)} USDC</strong></div></div><p className="status-line">{run.message}</p><div className="tile-board" aria-label="Chancy 8x8 board">{tiles.map((tile) => <button key={tile} aria-label={`tile ${tile}`} className={`tile ${revealed[tile]}`} onClick={() => revealTile(tile)}>{revealed[tile] === 'hidden' ? formatUsdc(nextRevealCost) : revealed[tile] === 'bomb' ? '×' : revealed[tile] === 'prize' ? '$' : '·'}</button>)}</div></section><aside className="run-card"><h2>{run.role === 'host' ? 'Room is waiting' : 'Run details'}</h2><div className="stat-list"><div><span>Prize pot</span><strong>{prizePotUsdc} USDC</strong></div><div><span>Mode</span><strong>{difficulty}: {mode.bombs} bombs / {mode.prizes} prize{mode.prizes === 1 ? '' : 's'}</strong></div><div><span>Player</span><strong>{run.role === 'player' ? 'You' : 'Waiting'}</strong></div></div>{run.role === 'host' ? <p className="note">Host cannot play this room. Wait for a player to join.</p> : <><button className="main-button full" type="button" onClick={claimRewards}>Claim USDC</button><button className="ghost-button full" type="button" onClick={quitSession}>Quit run</button></>}</aside></div>
-    </section>}
+              <div className="create-card">
+                <label htmlFor="withdraw">
+                  Cash out (USDC)
+                  <small>Sent to your wallet. 5% fee on withdrawals.</small>
+                </label>
+                <input id="withdraw" inputMode="decimal" value={withdrawUsdc} onChange={(e) => setWithdrawUsdc(e.target.value)} placeholder={formatUsdc(withdrawable)} />
+                <button className="ghost-button full" type="button" disabled={busy || BigInt(withdrawable) <= 0n} onClick={requestWithdrawal}>Cash out</button>
+              </div>
+            </aside>
+          </section>
+        </>
+      )}
 
-    <footer className="app-footer"><span>{health === 'online' ? 'Chancy live' : 'Chancy unavailable'}</span><span>{wallet ? `Wallet ${walletLabel}` : 'Wallet not connected'}</span><span>{lastAction}</span>{error && <strong className="error-text">{error}</strong>}</footer>
-  </main>;
+      {view === 'round' && session && (
+        <>
+          <div className="room-header">
+            <button className="ghost-button" type="button" onClick={endRound}>← Back</button>
+            <h2>{session.mode} round</h2>
+          </div>
+
+          <section className="room-layout">
+            <div className="board-card">
+              <div className="meter-row">
+                <div><span>Bombs</span><strong>{run.bombsHit}/3</strong></div>
+                <div><span>Prizes</span><strong>{run.prizesCollected}/{modeConfig.prizes}</strong></div>
+                <div><span>Win pays</span><strong>{dollars(potentialWin)}</strong></div>
+              </div>
+              <p className="status-line">{lastAction}</p>
+              <div className="tile-board" aria-label="Chancy 8x8 board">
+                {TILES.map((tile) => {
+                  const state = revealed[tile];
+                  const cls = state ? `tile ${state}` : 'tile';
+                  const symbol = state === 'prize' ? '★' : state === 'bomb' ? '✺' : state === 'empty' ? '·' : '';
+                  return (
+                    <button
+                      key={tile}
+                      className={cls}
+                      type="button"
+                      aria-label={`tile ${tile}`}
+                      disabled={!!state || run.status !== 'active' || busy}
+                      onClick={() => clickTile(tile)}
+                    >{symbol}</button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <aside className="stat-list">
+              <div>
+                <span>Status</span>
+                <strong>{run.status === 'won' ? 'You won!' : run.status === 'lost' ? 'Run over' : 'Playing'}</strong>
+              </div>
+              <div>
+                <span>Credit balance</span>
+                <strong>{dollars(balance)}</strong>
+              </div>
+              {run.status === 'won' && <div><span>Payout</span><strong>{dollars(run.payout)}</strong></div>}
+              {run.status !== 'active' && (
+                <button className="main-button full" type="button" onClick={endRound}>
+                  {run.status === 'won' ? 'Collect & continue' : 'Play again'}
+                </button>
+              )}
+              {run.status === 'active' && (
+                <button className="ghost-button full" type="button" disabled={busy} onClick={endRound}>Quit round</button>
+              )}
+            </aside>
+          </section>
+        </>
+      )}
+
+      <button className="help-button" type="button" aria-label="How Chancy works" onClick={() => setShowRules(true)}>?</button>
+      {showRules && <RulesModal onClose={closeRules} />}
+    </div>
+  );
 }
