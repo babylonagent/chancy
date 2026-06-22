@@ -140,6 +140,7 @@ function installV2Routes(app, {
   store = createV2Store(),
   storePath = "",
   verifyDeposit = defaultVerifyDeposit,
+  adminToken = "",
 } = {}) {
   // Deposit: client sends ONLY txHash + player. The server reads the on-chain
   // receipt, decodes the vault Deposited event, and credits the REAL net amount.
@@ -235,6 +236,20 @@ function installV2Routes(app, {
     if (!parsed.success) return res.status(400).json({ error: "INVALID_PARAMS", details: parsed.error.flatten() });
     const withdrawals = [...store.withdrawals.values()].filter((withdrawal) => withdrawal.player.toLowerCase() === parsed.data.player.toLowerCase());
     return res.json({ player: parsed.data.player, withdrawals });
+  });
+
+  // Admin: list ALL withdrawals (optionally filtered by status). Used by the
+  // auto-payout relayer to discover pending payouts. Bearer-protected: only
+  // enabled when ADMIN_TOKEN is configured, fail closed if it isn't.
+  app.get("/v2/admin/withdrawals", (req, res) => {
+    if (!adminToken) return res.status(503).json({ error: "ADMIN_DISABLED" });
+    const auth = req.headers?.authorization || "";
+    if (auth !== `Bearer ${adminToken}`) return res.status(401).json({ error: "UNAUTHORIZED" });
+    const statusParse = z.object({ status: z.enum(["pending", "paid"]).optional() }).safeParse(req.query || {});
+    if (!statusParse.success) return res.status(400).json({ error: "INVALID_QUERY" });
+    const wanted = statusParse.data.status;
+    const withdrawals = [...store.withdrawals.values()].filter((w) => !wanted || w.status === wanted);
+    return res.json({ count: withdrawals.length, withdrawals });
   });
 
   app.post("/v2/withdrawals/:withdrawalId/mark-paid", (req, res) => {

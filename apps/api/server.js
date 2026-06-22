@@ -197,6 +197,7 @@ function createApp({
     store: loadV2Store(v2StorePath),
     storePath: v2StorePath,
     verifyDeposit: makeDepositVerifier({ vault, rpcUrl, minConfirmations: Number(process.env.CHANCY_DEPOSIT_MIN_CONFIRMATIONS || 1) }),
+    adminToken: process.env.CHANCY_ADMIN_TOKEN || "",
   });
 
   app.get("/health", (_req, res) => {
