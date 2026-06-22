@@ -8,6 +8,7 @@
     "build": "hardhat compile",
     "export:abi": "hardhat compile && node scripts/export-abi.js",
     "api": "node apps/api/server.js",
+    "api:test": "vitest run --config vitest.api.config.js",
     "web:test": "vitest run apps/web/src/App.test.jsx",
     "web:build": "vite build",
     "web:dev": "vite --host 0.0.0.0"

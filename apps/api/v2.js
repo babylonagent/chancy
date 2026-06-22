@@ -9,6 +9,18 @@ const modeConfig = {
   Hardcore: { bombs: 10, prizes: 1 },
 };
 
+// ───────────────────────────────────────────────────────────────────────────
+// PAYOUT ECONOMICS — TUNABLE BUSINESS VALUES (sign-off required before mainnet)
+// Win = collect ALL prize tiles before 3 bombs. Payout = stake * multiplier.
+// Partial prizes pay nothing. Hitting 3 bombs forfeits the stake.
+// winMultiplierBps: 10000 = 1.0x. Harder mode → bigger multiplier.
+// ───────────────────────────────────────────────────────────────────────────
+const winMultiplierBps = {
+  Easy: 15000n, // 1.5x
+  Normal: 25000n, // 2.5x
+  Hardcore: 50000n, // 5.0x
+};
+
 const addressSchema = z.string().regex(/^0x[0-9a-fA-F]{40}$/);
 const bytes32Schema = z.string().regex(/^0x[0-9a-fA-F]{64}$/);
 const uintString = z.union([z.string().regex(/^\d+$/), z.number().int().nonnegative()]).transform(String);
@@ -47,7 +59,14 @@ function boardCommitHash({ entropy, sessionId, player, mode, board }) {
 }
 
 function createV2Store() {
-  return { balances: new Map(), sessions: new Map(), withdrawals: new Map(), nextSessionId: 1, nextWithdrawalId: 1 };
+  return {
+    balances: new Map(),
+    sessions: new Map(),
+    withdrawals: new Map(),
+    deposits: new Map(), // txHash(lowercased) -> { player, creditedAmount, grossAmount, feeAmount, at }
+    nextSessionId: 1,
+    nextWithdrawalId: 1,
+  };
 }
 
 function serializeStore(store) {
@@ -60,6 +79,7 @@ function serializeStore(store) {
       clicked: [...session.clicked.entries()],
     }])),
     withdrawals: Object.fromEntries(store.withdrawals.entries()),
+    deposits: Object.fromEntries((store.deposits || new Map()).entries()),
   };
 }
 
@@ -72,6 +92,7 @@ function hydrateStore(raw) {
     store.sessions.set(id, { ...session, clicked: new Map(session.clicked || []) });
   }
   for (const [id, withdrawal] of Object.entries(raw?.withdrawals || {})) store.withdrawals.set(id, withdrawal);
+  for (const [txHash, record] of Object.entries(raw?.deposits || {})) store.deposits.set(txHash, record);
   return store;
 }
 
@@ -108,15 +129,72 @@ function withdrawableBalance(store, player) {
   return balance > pending ? balance - pending : 0n;
 }
 
-function installV2Routes(app, { store = createV2Store(), storePath = "" } = {}) {
-  app.post("/v2/credits/deposit", (req, res) => {
-    const parsed = z.object({ player: addressSchema, amount: uintString, txHash: bytes32Schema }).safeParse(req.body || {});
+// Default deposit verifier: rejects everything. The real viem-backed verifier is
+// injected by server.js. This guarantees we NEVER credit an unverified deposit,
+// even if wiring is forgotten — fail closed, not open.
+async function defaultVerifyDeposit() {
+  throw new Error("DEPOSIT_VERIFIER_NOT_CONFIGURED");
+}
+
+function installV2Routes(app, {
+  store = createV2Store(),
+  storePath = "",
+  verifyDeposit = defaultVerifyDeposit,
+} = {}) {
+  // Deposit: client sends ONLY txHash + player. The server reads the on-chain
+  // receipt, decodes the vault Deposited event, and credits the REAL net amount.
+  // Idempotent by txHash so a retried POST never double-credits.
+  app.post("/v2/credits/deposit", async (req, res) => {
+    const parsed = z.object({ player: addressSchema, txHash: bytes32Schema }).safeParse(req.body || {});
     if (!parsed.success) return res.status(400).json({ error: "INVALID_REQUEST", details: parsed.error.flatten() });
-    const { player, amount } = parsed.data;
-    const next = getBalance(store, player) + BigInt(amount);
+    const { player, txHash } = parsed.data;
+    const txKey = txHash.toLowerCase();
+
+    // Idempotency: already processed → return current balance, no re-credit.
+    const existing = store.deposits.get(txKey);
+    if (existing) {
+      return res.json({
+        player,
+        balance: getBalance(store, player).toString(),
+        asset: "USD_CREDIT",
+        credited: existing.creditedAmount,
+        txHash: txKey,
+        idempotent: true,
+      });
+    }
+
+    let verified;
+    try {
+      verified = await verifyDeposit({ txHash, player });
+    } catch (error) {
+      const code = error.message || "DEPOSIT_VERIFICATION_FAILED";
+      const status = code === "DEPOSIT_NOT_FOUND" ? 404 : code === "DEPOSIT_PLAYER_MISMATCH" ? 403 : 422;
+      return res.status(status).json({ error: code });
+    }
+
+    // verified = { player, grossAmount, creditedAmount, feeAmount }
+    if (verified.player.toLowerCase() !== player.toLowerCase()) {
+      return res.status(403).json({ error: "DEPOSIT_PLAYER_MISMATCH" });
+    }
+    const credited = BigInt(verified.creditedAmount);
+    const next = getBalance(store, player) + credited;
     setBalance(store, player, next);
+    store.deposits.set(txKey, {
+      player: player.toLowerCase(),
+      grossAmount: String(verified.grossAmount),
+      creditedAmount: credited.toString(),
+      feeAmount: String(verified.feeAmount),
+      at: new Date().toISOString(),
+    });
     persistStore(store, storePath);
-    return res.json({ player, balance: next.toString(), asset: "USD_CREDIT" });
+    return res.json({
+      player,
+      balance: next.toString(),
+      asset: "USD_CREDIT",
+      credited: credited.toString(),
+      txHash: txKey,
+      idempotent: false,
+    });
   });
 
   app.get("/v2/credits/:player", (req, res) => {
@@ -209,6 +287,7 @@ function installV2Routes(app, { store = createV2Store(), storePath = "" } = {}) 
       bombsHit: 0,
       prizesCollected: 0,
       status: "active",
+      payout: "0",
     };
     store.sessions.set(sessionId, session);
     persistStore(store, storePath);
@@ -228,6 +307,7 @@ function installV2Routes(app, { store = createV2Store(), storePath = "" } = {}) 
     if (session.status !== "active") return res.status(409).json({ error: "SESSION_NOT_ACTIVE", status: session.status });
 
     let outcome = "empty";
+    let payoutCredited = "0";
     if (session.board.bombPositions.includes(tile)) {
       outcome = "bomb";
       session.bombsHit += 1;
@@ -235,9 +315,25 @@ function installV2Routes(app, { store = createV2Store(), storePath = "" } = {}) 
     } else if (session.board.prizePositions.includes(tile)) {
       outcome = "prize";
       session.prizesCollected += 1;
-      if (session.prizesCollected >= modeConfig[session.mode].prizes) session.status = "won";
+      if (session.prizesCollected >= modeConfig[session.mode].prizes) {
+        session.status = "won";
+        // Pay the pot: stake * winMultiplier. Credited to the player ledger.
+        const stake = BigInt(session.stake);
+        const payout = stake * (winMultiplierBps[session.mode] || 10000n) / BPS_DENOMINATOR;
+        session.payout = payout.toString();
+        payoutCredited = payout.toString();
+        setBalance(store, session.player, getBalance(store, session.player) + payout);
+      }
     }
-    const result = { sessionId: session.sessionId, tile, outcome, bombsHit: session.bombsHit, prizesCollected: session.prizesCollected, status: session.status };
+    const result = {
+      sessionId: session.sessionId,
+      tile,
+      outcome,
+      bombsHit: session.bombsHit,
+      prizesCollected: session.prizesCollected,
+      status: session.status,
+      payout: payoutCredited,
+    };
     session.clicked.set(tile, result);
     persistStore(store, storePath);
     return res.json(result);
@@ -252,10 +348,10 @@ function installV2Routes(app, { store = createV2Store(), storePath = "" } = {}) 
     if (bodyParse.data.player.toLowerCase() !== session.player.toLowerCase()) return res.status(403).json({ error: "NOT_SESSION_PLAYER" });
     if (session.status === "active") session.status = "exited";
     persistStore(store, storePath);
-    return res.json({ sessionId: session.sessionId, status: session.status, boardCommitHash: session.boardCommitHash, entropy: session.entropy, board: session.board, clicked: [...session.clicked.values()] });
+    return res.json({ sessionId: session.sessionId, status: session.status, payout: session.payout || "0", boardCommitHash: session.boardCommitHash, entropy: session.entropy, board: session.board, clicked: [...session.clicked.values()] });
   });
 
   return store;
 }
 
-module.exports = { installV2Routes, createV2Store, loadV2Store, deriveBoard, boardCommitHash };
+module.exports = { installV2Routes, createV2Store, loadV2Store, deriveBoard, boardCommitHash, modeConfig, winMultiplierBps };

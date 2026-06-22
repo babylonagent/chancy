@@ -1,10 +1,12 @@
 const express = require("express");
 const cors = require("cors");
 const { z } = require("zod");
-const { encodeFunctionData, createPublicClient, http, parseAbi } = require("viem");
+const { encodeFunctionData, createPublicClient, http, parseAbi, decodeEventLog } = require("viem");
 const chancyAbiJson = require("../../abi/ChancyGame.json");
+const chancyVaultAbiJson = require("../../abi/ChancyVault.json");
 const { installV2Routes, loadV2Store } = require("./v2");
 const chancyAbi = chancyAbiJson.abi || chancyAbiJson;
+const chancyVaultAbi = chancyVaultAbiJson.abi || chancyVaultAbiJson;
 
 const difficultyMap = {
   Easy: 0,
@@ -113,6 +115,58 @@ async function listSessions({ contract, rpcUrl, limit = 24 }) {
   return { sessions: rows, nextSessionId: nextSessionId.toString(), source: "contract", errors };
 }
 
+// On-chain deposit verifier. Reads the tx receipt, requires it succeeded, finds
+// the Deposited log emitted BY OUR VAULT (ignores spoofed logs from other
+// contracts), decodes it, and returns the real on-chain net amount. This is the
+// trust boundary: credits come from chain truth, never from the client body.
+function makeDepositVerifier({ vault, rpcUrl, minConfirmations = 1 }) {
+  const vaultLower = vault.toLowerCase();
+  return async function verifyDeposit({ txHash }) {
+    const client = createPublicClient({ transport: http(rpcUrl || DEFAULT_BASE_RPC_URL) });
+    let receipt;
+    try {
+      receipt = await client.getTransactionReceipt({ hash: txHash });
+    } catch (error) {
+      if (/could not be found|not be found|not found/i.test(error.shortMessage || error.message || "")) {
+        throw new Error("DEPOSIT_NOT_FOUND");
+      }
+      throw new Error("DEPOSIT_RPC_ERROR");
+    }
+    if (!receipt) throw new Error("DEPOSIT_NOT_FOUND");
+    if (receipt.status !== "success") throw new Error("DEPOSIT_TX_REVERTED");
+
+    if (minConfirmations > 1) {
+      try {
+        const head = await client.getBlockNumber();
+        const confs = head - receipt.blockNumber + 1n;
+        if (confs < BigInt(minConfirmations)) throw new Error("DEPOSIT_NOT_CONFIRMED");
+      } catch (error) {
+        if (error.message === "DEPOSIT_NOT_CONFIRMED") throw error;
+        // confirmation check is best-effort; don't fail a valid deposit on RPC hiccup
+      }
+    }
+
+    for (const log of receipt.logs) {
+      if (log.address.toLowerCase() !== vaultLower) continue; // must come from our vault
+      let decoded;
+      try {
+        decoded = decodeEventLog({ abi: chancyVaultAbi, data: log.data, topics: log.topics });
+      } catch {
+        continue;
+      }
+      if (decoded.eventName !== "Deposited") continue;
+      const { player, grossAmount, creditedAmount, feeAmount } = decoded.args;
+      return {
+        player,
+        grossAmount: grossAmount.toString(),
+        creditedAmount: creditedAmount.toString(),
+        feeAmount: feeAmount.toString(),
+      };
+    }
+    throw new Error("DEPOSIT_EVENT_NOT_FOUND");
+  };
+}
+
 async function getEntropyFee({ contract, rpcUrl }) {
   const client = createPublicClient({ transport: http(rpcUrl || DEFAULT_BASE_RPC_URL) });
   const entropyAddress = await client.readContract({ address: contract, abi: chancyAbi, functionName: "entropy" });
@@ -123,10 +177,14 @@ async function getEntropyFee({ contract, rpcUrl }) {
 
 function createApp({
   contractAddress = process.env.CHANCY_CONTRACT_ADDRESS || DEFAULT_CONTRACT_ADDRESS,
+  vaultAddress = process.env.CHANCY_VAULT_ADDRESS || DEFAULT_CONTRACT_ADDRESS,
+  usdcAddress = process.env.CHANCY_USDC_ADDRESS || process.env.VITE_CHANCY_BASE_USDC_ADDRESS || DEFAULT_CONTRACT_ADDRESS,
   rpcUrl = process.env.BASE_RPC_URL || process.env.CHANCY_RPC_URL || DEFAULT_BASE_RPC_URL,
   v2StorePath = process.env.CHANCY_V2_STORE_PATH || "",
 } = {}) {
   const contract = addressSchema.parse(contractAddress);
+  const vault = addressSchema.parse(vaultAddress);
+  const usdc = addressSchema.parse(usdcAddress);
   const app = express();
 
   app.use((req, _res, next) => {
@@ -135,11 +193,35 @@ function createApp({
   });
   app.use(cors());
   app.use(express.json());
-  installV2Routes(app, { store: loadV2Store(v2StorePath), storePath: v2StorePath });
+  installV2Routes(app, {
+    store: loadV2Store(v2StorePath),
+    storePath: v2StorePath,
+    verifyDeposit: makeDepositVerifier({ vault, rpcUrl, minConfirmations: Number(process.env.CHANCY_DEPOSIT_MIN_CONFIRMATIONS || 1) }),
+  });
 
   app.get("/health", (_req, res) => {
     res.json({ ok: true, service: "chancy-api", contractAddress: contract });
   });
+
+  app.get("/v2/config", (_req, res) => {
+    res.json({ ok: true, vaultAddress: vault, usdcAddress: usdc, creditAsset: "USD_CREDIT", depositFeeBps: "500" });
+  });
+
+  app.post("/v2/tx/approve-usdc", validate(z.object({
+    amount: uintString,
+  }), (body) => tx(usdc, encodeFunctionData({
+    abi: erc20Abi,
+    functionName: "approve",
+    args: [vault, BigInt(body.amount)],
+  }))));
+
+  app.post("/v2/tx/deposit", validate(z.object({
+    amount: uintString,
+  }), (body) => tx(vault, encodeFunctionData({
+    abi: chancyVaultAbi,
+    functionName: "deposit",
+    args: [BigInt(body.amount)],
+  }))));
 
   app.get("/data/sessions", async (req, res) => {
     try {
@@ -261,4 +343,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { createApp, chancyAbi, readCall, listSessions, getEntropyFee };
+module.exports = { createApp, chancyAbi, chancyVaultAbi, readCall, listSessions, getEntropyFee, makeDepositVerifier };
