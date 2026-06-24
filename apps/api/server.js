@@ -1,5 +1,6 @@
 const express = require("express");
 const cors = require("cors");
+const fs = require("fs");
 const { z } = require("zod");
 const { encodeFunctionData, createPublicClient, http, parseAbi, decodeEventLog } = require("viem");
 const chancyAbiJson = require("../../abi/ChancyGame.json");
@@ -201,9 +202,18 @@ function createApp({
   app.use(express.json());
 
   // Persistence: SQLite when db path is set, JSON file otherwise.
+  // On first run with SQLite, auto-migrate from JSON if it has data.
   let db = null;
   let store;
   if (v2DbPath) {
+    // Auto-migrate from JSON store if SQLite is empty and JSON exists.
+    if (v2StorePath && fs.existsSync(v2StorePath) && fs.statSync(v2StorePath).size > 2) {
+      const { migrateJsonToSqlite } = require("./sqlite-store");
+      const mig = migrateJsonToSqlite(v2StorePath, v2DbPath);
+      if (mig.migrated) {
+        console.log(JSON.stringify({ ok: true, migrated: "json-to-sqlite", ...mig }));
+      }
+    }
     db = initDatabase(v2DbPath);
     store = loadSqliteStore(db);
   } else {

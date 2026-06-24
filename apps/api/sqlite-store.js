@@ -65,6 +65,10 @@ CREATE TABLE IF NOT EXISTS sessions (
   board_commit_hash TEXT,
   entropy           TEXT,
   salt              TEXT,
+  pyth_random_number TEXT,
+  entropy_sequence_number TEXT,
+  entropy_tx_hash   TEXT,
+  entropy_error     TEXT,
   clicked           TEXT NOT NULL DEFAULT '[]',
   bombs_hit         INTEGER NOT NULL DEFAULT 0,
   prizes_collected  INTEGER NOT NULL DEFAULT 0,
@@ -164,6 +168,10 @@ function loadSqliteStore(db) {
       boardCommitHash: row.board_commit_hash || null,
       entropy: row.entropy || null,
       salt: row.salt || null,
+      pythRandomNumber: row.pyth_random_number || undefined,
+      entropySequenceNumber: row.entropy_sequence_number || undefined,
+      entropyTxHash: row.entropy_tx_hash || undefined,
+      entropyError: row.entropy_error || undefined,
       clicked: new Map(clickedArr),
       bombsHit: row.bombs_hit,
       prizesCollected: row.prizes_collected,
@@ -225,8 +233,9 @@ function persistSqliteStore(db, store) {
     db.exec("DELETE FROM sessions");
     const insSession = db.prepare(
       `INSERT INTO sessions (session_id, player, host, mode, stake, commitment, commit_expires_at,
-        board, board_commit_hash, entropy, salt, clicked, bombs_hit, prizes_collected, status, payout)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        board, board_commit_hash, entropy, salt, pyth_random_number, entropy_sequence_number, entropy_tx_hash, entropy_error,
+        clicked, bombs_hit, prizes_collected, status, payout)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
     for (const [id, s] of store.sessions) {
       const clickedArr = [...s.clicked.entries()];
@@ -237,6 +246,10 @@ function persistSqliteStore(db, store) {
         s.boardCommitHash || null,
         s.entropy || null,
         s.salt || null,
+        s.pythRandomNumber || null,
+        s.entropySequenceNumber || null,
+        s.entropyTxHash || null,
+        s.entropyError || null,
         JSON.stringify(clickedArr),
         s.bombsHit || 0, s.prizesCollected || 0, s.status, s.payout || "0"
       );
@@ -258,7 +271,7 @@ function migrateJsonToSqlite(jsonPath, dbPath) {
     return { migrated: false, reason: "JSON file not found" };
   }
   const db = initDatabase(dbPath);
-  const existing = db.prepare("SELECT COUNT(*) as cnt FROM sessions").get();
+  const existing = db.prepare("SELECT (SELECT COUNT(*) FROM sessions) + (SELECT COUNT(*) FROM balances) + (SELECT COUNT(*) FROM deposits) + (SELECT COUNT(*) FROM withdrawals) as cnt").get();
   if (existing.cnt > 0) {
     db.close();
     return { migrated: false, reason: "SQLite already has data" };
