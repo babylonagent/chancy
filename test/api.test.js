@@ -1,9 +1,10 @@
 const { expect } = require("chai");
 const request = require("supertest");
 const { decodeFunctionData } = require("viem");
-const { createApp, chancyAbi } = require("../apps/api/server");
+const { createApp, chancyAbi, chancyVaultAbi } = require("../apps/api/server");
 
 const CONTRACT = "0x1111111111111111111111111111111111111111";
+const VAULT = "0x2222222222222222222222222222222222222222";
 const PLAYER = "0x2222222222222222222222222222222222222222";
 const USDC_ASSET = "0x3333333333333333333333333333333333333333";
 
@@ -22,6 +23,24 @@ describe("agent API", function () {
     const res = await request(app).get("/api/health").expect(200);
 
     expect(res.body).to.deep.equal({ ok: true, service: "chancy-api", contractAddress: CONTRACT });
+  });
+
+  it("builds V2 vault approve and deposit transactions", async function () {
+    const app = createApp({ contractAddress: CONTRACT, vaultAddress: VAULT, usdcAddress: USDC_ASSET });
+
+    const config = await request(app).get("/v2/config").expect(200);
+    expect(config.body).to.include({ ok: true, vaultAddress: VAULT, usdcAddress: USDC_ASSET, depositFeeBps: "500" });
+
+    const approve = await request(app).post("/v2/tx/approve-usdc").send({ amount: "1000000" }).expect(200);
+    expect(approve.body.to).to.equal(USDC_ASSET);
+    const decodedApprove = decodeFunctionData({ abi: [{ type: "function", name: "approve", stateMutability: "nonpayable", inputs: [{ name: "spender", type: "address" }, { name: "amount", type: "uint256" }], outputs: [{ type: "bool" }] }], data: approve.body.data });
+    expect(decodedApprove.args.map(String)).to.deep.equal([VAULT, "1000000"]);
+
+    const deposit = await request(app).post("/v2/tx/deposit").send({ amount: "1000000" }).expect(200);
+    expect(deposit.body.to).to.equal(VAULT);
+    const decodedDeposit = decodeFunctionData({ abi: chancyVaultAbi, data: deposit.body.data });
+    expect(decodedDeposit.functionName).to.equal("deposit");
+    expect(decodedDeposit.args.map(String)).to.deep.equal(["1000000"]);
   });
 
   it("builds a createSession transaction with a prize pot", async function () {

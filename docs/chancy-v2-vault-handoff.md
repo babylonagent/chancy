@@ -1,6 +1,19 @@
 # Chancy V2 Vault Deployment Handoff
 
-No V2 vault contract has been deployed from this session.
+Base Sepolia V2 vault is deployed and constructor state is verified.
+
+## Base Sepolia deployment
+
+```txt
+ChancyVault        = 0x6fa1136097c6ECC6Dc5fE746c77B57684a938E39
+USDC               = 0x036cbd53842c5426634e7929541ec2318f3dcf7e
+Controller / owner = 0xca237adb637fc628d317f5f1c5e2522e1ea22ddd
+Hot wallet         = 0xbcd9b0ba388608598f9eaab43bfc7ba44324f860
+Cold wallet        = 0x51a17e6dae3d0d04174734b906bb201cc79a20ff
+Deposit fee        = 500 bps
+```
+
+Verified on Base Sepolia: owner/controller, USDC, hot wallet, cold wallet, `depositFeeBps=500`, `MAX_DEPOSIT_FEE_BPS=500`.
 
 ## Final V2 custody shape
 
