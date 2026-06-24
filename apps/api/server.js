@@ -8,6 +8,7 @@ const chancyVaultAbiJson = require("../../abi/ChancyVault.json");
 const { installV2Routes, loadV2Store } = require("./v2");
 const { initDatabase, loadSqliteStore, migrateJsonToSqlite } = require("./sqlite-store");
 const { makeEntropyRequester } = require("./entropy");
+const { createDepositIndexer } = require("./deposit-indexer");
 const { rateLimit, getClientIp, stakeCap, corsRestriction, securityHeaders, MAX_CONCURRENT_SESSIONS } = require("./security");
 const chancyRandomnessAbiJson = require("../../abi/ChancyRandomness.json");
 const chancyAbi = chancyAbiJson.abi || chancyAbiJson;
@@ -273,6 +274,49 @@ function createApp({
     adminToken: process.env.CHANCY_ADMIN_TOKEN || "",
   });
 
+  // ── Deposit Indexer — auto-credits raw USDC transfers to vault ──
+  // Watches Transfer events, credits from address 95% net (5% fee stays in vault).
+  // Replaces approve+deposit flow with single raw send.
+  const persistFn = db
+    ? () => require("./sqlite-store").persistSqliteStore(db, store)
+    : () => {};
+
+  // lastScannedBlock tracking (DB-backed if SQLite, in-memory otherwise)
+  let _lastScannedBlock = 0;
+  const getLastBlock = () => {
+    if (db) {
+      try {
+        const row = db.prepare("SELECT value FROM meta WHERE key = ?").get("indexerLastBlock");
+        return row ? Number(row.value) : 0;
+      } catch { return _lastScannedBlock; }
+    }
+    return _lastScannedBlock;
+  };
+  const setLastBlock = (block) => {
+    _lastScannedBlock = block;
+    if (db) {
+      try {
+        db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)").run("indexerLastBlock", String(block));
+      } catch { /* best-effort */ }
+    }
+  };
+
+  let indexer = null;
+  if (process.env.CHANCY_INDEXER_DISABLED !== "1") {
+    indexer = createDepositIndexer({
+      rpcUrl,
+      vaultAddress: vault,
+      usdcAddress: usdc,
+      store,
+      persist: persistFn,
+      minConfirmations: Number(process.env.CHANCY_DEPOSIT_MIN_CONFIRMATIONS || 3),
+      pollIntervalMs: Number(process.env.CHANCY_INDEXER_POLL_MS || 5000),
+      getLastBlock,
+      setLastBlock,
+    });
+    indexer.start();
+  }
+
   app.get("/health", (_req, res) => {
     res.json({ ok: true, service: "chancy-api", contractAddress: contract });
   });
@@ -296,6 +340,23 @@ function createApp({
     functionName: "approve",
     args: [vault, BigInt(body.amount)],
   }))));
+
+  // Check current allowance — frontend uses this to skip redundant approve txs
+  app.get("/v2/allowance/:player", async (req, res) => {
+    const parsed = z.object({ player: addressSchema }).safeParse(req.params || {});
+    if (!parsed.success) return res.status(400).json({ error: "INVALID_PARAMS" });
+    try {
+      const allowance = await client.readContract({
+        address: usdc,
+        abi: erc20Abi,
+        functionName: "allowance",
+        args: [parsed.data.player, vault],
+      });
+      return res.json({ player: parsed.data.player, allowance: allowance.toString() });
+    } catch (err) {
+      return res.status(502).json({ error: "ALLOWANCE_READ_FAILED", message: err.message });
+    }
+  });
 
   app.post("/v2/tx/deposit", validate(z.object({
     amount: uintString,

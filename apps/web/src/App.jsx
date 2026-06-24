@@ -128,8 +128,14 @@ export default function App() {
   // Wallet / credits
   const [balance, setBalance] = useState('0');
   const [withdrawable, setWithdrawable] = useState('0');
-  const [depositAmt, setDepositAmt] = useState('10');
   const [withdrawAmt, setWithdrawAmt] = useState('');
+
+  // Deposit UI state
+  const [vaultAddress, setVaultAddress] = useState('');
+  const [usdcAddress, setUsdcAddress] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [pollingDeposit, setPollingDeposit] = useState(false);
+  const [preDepositBalance, setPreDepositBalance] = useState('0');
 
   // Lobby state
   const [sessions, setSessions] = useState([]);
@@ -150,9 +156,13 @@ export default function App() {
 
   const modeCfg = MODES[mode] || MODES.Normal;
 
-  // ── Health check ──
+  // ── Health check + config ──
   useEffect(() => {
     getJson('/health').then(() => setOnline(true)).catch(() => setOnline(false));
+    getJson('/v2/config').then((cfg) => {
+      if (cfg.vaultAddress) setVaultAddress(cfg.vaultAddress);
+      if (cfg.usdcAddress) setUsdcAddress(cfg.usdcAddress);
+    }).catch(() => {});
   }, []);
 
   // ── Wallet events ──
@@ -222,33 +232,62 @@ export default function App() {
     }
   }
 
-  // ── DEPOSIT ──
-  async function depositCredits() {
-    setError('');
-    const amount = usdcUnits(depositAmt);
-    if (BigInt(amount) <= 0n) { setError('Enter an amount to add.'); return; }
-    setBusy(true); setStatusMsg('Adding credits…');
+  // ── DEPOSIT (indexer-based) ──
+  // User sends USDC directly to vault. Indexer auto-credits.
+  // Wallet remains optional — user can send from any wallet.
+  async function connectWalletForDeposit() {
+    const player = await connectWallet();
+    if (player) {
+      setPreDepositBalance(balance);
+      setView('deposit');
+    }
+  }
+
+  async function copyVaultAddress() {
+    try {
+      await navigator.clipboard.writeText(vaultAddress);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setError('Copy failed — long-press to copy manually');
+    }
+  }
+
+  // Open native wallet send to vault (if MetaMask/compatible)
+  async function openWalletSend() {
+    if (!wallet) { await connectWalletForDeposit(); return; }
     try {
       const provider = getWalletProvider();
-      const player = wallet || await connectWallet();
-      if (!player) return;
-      await ensureChain(provider);
-      setStatusMsg('Approving…');
-      const approveTx = await postJson('/v2/tx/approve-usdc', { amount });
-      await provider.request({ method: 'eth_sendTransaction', params: [{ from: player, to: approveTx.to, data: approveTx.data, value: approveTx.value || '0x0' }] });
-      setStatusMsg('Depositing…');
-      const depositTx = await postJson('/v2/tx/deposit', { amount });
-      const txHash = await provider.request({ method: 'eth_sendTransaction', params: [{ from: player, to: depositTx.to, data: depositTx.data, value: depositTx.value || '0x0' }] });
-      setStatusMsg('Confirming…');
-      const credit = await postJson('/v2/credits/deposit', { player, txHash });
-      setBalance(credit.balance || '0');
-      await refreshCredits(player);
-      setStatusMsg(`Credits added — ${dollars(credit.balance || '0')}`);
+      await provider.request({
+        method: 'eth_sendTransaction',
+        params: [{
+          from: wallet,
+          to: vaultAddress,
+          value: '0x0',
+          // No data — user picks amount in their wallet UI
+        }],
+      });
     } catch (err) {
-      setError(err.message || String(err));
-      setStatusMsg('');
-    } finally { setBusy(false); }
+      // Some wallets don't support pre-filling — fall back to copy
+      if (err.code === -32602 || err.message?.includes('parameters')) {
+        await copyVaultAddress();
+        setStatusMsg('Address copied — open your wallet and paste to send');
+      }
+    }
   }
+
+  // Poll for balance change after user sends USDC
+  useEffect(() => {
+    if (!pollingDeposit || !wallet) return;
+    const interval = setInterval(async () => {
+      const bal = await refreshCredits(wallet);
+      if (BigInt(bal) > BigInt(preDepositBalance)) {
+        setPollingDeposit(false);
+        setStatusMsg(`Credits added — ${dollars(bal)}`);
+      }
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [pollingDeposit, wallet, preDepositBalance, refreshCredits]);
 
   // ── HOST: CREATE SESSION ──
   async function hostCreateSession() {
@@ -474,11 +513,14 @@ export default function App() {
                   <span className="value green small">{dollars(withdrawable)}</span>
                 </div>
               </div>
-              <div className="credit-actions">
-                <input value={depositAmt} onChange={(e) => setDepositAmt(e.target.value)} placeholder="10" inputMode="decimal" className="credit-input" />
-                <button className="btn btn-primary btn-sm" disabled={busy} onClick={depositCredits}>Add</button>
-                <input value={withdrawAmt} onChange={(e) => setWithdrawAmt(e.target.value)} placeholder={formatUsdc(withdrawable)} inputMode="decimal" className="credit-input" />
-                <button className="btn btn-ghost btn-sm" disabled={busy || BigInt(withdrawable) <= 0n} onClick={requestWithdrawal}>Withdraw</button>
+              <div className="credit-actions-simple">
+                <button className="btn btn-primary btn-sm" onClick={() => { setPreDepositBalance(balance); setView('deposit'); }}>
+                  + Add credits
+                </button>
+                <div className="withdraw-row">
+                  <input value={withdrawAmt} onChange={(e) => setWithdrawAmt(e.target.value)} placeholder={formatUsdc(withdrawable)} inputMode="decimal" className="credit-input" />
+                  <button className="btn btn-ghost btn-sm" disabled={busy || BigInt(withdrawable) <= 0n} onClick={requestWithdrawal}>Withdraw</button>
+                </div>
               </div>
             </div>
           )}
@@ -556,6 +598,67 @@ export default function App() {
           )}
 
           {statusMsg && <p className="status-text">{statusMsg}</p>}
+        </div>
+      )}
+
+      {/* ═══ DEPOSIT (indexer-based) ═══ */}
+      {view === 'deposit' && (
+        <div className="deposit-view">
+          <div className="lobby-header">
+            <button className="back-btn" onClick={() => { setPollingDeposit(false); setView('lobby'); }}>← Back</button>
+          </div>
+
+          <h2 className="view-title">Add credits</h2>
+          <p className="view-sub">Send USDC (Base) to the address below. Credits appear automatically after confirmation (~10 seconds). No approval needed.</p>
+
+          {/* QR Code */}
+          {vaultAddress && (
+            <div className="qr-section">
+              <img
+                className="qr-code"
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(vaultAddress)}`}
+                alt="Vault address QR"
+              />
+            </div>
+          )}
+
+          {/* Vault address */}
+          <div className="vault-address-card" onClick={copyVaultAddress}>
+            <div className="vault-label">Deposit address (USDC · Base)</div>
+            <div className="vault-address">{vaultAddress || 'Loading…'}</div>
+            <div className="vault-copy-hint">{copied ? '✓ Copied' : 'Tap to copy'}</div>
+          </div>
+
+          {/* Actions */}
+          <div className="deposit-actions">
+            {window.ethereum && (
+              <button className="btn btn-primary" onClick={() => { openWalletSend(); setPollingDeposit(true); }}>
+                Open wallet to send
+              </button>
+            )}
+            <button className="btn btn-secondary" onClick={() => { copyVaultAddress(); setPollingDeposit(true); }}>
+              {copied ? '✓ Copied — send from any wallet' : 'Copy address'}
+            </button>
+          </div>
+
+          {/* Status / polling */}
+          {pollingDeposit ? (
+            <div className="deposit-polling">
+              <div className="pulse-dot" />
+              <span>Waiting for your deposit…</span>
+              <button className="btn btn-ghost btn-sm" onClick={() => setPollingDeposit(false)}>Cancel</button>
+            </div>
+          ) : statusMsg ? (
+            <div className="deposit-success">{statusMsg}</div>
+          ) : null}
+
+          {/* Current balance */}
+          <div className="deposit-balance">
+            <span className="label">Current balance</span>
+            <span className="value gold">{dollars(balance)}</span>
+          </div>
+
+          <p className="fee-note">5% deposit fee applies · Credits are 1:1 with USDC</p>
         </div>
       )}
 
