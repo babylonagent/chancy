@@ -1,200 +1,127 @@
 # Chancy
 
-Commit-reveal-style block game for Base, using **Pyth Entropy** for per-player board generation.
+**Trustless P2P tile-reveal game on Base.** Hosts fund prize pots. Players pay per tile. Find all prizes to win the pot. Dodge bombs to survive.
 
-## Contracts
-
-- `contracts/ChancyGame.sol`
-  - Production contract.
-  - Constructor: `(entropyAddress, initialAllowedAsset, initialOwner)`.
-  - Multi-asset by address: native ETH is `address(0)`; ERC20 settlement assets
-    (e.g. USDC) are allow-listed by the owner via `setAssetAllowed`. New assets
-    need no redeploy.
-
-- `contracts/ChancyGameBase.sol`
-  - Shared game logic.
-
-## Randomness / board generation
-
-Chancy does **not** use one shared hidden board per session.
-
-Correct flow:
-
-```text
-host creates session with difficulty
-→ host funds max prize exposure
-→ player joins session
-→ join transfers fixed game token entry amount
-→ join requests Pyth Entropy randomness
-→ Pyth Entropy callback returns random number
-→ contract derives that player's 64-block board
-→ player clicks tiles against their own board
-→ bomb/prize/empty outcome is resolved
+```
+chancy.cash
 ```
 
-Storage shape:
+## How it works
 
-```text
-sessionId + player => PlayerGame
+```
+Host creates game → locks prize pot ($5+)
+   ↓
+Player browses open games → joins (pays $0.05 entrance)
+   ↓
+Player reveals tiles → progressive cost per tile
+   ↓
+Find ALL prizes → win the pot
+3 bombs → game over (host earns player's spent)
+Quit anytime → keep prizes earned
 ```
 
-## Rules
+## Trustless architecture
 
-- 64 hidden blocks.
-- Host chooses difficulty at session initialization.
-- Difficulty presets:
-  - Easy: 5 bombs / 3 prizes
-  - Normal: 7 bombs / 2 prizes
-  - Hardcore: 10 bombs / 1 prize
-- Duplicate tile clicks are rejected.
-- Player cannot click until their Pyth Entropy board is ready.
-- 3 bombs marks the player's game over and blocks further clicks.
-- Prize clicks accrue a pro-rata share of the host-funded prize pot into claimable rewards.
-- Settlement asset is a host/session parameter. Native ETH is `address(0)`; USDC is allow-listed.
+| Component | Mechanism | Verification |
+|---|---|---|
+| **Deposits** | Raw USDC transfer to vault → indexer credits sender | [Indexer watches on-chain Transfer events](apps/api/deposit-indexer.js) |
+| **Board fairness** | Commit-reveal + Pyth Entropy on-chain randomness | [Server can't grind boards](apps/api/v2.js#L92) |
+| **Prize pots** | Locked in credit ledger from host's deposited balance | Server-side ledger, backed by SQLite |
+| **Payouts** | Hot wallet relayer auto-pays pending withdrawals | [Payout relayer](scripts/payout-relayer.js) |
+| **Fund safety** | 5% fees to controller, rebalance sweeps vault↔hot | [Rebalance service](scripts/rebalance.js) |
 
-## Host-funded prize pot
+### No approve needed — single-tx deposits
 
-Hosts fund the full session prize pot during `createSession(asset, difficulty, prizePot)`.
+Players send USDC directly to the vault address. An indexer watches the USDC `Transfer` event and auto-credits the sender (95% net, 5% fee stays in vault). **Zero spending cap approvals, works with any wallet.**
 
-Players reveal tiles with progressive per-tile costs based on the prize pot. If a player quits, hits 3 bombs, or becomes idle for more than one minute, the host receives the player's spent reveal costs.
-
-## Pyth Entropy integration
-
-Docs: https://docs.pyth.network/entropy/generate-random-numbers-evm
-
-The contract uses:
-
-- `IEntropyV2.getFeeV2(provider, gasLimit)`
-- `IEntropyV2.requestV2(provider, userRandomNumber, gasLimit)`
-- `IEntropyConsumer._entropyCallback(...)`
-- internal `entropyCallback(...)` to derive the board
-
-Tests use `contracts/test/MockEntropy.sol` to simulate the Pyth callback.
-
-## Agent/API transaction builder
-
-The API builds unsigned transaction payloads for wallets or agents.
-
-```bash
-npm run export:abi
-CHANCY_CONTRACT_ADDRESS=0x... npm run api
+```
+Player sends USDC → Vault address
+         ↓
+Indexer detects Transfer(from=player, to=vault, amount)
+         ↓
+Credits player: amount × 95% (idempotent by txHash)
 ```
 
-Endpoints:
+### Commit-reveal fairness
 
-Transaction builders:
+Players commit `hash(entropy:salt)` before joining. The server requests Pyth Entropy on-chain randomness only after the commitment is locked — preventing board grinding by selectively aborting.
 
-- `POST /tx/create-session`
-- `POST /tx/join-session`
-- `POST /tx/click-tile`
-- `POST /tx/quit-session`
-- `POST /tx/kick-idle-player`
-- `POST /tx/claim-rewards`
-
-Read/data endpoints:
-
-- `GET /data/sessions`
-- `GET /read/session/:sessionId`
-- `GET /read/player-game/:sessionId/:player`
-- `GET /read/claimable-rewards/:player/:asset`
-- `GET /read/next-session-id`
-- `GET /read/current-reveal-cost/:sessionId`
-
-Each transaction endpoint returns:
-
-```json
-{
-  "to": "0x...",
-  "data": "0x...",
-  "value": "0"
-}
+```
+Player generates entropy + salt locally
+         ↓
+Commits hash(entropy:salt) at join
+         ↓
+Server requests Pyth Entropy (on-chain, verifiable)
+         ↓
+Board = f(pythRandom, sessionId, player, mode)
 ```
 
-## Web client
+## Game modes
 
-The web client provides an 8×8 grid, API-backed payload builder controls, injected wallet execution, and a Vercel-ready preview deployment. The preview API is served by the same app through serverless `/tx/*`, `/read/*`, and `/health` routes.
+| Mode | Bombs | Prizes | First tile cost |
+|---|---|---|---|
+| **Easy** | 5 | 3 | 1.5% of pot |
+| **Normal** | 7 | 2 | 2.5% of pot |
+| **Hardcore** | 10 | 1 | 3.5% of pot |
 
-```bash
-npm run web:dev
-npm run web:build
-npm run web:test
+Tile costs increase progressively. 3 bombs = game over.
+
+## Tech stack
+
+- **Chain:** Base L2 (mainnet)
+- **Contracts:** Solidity, Hardhat
+- **Randomness:** [Pyth Entropy](https://docs.pyth.network/entropy)
+- **Backend:** Node.js, Express, SQLite
+- **Frontend:** React, Vite
+- **Indexer:** viem, polls USDC Transfer events
+
+## Contract addresses (Base mainnet)
+
+| Contract | Address |
+|---|---|
+| ChancyVault | `0xbE81cE9d9909A31184D1878075f60bbbf8571612` |
+| ChancyRandomness | `0x705dF0f1667Ed82bB25E5a51273a9Ea6dE5C6e96` |
+| USDC | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
+| Pyth Entropy | `0x6E7D74FA7d5c90FEF9F0512987605a6d546181Bb` |
+
+All verifiable on [Basescan](https://basescan.org).
+
+## Project structure
+
+```
+contracts/          Solidity contracts (vault, game, randomness)
+abi/                Exported ABIs
+apps/api/           V2 API server + indexer
+  ├── v2.js           Game engine (sessions, credits, P2P mechanics)
+  ├── deposit-indexer.js  Watches USDC transfers, auto-credits
+  ├── server.js       Express app, security middleware, entropy
+  ├── sqlite-store.js Persistent ledger
+  ├── entropy.js      Pyth Entropy requester
+  └── security.js     Rate limiting, CORS, headers
+apps/web/           React frontend
+scripts/            Deploy, verify, relayer, rebalance, monitor
+test/               Hardhat contract tests
+docs/               Specs and handoff docs
 ```
 
-Capabilities:
+## Fee model
 
-- Connect an injected Base-compatible wallet.
-- Show API health and the configured Chancy contract address.
-- Build create/join/click/quit/idle-kick/claim transaction payloads.
-- Build session/player/claimable/next-session/reveal-cost read payloads.
-- No private keys in UI.
+| Fee | Rate | Destination |
+|---|---|---|
+| Deposit | 5% | Stays in vault → swept to controller |
+| Withdrawal | 5% | Controller |
+| Session | $0.05 entrance | Host |
 
-## Preview deployment
+Credits are 1:1 with USDC. Win payouts are fee-free.
 
-The Vercel preview uses `vercel.json` to build the web app and expose the Express transaction builder as serverless routes. Store public contract/token addresses only; never deploy private keys or RPC API keys to Vercel.
+## Security
 
-Required preview environment variable:
+- **No secrets in frontend or public repo** — private keys live only on the VPS
+- **Exact-amount deposits** — no unlimited approvals, ever
+- **Idempotent indexer** — txHash deduplication prevents double-credits
+- **Rate limiting** — per-endpoint limits on API
+- **Commit-reveal** — server cannot selectively abort to grind boards
 
-```text
-CHANCY_CONTRACT_ADDRESS=0x...
-```
+## License
 
-Optional public web config:
-
-```text
-VITE_CHANCY_API_URL=
-VITE_CHANCY_BASE_USDC_ADDRESS=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913
-VITE_CHANCY_BASE_SEPOLIA_USDC_ADDRESS=0x036cbd53842c5426634e7929541ec2318f3dcf7e
-```
-
-Deploy preview:
-
-```bash
-vercel deploy --prod
-```
-
-Do not commit RPC URLs, API keys, private keys, or token launch secrets. The browser wallet supplies the active Base RPC for reads and sends.
-
-## Deployment
-
-Copy env template:
-
-```bash
-cp .env.example .env
-```
-
-Set runtime-only values:
-
-```text
-PRIVATE_KEY=
-BASE_RPC_URL=
-BASE_SEPOLIA_RPC_URL=
-CHANCY_OWNER_ADDRESS=
-CHANCY_USDC_ADDRESS=
-PYTH_ENTROPY_ADDRESS=
-CHANCY_CONTRACT_ADDRESS=
-```
-
-Deploy production-shaped contract:
-
-```bash
-npx hardhat run scripts/deploy-chancy-game.js --network baseSepolia
-```
-
-Local smoke deploy:
-
-```bash
-npx hardhat run scripts/smoke-local-deploy.js
-```
-
-For mainnet handoff, see [`docs/mainnet-handoff.md`](docs/mainnet-handoff.md).
-
-## Commands
-
-```bash
-npm install
-npm test
-npm run build
-npm run export:abi
-npm run web:test
-npm run web:build
-```
+MIT
