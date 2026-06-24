@@ -1,33 +1,34 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import chancyLogo from './assets/chancy-logo.svg';
 
+// ─── CONFIG ─────────────────────────────────────────────────────────────────
 const API = import.meta.env?.VITE_CHANCY_API_URL || '';
-const BASE_USDC_ADDRESS = import.meta.env?.VITE_CHANCY_BASE_USDC_ADDRESS || '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
-const BASE_SEPOLIA_USDC_ADDRESS = import.meta.env?.VITE_CHANCY_BASE_SEPOLIA_USDC_ADDRESS || '0x036cbd53842c5426634e7929541ec2318f3dcf7e';
 
+// Base mainnet (VPS is configured for mainnet)
 const BASE_CHAIN_ID = '0x2105';
-const BASE_SEPOLIA_CHAIN_ID = '0x14a34';
-const TARGET_CHAIN_ID = (import.meta.env?.VITE_CHANCY_CHAIN_ID || BASE_SEPOLIA_CHAIN_ID).toLowerCase();
+const TARGET_CHAIN_ID = BASE_CHAIN_ID;
 
 const USDC_DECIMALS = 1_000_000n;
-const STAKE_UNITS = '50000';
-const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
-const GAME_HOST = import.meta.env?.VITE_CHANCY_GAME_HOST || '';
+const BOMB_LIVES = 3;
+const TILES = Array.from({ length: 64 }, (_, i) => i + 1);
 
 const CHAIN_PARAMS = {
-  [BASE_CHAIN_ID]: { chainId: BASE_CHAIN_ID, chainName: 'Base', nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }, rpcUrls: ['https://mainnet.base.org'], blockExplorerUrls: ['https://basescan.org'] },
-  [BASE_SEPOLIA_CHAIN_ID]: { chainId: BASE_SEPOLIA_CHAIN_ID, chainName: 'Base Sepolia', nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }, rpcUrls: ['https://sepolia.base.org'], blockExplorerUrls: ['https://sepolia.basescan.org'] },
+  [BASE_CHAIN_ID]: {
+    chainId: BASE_CHAIN_ID, chainName: 'Base',
+    nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+    rpcUrls: ['https://mainnet.base.org'],
+    blockExplorerUrls: ['https://basescan.org'],
+  },
 };
 
+// Modes — must match backend modeConfig exactly
 const MODES = {
-  Easy:     { bombs: 3, prizes: 5, multiplier: '2.5', copy: '3 bombs · 5 prizes' },
-  Normal:   { bombs: 5, prizes: 3, multiplier: '5.3', copy: '5 bombs · 3 prizes' },
-  Hardcore: { bombs: 9, prizes: 2, multiplier: '8.7', copy: '9 bombs · 2 prizes' },
+  Easy:     { bombs: 5,  prizes: 3, copy: '5 bombs · 3 prizes' },
+  Normal:   { bombs: 7,  prizes: 2, copy: '7 bombs · 2 prizes' },
+  Hardcore: { bombs: 10, prizes: 1, copy: '10 bombs · 1 prize' },
 };
 
-const TILES = Array.from({ length: 64 }, (_, i) => i + 1);
-const BOMB_LIVES = 3;
-
+// ─── UTILS ──────────────────────────────────────────────────────────────────
 function formatUsdc(units) {
   const value = BigInt(units || '0');
   const whole = value / USDC_DECIMALS;
@@ -47,29 +48,37 @@ function randomEntropy() {
   (globalThis.crypto || window.crypto).getRandomValues(bytes);
   return '0x' + [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
-function sha256Hex(entropy, salt) {
+async function sha256Hex(entropy, salt) {
   const data = `${entropy}:${salt}`;
   const bytes = new TextEncoder().encode(data);
-  return crypto.subtle.digest('SHA-256', bytes).then((buf) => '0x' + [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join(''));
+  return crypto.subtle.digest('SHA-256', bytes).then((buf) =>
+    '0x' + [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('')
+  );
 }
 
 async function postJson(path, body) {
-  const res = await fetch(`${API}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  const res = await fetch(`${API}${path}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || data.message || `Request failed (${res.status})`);
+  return data;
 }
 async function getJson(path) {
   const res = await fetch(`${API}${path}`);
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || data.message || `Request failed (${res.status})`);
+  return data;
 }
+
 function getWalletProvider() {
   if (!window.ethereum) throw new Error('No wallet found. Install a supported wallet first.');
   return window.ethereum;
 }
-function shortAddr(a) { return !a || /^0x0{40}$/i.test(a) ? '' : `${a.slice(0, 6)}…${a.slice(-4)}`; }
+function shortAddr(a) { return !a || /^0x0{40}$/i.test(a) ? '—' : `${a.slice(0, 6)}…${a.slice(-4)}`; }
 
-// ─── Rules Modal (bottom sheet) ─────────────────────────────────────────────
+// ─── RULES MODAL ────────────────────────────────────────────────────────────
 function RulesSheet({ onClose }) {
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -81,22 +90,26 @@ function RulesSheet({ onClose }) {
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-handle" />
         <h2>How to play</h2>
-        <p className="modal-sub">Tap tiles, dodge bombs, collect all prizes to win.</p>
+        <p className="modal-sub">Hosts fund prize pots. Players pay per tile. Find all prizes to win the pot.</p>
         <div className="rule-item">
           <div className="rule-icon gold">$</div>
-          <div className="rule-text"><strong>Add credits once</strong><span>Top up and play as many rounds as you want — no pop-ups mid-game.</span></div>
+          <div className="rule-text"><strong>Add credits</strong><span>Deposit once → play instantly. No pop-ups mid-game.</span></div>
+        </div>
+        <div className="rule-item">
+          <div className="rule-icon blue">◉</div>
+          <div className="rule-text"><strong>Host a game</strong><span>Lock a prize pot. Earn when players fail. Close anytime to reclaim.</span></div>
         </div>
         <div className="rule-item">
           <div className="rule-icon green">★</div>
-          <div className="rule-text"><strong>Find the prizes</strong><span>Each round is $0.05. Reveal tiles one at a time. Collect every prize to win.</span></div>
+          <div className="rule-text"><strong>Play & reveal</strong><span>Pay $0.05 to join. Tiles cost more as you reveal more. Find all prizes → win the pot.</span></div>
         </div>
         <div className="rule-item">
           <div className="rule-icon red">✺</div>
-          <div className="rule-text"><strong>Dodge the bombs</strong><span>Three bombs ends the round. Choose your risk — bigger bombs, bigger payouts.</span></div>
+          <div className="rule-text"><strong>Dodge bombs</strong><span>Three bombs ends your run. Quit anytime to keep prizes earned.</span></div>
         </div>
         <div className="rule-item">
           <div className="rule-icon gold">↗</div>
-          <div className="rule-text"><strong>Cash out anytime</strong><span>Withdraw your credits to your wallet whenever you want.</span></div>
+          <div className="rule-text"><strong>Cash out</strong><span>Withdraw credits to your wallet whenever you want.</span></div>
         </div>
         <button className="btn btn-primary" onClick={onClose} style={{ marginTop: 16 }}>Got it</button>
       </div>
@@ -104,34 +117,40 @@ function RulesSheet({ onClose }) {
   );
 }
 
-// ─── Main App ───────────────────────────────────────────────────────────────
+// ─── MAIN APP ───────────────────────────────────────────────────────────────
 export default function App() {
-  const [view, setView] = useState('landing');
+  const [view, setView] = useState('landing'); // landing | lobby | round | host
   const [online, setOnline] = useState(null);
   const [wallet, setWallet] = useState('');
   const [chainId, setChainId] = useState('');
   const [showRules, setShowRules] = useState(() => !localStorage.getItem('chancy_rules_seen'));
 
-  const [mode, setMode] = useState('Normal');
-  const [depositAmt, setDepositAmt] = useState('5');
-  const [withdrawAmt, setWithdrawAmt] = useState('');
-
+  // Wallet / credits
   const [balance, setBalance] = useState('0');
   const [withdrawable, setWithdrawable] = useState('0');
+  const [depositAmt, setDepositAmt] = useState('10');
+  const [withdrawAmt, setWithdrawAmt] = useState('');
 
+  // Lobby state
+  const [sessions, setSessions] = useState([]);
+  const [mode, setMode] = useState('Normal');
+
+  // Host state
+  const [hostMode, setHostMode] = useState('Normal');
+  const [potAmt, setPotAmt] = useState('10');
+
+  // Active round state
   const [session, setSession] = useState(null);
   const [revealed, setRevealed] = useState({});
-  const [run, setRun] = useState({ bombsHit: 0, prizesCollected: 0, status: 'idle', payout: '0' });
+  const [run, setRun] = useState({ bombsHit: 0, prizesFound: 0, status: 'idle', spentTotal: '0', prizeEarned: '0', nextTileCost: '0' });
 
   const [busy, setBusy] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
   const [error, setError] = useState('');
 
-  const host = GAME_HOST || wallet || ZERO_ADDRESS;
-  const modeCfg = MODES[mode];
-  const potentialWin = (BigInt(STAKE_UNITS) * BigInt(Math.round(parseFloat(modeCfg.multiplier) * 10)) / 10n).toString();
+  const modeCfg = MODES[mode] || MODES.Normal;
 
-  // ── Health check (silent) ──
+  // ── Health check ──
   useEffect(() => {
     getJson('/health').then(() => setOnline(true)).catch(() => setOnline(false));
   }, []);
@@ -161,6 +180,14 @@ export default function App() {
       return d.balance || '0';
     } catch { return '0'; }
   }, [wallet]);
+
+  const refreshSessions = useCallback(async () => {
+    try {
+      const d = await getJson('/v2/sessions');
+      setSessions(d.sessions || []);
+      return d.sessions || [];
+    } catch { return []; }
+  }, []);
 
   useEffect(() => { if (wallet) refreshCredits(wallet); }, [wallet, refreshCredits]);
 
@@ -195,6 +222,7 @@ export default function App() {
     }
   }
 
+  // ── DEPOSIT ──
   async function depositCredits() {
     setError('');
     const amount = usdcUnits(depositAmt);
@@ -222,23 +250,61 @@ export default function App() {
     } finally { setBusy(false); }
   }
 
-  async function startRound() {
+  // ── HOST: CREATE SESSION ──
+  async function hostCreateSession() {
     setError('');
     const player = wallet || await connectWallet();
     if (!player) return;
-    const freshBal = await refreshCredits(player);
-    if (BigInt(freshBal) < BigInt(STAKE_UNITS)) { setError('Not enough credits — add at least $0.05.'); return; }
-    setBusy(true); setStatusMsg('Starting round…');
+    const pot = usdcUnits(potAmt);
+    if (BigInt(pot) < 5_000_000n) { setError('Prize pot must be at least $5.'); return; }
+    setBusy(true); setStatusMsg('Creating game…');
+    try {
+      const result = await postJson('/v2/sessions/create', { host: player, mode: hostMode, prizePot: pot });
+      await refreshCredits(player);
+      setStatusMsg(`Game #${result.sessionId} live — ${dollars(result.prizePot)} pot`);
+      setView('lobby');
+      await refreshSessions();
+    } catch (err) {
+      setError(err.message || String(err));
+      setStatusMsg('');
+    } finally { setBusy(false); }
+  }
+
+  // ── HOST: CLOSE SESSION ──
+  async function closeSession(sessionId) {
+    setError('');
+    if (!wallet) return;
+    setBusy(true);
+    try {
+      await postJson(`/v2/sessions/${sessionId}/close`, { host: wallet });
+      await refreshCredits(wallet);
+      await refreshSessions();
+      setStatusMsg('Game closed — pot reclaimed');
+    } catch (err) {
+      setError(err.message || String(err));
+    } finally { setBusy(false); }
+  }
+
+  // ── PLAYER: JOIN + REVEAL ──
+  async function joinSession(sess) {
+    setError('');
+    const player = wallet || await connectWallet();
+    if (!player) return;
+    if (BigInt(balance) < BigInt(sess.entranceFee)) {
+      setError(`Need at least ${dollars(sess.entranceFee)} to join. Add credits first.`);
+      return;
+    }
+    setBusy(true); setStatusMsg('Joining game…');
     try {
       const entropy = randomEntropy();
       const salt = randomEntropy();
       const commitment = await sha256Hex(entropy, salt);
-      const created = await postJson('/v2/sessions', { player, host: host === ZERO_ADDRESS ? player : host, mode, stake: STAKE_UNITS, commitment });
+      await postJson(`/v2/sessions/${sess.sessionId}/join`, { player, commitment });
       setStatusMsg('Shuffling tiles…');
-      await postJson(`/v2/sessions/${created.sessionId}/reveal`, { player, entropy, salt });
-      setSession({ sessionId: created.sessionId, mode });
+      const revealed = await postJson(`/v2/sessions/${sess.sessionId}/reveal`, { player, entropy, salt });
+      setSession({ sessionId: sess.sessionId, mode: sess.mode, prizePot: sess.prizePot });
       setRevealed({});
-      setRun({ bombsHit: 0, prizesCollected: 0, status: 'active', payout: '0' });
+      setRun({ bombsHit: 0, prizesFound: 0, status: 'active', spentTotal: '0', prizeEarned: '0', nextTileCost: sess.firstTileCost || '0' });
       setView('round');
       setStatusMsg('');
       await refreshCredits(player);
@@ -248,15 +314,20 @@ export default function App() {
     } finally { setBusy(false); }
   }
 
+  // ── PLAYER: CLICK TILE ──
   async function clickTile(tile) {
     if (!session || run.status !== 'active' || revealed[tile] || busy) return;
     setBusy(true);
     try {
       const result = await postJson(`/v2/sessions/${session.sessionId}/click`, { player: wallet, tile });
       setRevealed((prev) => ({ ...prev, [result.tile]: result.outcome }));
-      setRun({ bombsHit: result.bombsHit, prizesCollected: result.prizesCollected, status: result.status, payout: result.payout });
-      if (result.status === 'won') { setStatusMsg(`Won ${dollars(result.payout)}!`); await refreshCredits(wallet); }
-      else if (result.status === 'lost') { setStatusMsg('Round over — 3 bombs'); }
+      setRun({
+        bombsHit: result.bombsHit, prizesFound: result.prizesFound,
+        status: result.status, spentTotal: result.spentTotal || '0',
+        prizeEarned: result.prizeEarned || '0', nextTileCost: result.nextTileCost || '0',
+      });
+      if (result.status === 'won') { setStatusMsg(`Won ${dollars(result.prizeEarned)}!`); await refreshCredits(wallet); }
+      else if (result.status === 'lost') { setStatusMsg('Game over — 3 bombs'); }
       else if (result.outcome === 'prize') { setStatusMsg('Prize found!'); }
       else if (result.outcome === 'bomb') { setStatusMsg(`Bomb — ${result.bombsHit}/3`); }
       else { setStatusMsg('Empty tile'); }
@@ -265,24 +336,33 @@ export default function App() {
     } finally { setBusy(false); }
   }
 
-  async function endRound() {
-    if (session) {
-      try {
-        const final = await postJson(`/v2/sessions/${session.sessionId}/exit`, { player: wallet });
+  // ── PLAYER: QUIT ROUND ──
+  async function quitRound() {
+    if (!session) { setView('lobby'); return; }
+    setError('');
+    setBusy(true);
+    try {
+      if (run.status === 'active') {
+        const final = await postJson(`/v2/sessions/${session.sessionId}/quit`, { player: wallet });
         if (final.board) {
           const full = {};
           (final.board.bombPositions || []).forEach((t) => { full[t] = 'bomb'; });
           (final.board.prizePositions || []).forEach((t) => { full[t] = 'prize'; });
           setRevealed((prev) => ({ ...full, ...prev }));
         }
-      } catch { /* best-effort */ }
-    }
-    await refreshCredits(wallet);
-    setSession(null);
-    setView('play');
-    setStatusMsg('');
+      }
+      await refreshCredits(wallet);
+      setSession(null);
+      setRun({ bombsHit: 0, prizesFound: 0, status: 'idle', spentTotal: '0', prizeEarned: '0', nextTileCost: '0' });
+      setView('lobby');
+      setStatusMsg('');
+      await refreshSessions();
+    } catch (err) {
+      setError(err.message || String(err));
+    } finally { setBusy(false); }
   }
 
+  // ── WITHDRAW ──
   async function requestWithdrawal() {
     setError('');
     const amount = usdcUnits(withdrawAmt);
@@ -306,6 +386,7 @@ export default function App() {
   const lives = BOMB_LIVES - run.bombsHit;
   const isPlaying = view === 'round' && session && run.status === 'active';
   const gameEnded = run.status === 'won' || run.status === 'lost';
+  const wrongChain = chainId && chainId.toLowerCase() !== TARGET_CHAIN_ID;
 
   // ═══════════════════════════════════════════════════════════════════════════
   //  RENDER
@@ -323,55 +404,51 @@ export default function App() {
         </div>
       </header>
 
+      {/* ── Wrong chain banner ── */}
+      {wrongChain && (
+        <div className="error-banner" style={{ marginBottom: 12 }} onClick={() => wallet && connectWallet()}>
+          ⚠ Wrong network — tap to switch to Base
+        </div>
+      )}
+
       {/* ── Error ── */}
-      {error && <div className="error-banner" style={{ marginBottom: 16 }} onClick={() => setError('')}>{error}</div>}
+      {error && <div className="error-banner" style={{ marginBottom: 12 }} onClick={() => setError('')}>{error}</div>}
 
       {/* ═══ LANDING ═══ */}
       {view === 'landing' && (
         <div className="landing">
           <img className="hero-logo" src={chancyLogo} alt="Chancy" />
-          <h1>Tap tiles.<br/>Dodge bombs.<br/><span className="gold">Bank the prizes.</span></h1>
-          <p className="tagline">Add credits once, play instantly. Every move is a single tap — no pop-ups, no waiting. Cash out whenever.</p>
+          <h1>Host a game.<br/>Beat the board.<br/><span className="gold">Win the pot.</span></h1>
+          <p className="tagline">Player-funded prize pots. Pay per tile, dodge bombs, collect every prize to sweep the pot. Cash out anytime.</p>
+
+          <div className="cta-row">
+            <button className="btn btn-primary" onClick={() => setView('lobby')}>
+              {wallet ? 'Browse games' : 'Connect & play'} →
+            </button>
+            <button className="btn btn-secondary" onClick={() => setView('host')}>
+              Host a game
+            </button>
+          </div>
 
           <div className="mode-preview">
             {Object.entries(MODES).map(([name, cfg]) => (
-              <div key={name} className="mode-card" onClick={() => { setMode(name); setView('play'); }}>
+              <div key={name} className="mode-card">
                 <div className="info">
                   <span className="name">{name}</span>
-                  <span className="desc">{cfg.copy} · Win pays {cfg.multiplier}×</span>
+                  <span className="desc">{cfg.copy}</span>
                 </div>
-                <span className="mult">{cfg.multiplier}×</span>
               </div>
             ))}
           </div>
-
-          <button className="btn btn-primary" onClick={() => setView('play')}>
-            {wallet ? 'Play now' : 'Connect & play'} →
-          </button>
         </div>
       )}
 
-      {/* ═══ PLAY ═══ */}
-      {view === 'play' && (
-        <div className="play-view">
-          {/* Mode selector */}
-          <div className="section-title">Difficulty</div>
-          <div className="mode-selector">
-            {Object.entries(MODES).map(([name, cfg]) => (
-              <button key={name} className={`mode-tab ${mode === name ? 'selected' : ''}`} onClick={() => setMode(name)}>
-                <span className="tab-name">{name}</span>
-                <span className="tab-mult">{cfg.multiplier}×</span>
-              </button>
-            ))}
-          </div>
-
-          {/* Mode detail */}
-          <div className="mode-detail">
-            <div className="left">
-              <span className="bombs-prizes">{modeCfg.copy}</span>
-              <span className="bombs-prizes">Win pays {modeCfg.multiplier}× your $0.05 stake</span>
-            </div>
-            <span className="payout-amount">{dollars(potentialWin)}</span>
+      {/* ═══ LOBBY (browse + play) ═══ */}
+      {view === 'lobby' && (
+        <div className="lobby-view">
+          <div className="lobby-header">
+            <button className="back-btn" onClick={() => setView('landing')}>← Back</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => setView('host')}>+ Host</button>
           </div>
 
           {/* Wallet / Credits */}
@@ -381,60 +458,128 @@ export default function App() {
                 <span className="wallet-label">Wallet</span>
                 <span className="wallet-addr">Not connected</span>
               </div>
-              <button className="btn btn-secondary btn-sm" onClick={connectWallet}>Connect</button>
+              <button className="btn btn-primary btn-sm" onClick={connectWallet}>Connect</button>
             </div>
           )}
 
           {wallet && (
-            <>
-              <div className="credit-display">
-                <div className="credit-row">
+            <div className="credit-card">
+              <div className="credit-top">
+                <div className="credit-big">
                   <span className="label">Credits</span>
                   <span className="value gold">{dollars(balance)}</span>
                 </div>
-                <div className="credit-row">
+                <div className="credit-side">
                   <span className="label">Withdrawable</span>
-                  <span className="value green">{dollars(withdrawable)}</span>
+                  <span className="value green small">{dollars(withdrawable)}</span>
                 </div>
               </div>
-
-              <div className="deposit-section">
-                <div className="section-title">Add credits</div>
-                <div className="input-group">
-                  <input value={depositAmt} onChange={(e) => setDepositAmt(e.target.value)} placeholder="5" inputMode="decimal" />
-                  <button className="btn btn-secondary btn-sm" disabled={busy} onClick={depositCredits}>Add</button>
-                </div>
-
-                <div className="section-title" style={{ marginTop: 8 }}>Cash out</div>
-                <div className="input-group">
-                  <input value={withdrawAmt} onChange={(e) => setWithdrawAmt(e.target.value)} placeholder={formatUsdc(withdrawable)} inputMode="decimal" />
-                  <button className="btn btn-ghost btn-sm" disabled={busy || BigInt(withdrawable) <= 0n} onClick={requestWithdrawal}>Withdraw</button>
-                </div>
+              <div className="credit-actions">
+                <input value={depositAmt} onChange={(e) => setDepositAmt(e.target.value)} placeholder="10" inputMode="decimal" className="credit-input" />
+                <button className="btn btn-primary btn-sm" disabled={busy} onClick={depositCredits}>Add</button>
+                <input value={withdrawAmt} onChange={(e) => setWithdrawAmt(e.target.value)} placeholder={formatUsdc(withdrawable)} inputMode="decimal" className="credit-input" />
+                <button className="btn btn-ghost btn-sm" disabled={busy || BigInt(withdrawable) <= 0n} onClick={requestWithdrawal}>Withdraw</button>
               </div>
-            </>
+            </div>
           )}
 
-          {statusMsg && <p className={`status-text${statusMsg === 'Shuffling tiles…' ? ' shuffling' : ''}`}>{statusMsg}</p>}
+          {/* Open games list */}
+          <div className="section-title">Open games</div>
+          <button className="refresh-btn" onClick={refreshSessions}>↻ Refresh</button>
+          {sessions.length === 0 ? (
+            <div className="empty-state">
+              <p>No open games right now.</p>
+              <button className="btn btn-secondary btn-sm" onClick={() => setView('host')}>Host the first game</button>
+            </div>
+          ) : (
+            <div className="game-list">
+              {sessions.map((s) => (
+                <div key={s.sessionId} className={`game-card mode-${s.mode.toLowerCase()}`}>
+                  <div className="game-card-top">
+                    <span className="game-mode-badge">{s.mode}</span>
+                    <span className="game-pot">{dollars(s.prizePot)} pot</span>
+                  </div>
+                  <div className="game-card-info">
+                    <span>{MODES[s.mode]?.copy || s.mode}</span>
+                    <span className="dim">First tile {dollars(s.firstTileCost)}</span>
+                    <span className="dim">Entry {dollars(s.entranceFee)}</span>
+                  </div>
+                  {s.host.toLowerCase() === wallet?.toLowerCase() ? (
+                    <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => closeSession(s.sessionId)}>Close & refund</button>
+                  ) : (
+                    <button className="btn btn-primary btn-sm" disabled={busy || !wallet} onClick={() => joinSession(s)}>Join — {dollars(s.entranceFee)}</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {statusMsg && <p className="status-text">{statusMsg}</p>}
         </div>
       )}
 
-      {/* ═══ ROUND ═══ */}
+      {/* ═══ HOST VIEW ═══ */}
+      {view === 'host' && (
+        <div className="host-view">
+          <div className="lobby-header">
+            <button className="back-btn" onClick={() => setView('lobby')}>← Back</button>
+          </div>
+
+          <h2 className="view-title">Host a game</h2>
+          <p className="view-sub">Lock a prize pot from your credits. Players pay to reveal tiles. You earn when they fail. Close anytime to reclaim.</p>
+
+          {/* Mode selector */}
+          <div className="section-title">Difficulty</div>
+          <div className="mode-selector">
+            {Object.entries(MODES).map(([name, cfg]) => (
+              <button key={name} className={`mode-tab ${hostMode === name ? 'selected' : ''}`} onClick={() => setHostMode(name)}>
+                <span className="tab-name">{name}</span>
+                <span className="tab-sub">{cfg.copy}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Pot input */}
+          <div className="section-title">Prize pot</div>
+          <div className="pot-input-group">
+            <span className="pot-prefix">$</span>
+            <input value={potAmt} onChange={(e) => setPotAmt(e.target.value)} placeholder="10" inputMode="decimal" />
+          </div>
+          <p className="hint-text">Minimum $5 · {wallet ? `You have ${dollars(balance)}` : 'Connect wallet first'}</p>
+
+          <button className="btn btn-primary" disabled={busy || !wallet || BigInt(usdcUnits(potAmt)) > BigInt(balance)} onClick={hostCreateSession}>
+            {wallet ? `Create game — ${dollars(usdcUnits(potAmt))}` : 'Connect wallet'}
+          </button>
+
+          {!wallet && (
+            <button className="btn btn-secondary" style={{ marginTop: 8 }} onClick={connectWallet}>Connect wallet</button>
+          )}
+
+          {statusMsg && <p className="status-text">{statusMsg}</p>}
+        </div>
+      )}
+
+      {/* ═══ ROUND (active game) ═══ */}
       {view === 'round' && session && (
         <div className="round-view">
           <div className="round-header">
-            <button className="back-btn" onClick={endRound}>← Exit</button>
+            <button className="back-btn" onClick={quitRound}>← {gameEnded ? 'Done' : 'Quit'}</button>
             <span className="mode-badge">{session.mode}</span>
           </div>
 
-          {/* Meters */}
+          {/* Pot + cost meters */}
           <div className="meters">
+            <div className="meter pot">
+              <span className="meter-label">Pot</span>
+              <span className="meter-value">{dollars(session.prizePot)}</span>
+            </div>
             <div className="meter prizes">
               <span className="meter-label">Prizes</span>
-              <span className="meter-value">{run.prizesCollected}/{modeCfg.prizes}</span>
+              <span className="meter-value">{run.prizesFound}/{modeCfg.prizes}</span>
             </div>
-            <div className="meter payout">
-              <span className="meter-label">Win pays</span>
-              <span className="meter-value">{dollars(potentialWin)}</span>
+            <div className="meter spent">
+              <span className="meter-label">Spent</span>
+              <span className="meter-value">{dollars(run.spentTotal)}</span>
             </div>
           </div>
 
@@ -445,11 +590,18 @@ export default function App() {
             ))}
           </div>
 
+          {/* Next tile cost hint */}
+          {isPlaying && (
+            <div className="next-cost-hint">
+              Next tile: <strong className="gold">{dollars(run.nextTileCost)}</strong>
+            </div>
+          )}
+
           {/* Board */}
           <div className="board">
             {TILES.map((tile) => {
               const state = revealed[tile];
-              const symbol = state === 'prize' ? '★' : state === 'bomb' ? '✺' : state === 'empty' ? '' : '';
+              const symbol = state === 'prize' ? '★' : state === 'bomb' ? '✺' : '';
               return (
                 <button
                   key={tile}
@@ -462,34 +614,25 @@ export default function App() {
           </div>
 
           {/* Status */}
-          {statusMsg && !gameEnded && <p className={`status-text${statusMsg === 'Shuffling tiles…' ? ' shuffling' : ''}`}>{statusMsg}</p>}
+          {statusMsg && !gameEnded && <p className="status-text">{statusMsg}</p>}
 
           {/* Result banner */}
           {gameEnded && (
             <div className={`result-banner ${run.status === 'won' ? 'win' : 'lose'}`}>
-              <span className="result-title">{run.status === 'won' ? 'You won!' : 'Round over'}</span>
+              <span className="result-title">{run.status === 'won' ? 'Pot won!' : 'Game over'}</span>
               {run.status === 'won' ? (
                 <>
-                  <span className="result-amount">{dollars(run.payout)}</span>
+                  <span className="result-amount">{dollars(run.prizeEarned)}</span>
                   <span className="result-sub">Credited to your balance</span>
                 </>
               ) : (
-                <span className="result-sub">Three bombs. Better luck next round.</span>
+                <span className="result-sub">Three bombs. {dollars(run.spentTotal)} lost to the host.</span>
               )}
-              <button className="btn btn-primary" style={{ marginTop: 8 }} onClick={endRound}>
-                {run.status === 'won' ? 'Collect & play again' : 'Try again'} →
+              <button className="btn btn-primary" style={{ marginTop: 8 }} onClick={quitRound}>
+                Back to lobby →
               </button>
             </div>
           )}
-        </div>
-      )}
-
-      {/* ── Bottom bar ── */}
-      {view === 'play' && (
-        <div className="bottom-bar">
-          <button className="btn btn-primary" disabled={busy} onClick={startRound}>
-            Play {mode} — $0.05
-          </button>
         </div>
       )}
 
