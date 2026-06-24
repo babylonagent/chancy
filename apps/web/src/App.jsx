@@ -65,6 +65,16 @@ function randomEntropy() {
   return '0x' + [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+// C39 commit-reveal: client generates entropy + salt locally, sends only the
+// SHA-256 commitment to the server, then reveals the plaintext after the stake
+// is debited. This prevents the server from grinding favorable boards.
+function sha256Hex(entropy, salt) {
+  const data = `${entropy}:${salt}`;
+  const bytes = new TextEncoder().encode(data);
+  // Use SubtleCrypto (async) — called from an async helper.
+  return crypto.subtle.digest('SHA-256', bytes).then((buf) => '0x' + [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join(''));
+}
+
 async function postJson(path, body) {
   const response = await fetch(`${API}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (!response.ok) throw new Error(await response.text());
@@ -240,14 +250,20 @@ export default function App() {
     if (BigInt(freshBalance) < BigInt(STAKE_UNITS)) { setError('Not enough credits — add at least $0.05.'); return; }
     setBusy(true);
     try {
-      // Server-side session. Debits $0.05 from credits. No wallet tx, no pop-up.
+      // C39 commit-reveal: generate entropy + salt locally, commit only the
+      // hash, then reveal the plaintext after the server debits the stake.
+      const entropy = randomEntropy();
+      const salt = randomEntropy();
+      const commitment = await sha256Hex(entropy, salt);
       const created = await postJson('/v2/sessions', {
         player,
         host: host === ZERO_ADDRESS ? player : host,
         mode,
         stake: STAKE_UNITS,
-        entropy: randomEntropy(),
+        commitment,
       });
+      // Reveal the plaintext now that the stake is locked — board is derived.
+      await postJson(`/v2/sessions/${created.sessionId}/reveal`, { player, entropy, salt });
       setSession({ sessionId: created.sessionId, mode });
       setRevealed({});
       setRun({ bombsHit: 0, prizesCollected: 0, status: 'active', payout: '0' });

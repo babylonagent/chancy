@@ -61,6 +61,37 @@ function boardCommitHash({ entropy, sessionId, player, mode, board }) {
   return sha256Hex(JSON.stringify({ entropy, sessionId, player: player.toLowerCase(), mode, board }));
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// C39 COMMIT-REVEAL FAIRNESS
+// The client generates entropy + salt locally and sends only the commitment
+// hash at session creation. The server cannot see the plaintext entropy until
+// the reveal phase — by which point the stake is already debited and the
+// sessionId assigned. This prevents the server from grinding boards by
+// selectively aborting sessions whose pre-computed board favors the player.
+// ───────────────────────────────────────────────────────────────────────────
+const REVEAL_TIMEOUT_MS = 120_000; // 2 min to reveal before auto-refund
+
+function computeCommitment(entropy, salt) {
+  return sha256Hex(`${entropy}:${salt}`);
+}
+
+// Refund any committed sessions that never got revealed past their timeout.
+// Called on each new commit so stale commits don't leak credits.
+function cleanupExpiredCommits(store, storePath) {
+  const now = Date.now();
+  let changed = false;
+  for (const session of store.sessions.values()) {
+    if (session.status === "committed" && session.commitExpiresAt && now > session.commitExpiresAt) {
+      // Refund the stake — the game never started.
+      setBalance(store, session.player, getBalance(store, session.player) + BigInt(session.stake));
+      session.status = "expired";
+      session.payout = "0";
+      changed = true;
+    }
+  }
+  if (changed) persistStore(store, storePath);
+}
+
 function createV2Store() {
   return {
     balances: new Map(),
@@ -273,24 +304,26 @@ function installV2Routes(app, {
     return res.json(withdrawal);
   });
 
+  // C39 Phase 1 — COMMIT: client sends only the commitment hash.
+  // Server debits stake, assigns sessionId, but does NOT derive the board yet.
   app.post("/v2/sessions", (req, res) => {
     const parsed = z.object({
       player: addressSchema,
       host: addressSchema,
       mode: z.enum(["Easy", "Normal", "Hardcore"]),
       stake: uintString,
-      entropy: bytes32Schema,
+      commitment: bytes32Schema, // sha256(entropy:salt) — server can't see entropy
     }).safeParse(req.body || {});
     if (!parsed.success) return res.status(400).json({ error: "INVALID_REQUEST", details: parsed.error.flatten() });
     const body = parsed.data;
+    cleanupExpiredCommits(store, storePath);
     const balance = getBalance(store, body.player);
     const stake = BigInt(body.stake);
     if (stake <= 0n) return res.status(400).json({ error: "INVALID_STAKE" });
     if (balance < stake) return res.status(402).json({ error: "INSUFFICIENT_CREDITS" });
 
     const sessionId = String(store.nextSessionId++);
-    const board = deriveBoard({ entropy: body.entropy, sessionId, player: body.player, mode: body.mode });
-    const commit = boardCommitHash({ entropy: body.entropy, sessionId, player: body.player, mode: body.mode, board });
+    const commitExpiresAt = Date.now() + REVEAL_TIMEOUT_MS;
     setBalance(store, body.player, balance - stake);
     const session = {
       sessionId,
@@ -298,18 +331,46 @@ function installV2Routes(app, {
       host: body.host,
       mode: body.mode,
       stake: stake.toString(),
-      entropy: body.entropy,
-      board,
-      boardCommitHash: commit,
+      commitment: body.commitment,
+      commitExpiresAt,
+      board: null, // not derived until reveal
+      boardCommitHash: null,
+      entropy: null, // stored at reveal
+      salt: null,
       clicked: new Map(),
       bombsHit: 0,
       prizesCollected: 0,
-      status: "active",
+      status: "committed", // → "active" after reveal
       payout: "0",
     };
     store.sessions.set(sessionId, session);
     persistStore(store, storePath);
-    return res.json({ sessionId, player: body.player, host: body.host, mode: body.mode, stake: stake.toString(), boardCommitHash: commit, status: "active" });
+    return res.json({ sessionId, player: body.player, host: body.host, mode: body.mode, stake: stake.toString(), commitment: body.commitment, status: "committed", commitExpiresAt });
+  });
+
+  // C39 Phase 2 — REVEAL: client sends plaintext entropy + salt.
+  // Server verifies commitment match, THEN derives the board. Too late to grind.
+  app.post("/v2/sessions/:sessionId/reveal", (req, res) => {
+    const paramParse = z.object({ sessionId: z.string().regex(/^\d+$/) }).safeParse(req.params || {});
+    const bodyParse = z.object({ player: addressSchema, entropy: bytes32Schema, salt: bytes32Schema }).safeParse(req.body || {});
+    if (!paramParse.success || !bodyParse.success) return res.status(400).json({ error: "INVALID_REQUEST" });
+    const session = store.sessions.get(paramParse.data.sessionId);
+    if (!session) return res.status(404).json({ error: "SESSION_NOT_FOUND" });
+    if (bodyParse.data.player.toLowerCase() !== session.player.toLowerCase()) return res.status(403).json({ error: "NOT_SESSION_PLAYER" });
+    if (session.status !== "committed") return res.status(409).json({ error: "SESSION_NOT_COMMITTED", status: session.status });
+    // Verify the reveal matches the stored commitment.
+    const expected = computeCommitment(bodyParse.data.entropy, bodyParse.data.salt);
+    if (expected !== session.commitment) return res.status(400).json({ error: "COMMITMENT_MISMATCH" });
+    // Now derive the board — server can no longer abort without refunding.
+    const board = deriveBoard({ entropy: bodyParse.data.entropy, sessionId: session.sessionId, player: session.player, mode: session.mode });
+    const commit = boardCommitHash({ entropy: bodyParse.data.entropy, sessionId: session.sessionId, player: session.player, mode: session.mode, board });
+    session.entropy = bodyParse.data.entropy;
+    session.salt = bodyParse.data.salt;
+    session.board = board;
+    session.boardCommitHash = commit;
+    session.status = "active";
+    persistStore(store, storePath);
+    return res.json({ sessionId: session.sessionId, boardCommitHash: commit, status: "active" });
   });
 
   app.post("/v2/sessions/:sessionId/click", (req, res) => {
@@ -364,6 +425,13 @@ function installV2Routes(app, {
     const session = store.sessions.get(paramParse.data.sessionId);
     if (!session) return res.status(404).json({ error: "SESSION_NOT_FOUND" });
     if (bodyParse.data.player.toLowerCase() !== session.player.toLowerCase()) return res.status(403).json({ error: "NOT_SESSION_PLAYER" });
+    // C39: if the session was committed but never revealed, refund the stake.
+    if (session.status === "committed") {
+      setBalance(store, session.player, getBalance(store, session.player) + BigInt(session.stake));
+      session.status = "cancelled";
+      persistStore(store, storePath);
+      return res.json({ sessionId: session.sessionId, status: "cancelled", payout: "0", refunded: session.stake, board: null, boardCommitHash: null, clicked: [] });
+    }
     if (session.status === "active") session.status = "exited";
     persistStore(store, storePath);
     return res.json({ sessionId: session.sessionId, status: session.status, payout: session.payout || "0", boardCommitHash: session.boardCommitHash, entropy: session.entropy, board: session.board, clicked: [...session.clicked.values()] });
@@ -372,4 +440,4 @@ function installV2Routes(app, {
   return store;
 }
 
-module.exports = { installV2Routes, createV2Store, loadV2Store, deriveBoard, boardCommitHash, modeConfig, winMultiplierBps };
+module.exports = { installV2Routes, createV2Store, loadV2Store, deriveBoard, boardCommitHash, computeCommitment, modeConfig, winMultiplierBps };
