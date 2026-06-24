@@ -8,6 +8,7 @@ const chancyVaultAbiJson = require("../../abi/ChancyVault.json");
 const { installV2Routes, loadV2Store } = require("./v2");
 const { initDatabase, loadSqliteStore, migrateJsonToSqlite } = require("./sqlite-store");
 const { makeEntropyRequester } = require("./entropy");
+const { rateLimit, getClientIp, stakeCap, corsRestriction, securityHeaders, MAX_CONCURRENT_SESSIONS } = require("./security");
 const chancyRandomnessAbiJson = require("../../abi/ChancyRandomness.json");
 const chancyAbi = chancyAbiJson.abi || chancyAbiJson;
 const chancyVaultAbi = chancyVaultAbiJson.abi || chancyVaultAbiJson;
@@ -194,12 +195,45 @@ function createApp({
   const usdc = addressSchema.parse(usdcAddress);
   const app = express();
 
+  // ── Security middleware ──
+  const allowedOrigins = (process.env.CHANCY_CORS_ORIGINS || "").split(",").map((s) => s.trim()).filter(Boolean);
+  app.use(securityHeaders);
+  app.use(corsRestriction(allowedOrigins));
+  app.use(express.json());
+
+  // Global rate limit: 120 req/min per IP
+  app.use(rateLimit({
+    maxTokens: 120, refillPerSec: 2,
+    keyFn: (req) => `ip:${getClientIp(req)}`,
+    name: "global",
+  }));
+
+  // Per-endpoint rate limits
+  app.use("/v2/credits/deposit", rateLimit({
+    maxTokens: 10, refillPerSec: 0.2, // 10/min — each does an RPC call
+    keyFn: (req) => `deposit:${getClientIp(req)}`,
+    name: "deposit",
+  }));
+  app.use("/v2/sessions", rateLimit({
+    maxTokens: 20, refillPerSec: 0.5, // 20/min — session creation + entropy
+    keyFn: (req) => `session:${getClientIp(req)}`,
+    name: "session",
+  }));
+  app.use("/v2/withdrawals/request", rateLimit({
+    maxTokens: 10, refillPerSec: 0.2, // 10/min
+    keyFn: (req) => `withdraw:${getClientIp(req)}`,
+    name: "withdraw",
+  }));
+  app.use("/v2/tx/", rateLimit({
+    maxTokens: 30, refillPerSec: 0.5, // 30/min — tx building endpoints
+    keyFn: (req) => `tx:${getClientIp(req)}`,
+    name: "tx_build",
+  }));
+
   app.use((req, _res, next) => {
     if (req.url.startsWith("/api/")) req.url = req.url.slice(4);
     next();
   });
-  app.use(cors());
-  app.use(express.json());
 
   // Persistence: SQLite when db path is set, JSON file otherwise.
   // On first run with SQLite, auto-migrate from JSON if it has data.

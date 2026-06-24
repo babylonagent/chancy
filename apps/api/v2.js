@@ -3,6 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const { z } = require("zod");
 const { persistSqliteStore } = require("./sqlite-store");
+const { stakeCap, MAX_CONCURRENT_SESSIONS } = require("./security");
 
 // Economics verified 2026-06-24: all modes 5-6.25% house edge.
 // Easy 37.5% win / 2.5x (edge 6.25%), Normal 17.9% win / 5.3x (edge 5.4%),
@@ -333,7 +334,21 @@ function installV2Routes(app, {
     const balance = getBalance(store, body.player);
     const stake = BigInt(body.stake);
     if (stake <= 0n) return res.status(400).json({ error: "INVALID_STAKE" });
+
+    // C43: Stake caps
+    if (stake < 50_000n) return res.status(400).json({ error: "STAKE_TOO_LOW", min: "50000" });
+    if (stake > 10_000_000n) return res.status(400).json({ error: "STAKE_TOO_HIGH", max: "10000000" });
+
     if (balance < stake) return res.status(402).json({ error: "INSUFFICIENT_CREDITS" });
+
+    // C43: Concurrent session limit — count active/committed sessions for this player
+    const activeCount = [...store.sessions.values()].filter(
+      (s) => s.player.toLowerCase() === body.player.toLowerCase() &&
+      (s.status === "committed" || s.status === "active")
+    ).length;
+    if (activeCount >= MAX_CONCURRENT_SESSIONS) {
+      return res.status(429).json({ error: "TOO_MANY_ACTIVE_SESSIONS", max: MAX_CONCURRENT_SESSIONS });
+    }
 
     const sessionId = String(store.nextSessionId++);
     const commitExpiresAt = Date.now() + REVEAL_TIMEOUT_MS;

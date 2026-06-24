@@ -151,7 +151,7 @@ describe("V2 credit engine money core", () => {
 
   it("blocks a session when credits are insufficient", async () => {
     const commitment = computeCommitment(ENTROPY, SALT);
-    const res = await request(app).post("/v2/sessions").send({ player: OTHER, host: OTHER, mode: "Easy", stake: "100", commitment });
+    const res = await request(app).post("/v2/sessions").send({ player: OTHER, host: OTHER, mode: "Easy", stake: "50000", commitment });
     expect(res.status).toBe(402);
     expect(res.body.error).toBe("INSUFFICIENT_CREDITS");
   });
