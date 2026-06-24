@@ -55,8 +55,8 @@ describe("Chancy V2 credit game API", function () {
 
     const exit = await request(app).post(`/v2/sessions/${started.body.sessionId}/exit`).send({ player: PLAYER }).expect(200);
     expect(exit.body.status).to.equal("exited");
-    expect(exit.body.board.bombPositions).to.have.length(5);
-    expect(exit.body.board.prizePositions).to.have.length(3);
+    expect(exit.body.board.bombPositions).to.have.length(3);
+    expect(exit.body.board.prizePositions).to.have.length(5);
     expect(exit.body.boardCommitHash).to.equal(started.body.boardCommitHash);
   });
 
@@ -80,7 +80,7 @@ describe("Chancy V2 credit game API", function () {
     expect(balance.body.balance).to.equal("40000000");
 
     const exit = await request(secondApp).post(`/v2/sessions/${started.body.sessionId}/exit`).send({ player: PLAYER }).expect(200);
-    expect(exit.body.board.prizePositions).to.have.length(2);
+    expect(exit.body.board.prizePositions).to.have.length(3);
   });
 
   it("queues withdrawals against withdrawable credit without immediately touching vault funds", async function () {

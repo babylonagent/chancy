@@ -98,10 +98,10 @@ describe("V2 credit engine money core", () => {
       payout = click.body.payout;
     }
     expect(status).toBe("won");
-    expect(payout).toBe("250000"); // 50,000 * 5.0x Hardcore
+    expect(payout).toBe("435000"); // 50,000 * 8.7x Hardcore
 
     const finalBal = await request(app).get(`/v2/credits/${PLAYER}`);
-    expect(finalBal.body.balance).toBe("2100000"); // 1,850,000 + 250,000
+    expect(finalBal.body.balance).toBe("2285000"); // 1,850,000 + 435,000
   });
 
   it("forfeits stake on 3 bombs and pays nothing", async () => {

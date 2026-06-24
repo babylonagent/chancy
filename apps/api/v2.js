@@ -3,10 +3,13 @@ const fs = require("fs");
 const path = require("path");
 const { z } = require("zod");
 
+// Economics verified 2026-06-24: all modes 5-6.25% house edge.
+// Easy 37.5% win / 2.5x (edge 6.25%), Normal 17.9% win / 5.3x (edge 5.4%),
+// Hardcore 10.9% win / 8.7x (edge 5.1%). Multipliers ascend with difficulty.
 const modeConfig = {
-  Easy: { bombs: 5, prizes: 3 },
-  Normal: { bombs: 7, prizes: 2 },
-  Hardcore: { bombs: 10, prizes: 1 },
+  Easy: { bombs: 3, prizes: 5 },
+  Normal: { bombs: 5, prizes: 3 },
+  Hardcore: { bombs: 9, prizes: 2 },
 };
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -16,9 +19,9 @@ const modeConfig = {
 // winMultiplierBps: 10000 = 1.0x. Harder mode → bigger multiplier.
 // ───────────────────────────────────────────────────────────────────────────
 const winMultiplierBps = {
-  Easy: 15000n, // 1.5x
-  Normal: 25000n, // 2.5x
-  Hardcore: 50000n, // 5.0x
+  Easy: 25000n, // 2.5x
+  Normal: 53000n, // 5.3x
+  Hardcore: 87000n, // 8.7x
 };
 
 const addressSchema = z.string().regex(/^0x[0-9a-fA-F]{40}$/);

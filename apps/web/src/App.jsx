@@ -36,9 +36,9 @@ const CHAIN_PARAMS = {
 };
 
 const MODES = {
-  Easy: { bombs: 5, prizes: 3, multiplier: '1.5', copy: '5 bombs, 3 prizes. Find all 3 prizes to win.' },
-  Normal: { bombs: 7, prizes: 2, multiplier: '2.5', copy: '7 bombs, 2 prizes. Balanced risk.' },
-  Hardcore: { bombs: 10, prizes: 1, multiplier: '5', copy: '10 bombs, 1 prize. Sharp teeth, big payout.' },
+  Easy: { bombs: 3, prizes: 5, multiplier: '2.5', copy: '3 bombs, 5 prizes. Find all 5 prizes to win.' },
+  Normal: { bombs: 5, prizes: 3, multiplier: '5.3', copy: '5 bombs, 3 prizes. Balanced risk.' },
+  Hardcore: { bombs: 9, prizes: 2, multiplier: '8.7', copy: '9 bombs, 2 prizes. Sharp teeth, big payout.' },
 };
 
 const TILES = Array.from({ length: 64 }, (_, i) => i + 1); // tiles are 1-indexed (1..64)
@@ -99,7 +99,7 @@ function RulesModal({ onClose }) {
       <div className="rule-list">
         <p><strong>Add credits once.</strong> Top up USDC and play as long as you like — no pop-ups mid-game.</p>
         <p><strong>Each round costs $0.05.</strong> Reveal tiles one at a time looking for prizes.</p>
-        <p><strong>Easy</strong> has 5 bombs and 3 prizes. <strong>Normal</strong> 7 bombs, 2 prizes. <strong>Hardcore</strong> 10 bombs, 1 prize.</p>
+        <p><strong>Easy</strong> has 3 bombs and 5 prizes. <strong>Normal</strong> 5 bombs, 3 prizes. <strong>Hardcore</strong> 9 bombs, 2 prizes.</p>
         <p><strong>Win the round</strong> by uncovering every prize. Three bombs ends the run. Cash out your credits any time.</p>
       </div>
       <button className="main-button full" type="button" onClick={onClose}>Got it</button>
