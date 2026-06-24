@@ -23,11 +23,21 @@ contract ChancyVault is Ownable, ReentrancyGuard {
     uint256 public totalCredited;
     uint256 public totalFeesCollected;
     uint256 public totalSweptToCold;
+    uint256 public totalSweptToHot;
 
     event Deposited(address indexed player, uint256 grossAmount, uint256 creditedAmount, uint256 feeAmount);
     event SweptToCold(address indexed coldWallet, uint256 amount);
+    event SweptToHot(address indexed hotWallet, uint256 amount);
     event HotWalletUpdated(address indexed previousHotWallet, address indexed newHotWallet);
     event ColdWalletUpdated(address indexed previousColdWallet, address indexed newColdWallet);
+
+    /// @dev Only the controller (owner) or the hot wallet (automated rebalancer)
+    ///      can trigger vault→hot sweeps. The hot wallet key lives on the server
+    ///      so the rebalance loop runs autonomously.
+    modifier onlyHotOrOwner() {
+        require(msg.sender == hotWallet || msg.sender == owner(), "NOT_HOT_OR_OWNER");
+        _;
+    }
 
     constructor(address usdcAddress, address controller, address initialHotWallet, address initialColdWallet)
         Ownable(controller)
@@ -57,11 +67,23 @@ contract ChancyVault is Ownable, ReentrancyGuard {
         emit Deposited(msg.sender, amount, creditedAmount, feeAmount);
     }
 
+    /// @notice Sweep USDC from the vault to the cold wallet (treasury reserve).
+    /// @dev Controller-only. Used to move excess deposits to long-term storage.
     function sweepToCold(uint256 amount) external onlyOwner nonReentrant {
         require(amount > 0, "INVALID_AMOUNT");
         totalSweptToCold += amount;
         usdc.safeTransfer(coldWallet, amount);
         emit SweptToCold(coldWallet, amount);
+    }
+
+    /// @notice Sweep USDC from the vault to the hot wallet (withdrawal liquidity).
+    /// @dev Callable by the hot wallet or owner. The automated rebalancer calls
+    ///      this to top up the hot wallet when it runs low on payout funds.
+    function sweepToHot(uint256 amount) external onlyHotOrOwner nonReentrant {
+        require(amount > 0, "INVALID_AMOUNT");
+        totalSweptToHot += amount;
+        usdc.safeTransfer(hotWallet, amount);
+        emit SweptToHot(hotWallet, amount);
     }
 
     function setHotWallet(address newHotWallet) external onlyOwner {

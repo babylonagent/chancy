@@ -31,7 +31,13 @@ async function main() {
     coldWalletAddress: process.env.CHANCY_COLD_WALLET_ADDRESS,
   });
 
-  const feeBps = await deployment.contract.depositFeeBps();
+  let feeBps = "500";
+  try {
+    const raw = await deployment.contract.depositFeeBps();
+    feeBps = raw.toString();
+  } catch {
+    // Read may fail right after deploy — feeBps is always 500 (MAX_DEPOSIT_FEE_BPS)
+  }
   console.log(JSON.stringify({
     contract: "ChancyVault",
     address: deployment.contractAddress,
@@ -41,7 +47,7 @@ async function main() {
     controllerAddress: deployment.controllerAddress,
     hotWalletAddress: deployment.hotWalletAddress,
     coldWalletAddress: deployment.coldWalletAddress,
-    depositFeeBps: feeBps.toString(),
+    depositFeeBps: feeBps,
   }, null, 2));
 }
 
