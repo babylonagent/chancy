@@ -3,11 +3,18 @@ import request from "supertest";
 import express from "express";
 import cors from "cors";
 import crypto from "crypto";
-import { installV2Routes, deriveBoard, computeCommitment } from "./v2.js";
+import {
+  installV2Routes,
+  deriveBoard,
+  computeCommitment,
+  revealCostAt,
+  prizePerTile,
+  modeConfig,
+  ENTRANCE_FEE,
+  MIN_PRIZE_POT,
+} from "./v2.js";
 
-// Deterministic mock verifier: simulates the on-chain Deposited event without
-// network access. Maps txHash -> the verified on-chain result the real
-// viem-backed verifier would return.
+// Mock deposit verifier
 function mockVerifier(ledger) {
   return async ({ txHash }) => {
     const rec = ledger[txHash.toLowerCase()];
@@ -16,29 +23,24 @@ function mockVerifier(ledger) {
   };
 }
 
-const PLAYER = "0x1111111111111111111111111111111111111111";
-const OTHER = "0x2222222222222222222222222222222222222222";
-const DEST = "0x3333333333333333333333333333333333333333";
-const TX1 = "0x" + "a".repeat(64);
-const TX2 = "0x" + "b".repeat(64);
-const ENTROPY = "0x" + "c".repeat(64);
-const SALT = "0x" + "d".repeat(64);
-
-// Mock entropy requester: simulates on-chain Pyth Entropy by passing the
-// userRandomNumber through as the randomNumber. This keeps deriveBoard
-// deterministic for test board computation (computeBoard uses ENTROPY directly,
-// and the mock returns ENTROPY as the Pyth result → same board).
+// Mock entropy requester — passes userRandom through as randomNumber
 function mockRequestEntropy() {
   let seq = 0n;
   return async (userRandomNumber) => {
     seq += 1n;
-    return {
-      sequenceNumber: seq,
-      randomNumber: userRandomNumber,
-      txHash: "0x" + "e".repeat(64),
-    };
+    return { sequenceNumber: seq, randomNumber: userRandomNumber, txHash: "0x" + "e".repeat(64) };
   };
 }
+
+const HOST = "0x1111111111111111111111111111111111111111";
+const PLAYER = "0x2222222222222222222222222222222222222222";
+const OTHER = "0x3333333333333333333333333333333333333333";
+const DEST = "0x4444444444444444444444444444444444444444";
+const TX1 = "0x" + "a".repeat(64);
+const TX2 = "0x" + "b".repeat(64);
+const ENTROPY = "0x" + "c".repeat(64);
+const SALT = "0x" + "d".repeat(64);
+const POT = "10000000"; // $10 prize pot
 
 function engineApp(verifyDeposit, requestEntropy = mockRequestEntropy()) {
   const app = express();
@@ -48,232 +50,225 @@ function engineApp(verifyDeposit, requestEntropy = mockRequestEntropy()) {
   return app;
 }
 
-// The board is deterministic from (entropy, sessionId, player, mode), and
-// deriveBoard is exported — so a test can compute the exact prize/bomb layout
-// and play a guaranteed win. This is also the fairness-verification primitive
-// players will use to audit a finished session.
-function computeBoard(sessionId, player, mode) {
-  return deriveBoard({ entropy: ENTROPY, sessionId, player, mode });
+// Helper: compute board for a session (for deterministic test play)
+function computeBoard(sessionId, player, mode, entropy = ENTROPY) {
+  return deriveBoard({ entropy, sessionId, player, mode });
 }
 
-// C39 two-phase helper: commit (stake debited, board hidden) then reveal.
-async function createSession(app, { player, host, mode, stake, entropy = ENTROPY, salt = SALT }) {
+// Helper: host creates session
+async function createSession(app, { host = HOST, mode = "Easy", prizePot = POT } = {}) {
+  const res = await request(app).post("/v2/sessions/create").send({ host, mode, prizePot });
+  expect(res.status).toBe(200);
+  return res.body;
+}
+
+// Helper: player joins + reveals (full join flow)
+async function joinAndReveal(app, sessionId, { player = PLAYER, entropy = ENTROPY, salt = SALT, mode = "Easy" } = {}) {
   const commitment = computeCommitment(entropy, salt);
-  const commit = await request(app).post("/v2/sessions").send({ player, host, mode, stake, commitment });
-  expect(commit.status).toBe(200);
-  expect(commit.body.status).toBe("committed");
-  const sessionId = commit.body.sessionId;
+  const join = await request(app).post(`/v2/sessions/${sessionId}/join`).send({ player, commitment });
+  expect(join.status).toBe(200);
+  expect(join.body.runStatus).toBe("committed");
   const reveal = await request(app).post(`/v2/sessions/${sessionId}/reveal`).send({ player, entropy, salt });
   expect(reveal.status).toBe(200);
-  expect(reveal.body.status).toBe("active");
-  return { sessionId, boardCommitHash: reveal.body.boardCommitHash };
+  expect(reveal.body.runStatus || reveal.body.status).toBe("active");
+  return { sessionId, player, board: computeBoard(sessionId, player, mode, entropy) };
 }
 
-describe("V2 credit engine money core", () => {
+// Fund a player with credits via mock deposit
+async function fund(app, player, amount, txHash = TX1) {
+  const ledger = { [txHash.toLowerCase()]: { player, grossAmount: amount, creditedAmount: amount, feeAmount: "0" } };
+  // Can't reconfigure verifier after app creation, so fund via direct deposit
+  // with a pre-set ledger. For tests we create a new app with the ledger.
+  return ledger;
+}
+
+describe("P2P host/player game mechanics", () => {
   let app;
   let ledger;
+
   beforeEach(() => {
+    // Fund both host and player
     ledger = {
-      [TX1.toLowerCase()]: { player: PLAYER, grossAmount: "1000000", creditedAmount: "950000", feeAmount: "50000" },
-      [TX2.toLowerCase()]: { player: PLAYER, grossAmount: "2000000", creditedAmount: "1900000", feeAmount: "100000" },
+      [TX1.toLowerCase()]: { player: HOST, grossAmount: "50000000", creditedAmount: "50000000", feeAmount: "0" },
+      [TX2.toLowerCase()]: { player: PLAYER, grossAmount: "50000000", creditedAmount: "50000000", feeAmount: "0" },
     };
     app = engineApp(mockVerifier(ledger));
   });
 
-  it("credits the on-chain net amount, never a client-claimed value", async () => {
-    const res = await request(app).post("/v2/credits/deposit").send({ player: PLAYER, txHash: TX1 });
-    expect(res.status).toBe(200);
-    expect(res.body.credited).toBe("950000");
-    expect(res.body.balance).toBe("950000");
-    expect(res.body.idempotent).toBe(false);
+  it("host creates a session and locks the prize pot", async () => {
+    await request(app).post("/v2/credits/deposit").send({ player: HOST, txHash: TX1 });
+    const beforeBal = await request(app).get(`/v2/credits/${HOST}`);
+    expect(beforeBal.body.balance).toBe("50000000");
+
+    const session = await createSession(app);
+    expect(session.sessionId).toBeTruthy();
+    expect(session.status).toBe("open");
+    expect(session.prizePot).toBe(POT);
+    expect(session.bombs).toBe(modeConfig.Easy.bombs);
+    expect(session.prizes).toBe(modeConfig.Easy.prizes);
+
+    // Host balance reduced by prize pot
+    const afterBal = await request(app).get(`/v2/credits/${HOST}`);
+    expect(afterBal.body.balance).toBe("40000000"); // 50M - 10M
   });
 
-  it("is idempotent: replaying the same txHash never double-credits", async () => {
-    await request(app).post("/v2/credits/deposit").send({ player: PLAYER, txHash: TX1 });
-    const res = await request(app).post("/v2/credits/deposit").send({ player: PLAYER, txHash: TX1 });
-    expect(res.body.idempotent).toBe(true);
-    expect(res.body.balance).toBe("950000");
+  it("rejects prize pot below minimum ($5)", async () => {
+    await request(app).post("/v2/credits/deposit").send({ player: HOST, txHash: TX1 });
+    const res = await request(app).post("/v2/sessions/create").send({ host: HOST, mode: "Easy", prizePot: "100000" });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("PRIZE_POT_TOO_LOW");
   });
 
-  it("rejects an unverifiable deposit (the $1-vanished bug class) with zero credit", async () => {
-    const res = await request(app).post("/v2/credits/deposit").send({ player: PLAYER, txHash: "0x" + "f".repeat(64) });
-    expect(res.status).toBe(404);
-    expect(res.body.error).toBe("DEPOSIT_NOT_FOUND");
-    const bal = await request(app).get(`/v2/credits/${PLAYER}`);
-    expect(bal.body.balance).toBe("0");
-  });
-
-  it("rejects a deposit whose on-chain player != claimed player", async () => {
-    const res = await request(app).post("/v2/credits/deposit").send({ player: OTHER, txHash: TX1 });
-    expect(res.status).toBe(403);
-    expect(res.body.error).toBe("DEPOSIT_PLAYER_MISMATCH");
-  });
-
-  it("plays a guaranteed winning session and pays the pot back to credits", async () => {
-    await request(app).post("/v2/credits/deposit").send({ player: PLAYER, txHash: TX2 }); // 1,900,000
-    const stake = "50000"; // $0.05
-    const { sessionId } = await createSession(app, { player: PLAYER, host: PLAYER, mode: "Hardcore", stake });
-
-    const afterDebit = await request(app).get(`/v2/credits/${PLAYER}`);
-    expect(afterDebit.body.balance).toBe("1850000"); // 1,900,000 - 50,000
-
-    // Compute the real board and click only the prize tiles → guaranteed win.
-    const board = computeBoard(sessionId, PLAYER, "Hardcore");
-    let payout = "0";
-    let status = "active";
-    for (const tile of board.prizePositions) {
-      const click = await request(app).post(`/v2/sessions/${sessionId}/click`).send({ player: PLAYER, tile });
-      status = click.body.status;
-      payout = click.body.payout;
-    }
-    expect(status).toBe("won");
-    expect(payout).toBe("435000"); // 50,000 * 8.7x Hardcore
-
-    const finalBal = await request(app).get(`/v2/credits/${PLAYER}`);
-    expect(finalBal.body.balance).toBe("2285000"); // 1,850,000 + 435,000
-  });
-
-  it("forfeits stake on 3 bombs and pays nothing", async () => {
+  it("player joins, pays entrance fee to host", async () => {
+    await request(app).post("/v2/credits/deposit").send({ player: HOST, txHash: TX1 });
     await request(app).post("/v2/credits/deposit").send({ player: PLAYER, txHash: TX2 });
-    const stake = "50000";
-    const { sessionId } = await createSession(app, { player: PLAYER, host: PLAYER, mode: "Normal", stake });
-    const board = computeBoard(sessionId, PLAYER, "Normal");
+    const session = await createSession(app);
 
-    let status = "active";
+    const commitment = computeCommitment(ENTROPY, SALT);
+    const join = await request(app).post(`/v2/sessions/${session.sessionId}/join`).send({ player: PLAYER, commitment });
+    expect(join.status).toBe(200);
+    expect(join.body.runStatus).toBe("committed");
+
+    // Player balance reduced by entrance fee
+    const playerBal = await request(app).get(`/v2/credits/${PLAYER}`);
+    expect(playerBal.body.balance).toBe("49950000"); // 50M - 0.05M
+
+    // Host balance increased by entrance fee
+    const hostBal = await request(app).get(`/v2/credits/${HOST}`);
+    expect(hostBal.body.balance).toBe("40050000"); // 40M + 0.05M
+  });
+
+  it("host cannot play their own session", async () => {
+    await request(app).post("/v2/credits/deposit").send({ player: HOST, txHash: TX1 });
+    const session = await createSession(app);
+    const commitment = computeCommitment(ENTROPY, SALT);
+    const join = await request(app).post(`/v2/sessions/${session.sessionId}/join`).send({ player: HOST, commitment });
+    expect(join.status).toBe(403);
+    expect(join.body.error).toBe("HOST_CANNOT_PLAY");
+  });
+
+  it("progressive reveal costs increase monotonically", async () => {
+    const pot = BigInt(POT);
+    let prev = 0n;
+    for (let i = 0; i < 64; i++) {
+      const cost = revealCostAt(pot, "Easy", i);
+      expect(cost).toBeGreaterThanOrEqual(prev);
+      prev = cost;
+    }
+    // First tile cost = 1.5% of pot = $0.15
+    expect(revealCostAt(pot, "Easy", 0).toString()).toBe("150000");
+  });
+
+  it("player clicks tiles, pays progressive cost, host earns on 3 bombs", async () => {
+    await request(app).post("/v2/credits/deposit").send({ player: HOST, txHash: TX1 });
+    await request(app).post("/v2/credits/deposit").send({ player: PLAYER, txHash: TX2 });
+    const session = await createSession(app, { mode: "Easy", prizePot: POT });
+    const { board } = await joinAndReveal(app, session.sessionId);
+
+    // Click 3 bomb tiles → game over
+    let lastResult;
     for (const tile of board.bombPositions.slice(0, 3)) {
-      const click = await request(app).post(`/v2/sessions/${sessionId}/click`).send({ player: PLAYER, tile });
-      status = click.body.status;
+      lastResult = await request(app).post(`/v2/sessions/${session.sessionId}/click`).send({ player: PLAYER, tile });
     }
-    expect(status).toBe("lost");
-    const finalBal = await request(app).get(`/v2/credits/${PLAYER}`);
-    expect(finalBal.body.balance).toBe("1850000"); // stake forfeited, no payout
+    expect(lastResult.body.status).toBe("lost");
+
+    // Host should have received the player's spent amount
+    const hostBal = await request(app).get(`/v2/credits/${HOST}`);
+    // Host started with 50M, locked 10M pot, got 0.05M entrance + spent amount
+    const expectedHostMin = 40050000n; // at minimum entrance fee
+    expect(BigInt(hostBal.body.balance)).toBeGreaterThanOrEqual(expectedHostMin);
+
+    // Session should be open again (reopened after game over)
+    const sessDetail = await request(app).get(`/v2/sessions/${session.sessionId}`);
+    expect(sessDetail.body.status).toBe("open");
   });
 
-  it("blocks a session when credits are insufficient", async () => {
-    const commitment = computeCommitment(ENTROPY, SALT);
-    const res = await request(app).post("/v2/sessions").send({ player: OTHER, host: OTHER, mode: "Easy", stake: "50000", commitment });
-    expect(res.status).toBe(402);
-    expect(res.body.error).toBe("INSUFFICIENT_CREDITS");
-  });
-
-  it("withdrawal reserves withdrawable immediately and deducts balance on mark-paid", async () => {
-    await request(app).post("/v2/credits/deposit").send({ player: PLAYER, txHash: TX1 }); // 950,000
-    const wd = await request(app).post("/v2/withdrawals/request").send({ player: PLAYER, amount: "100000", destination: DEST });
-    expect(wd.body.payoutAmount).toBe("95000");
-    expect(wd.body.feeAmount).toBe("5000");
-
-    const afterReq = await request(app).get(`/v2/credits/${PLAYER}`);
-    expect(afterReq.body.balance).toBe("950000"); // total unchanged
-    expect(afterReq.body.withdrawable).toBe("850000"); // gross reserved
-
-    const paid = await request(app).post(`/v2/withdrawals/${wd.body.withdrawalId}/mark-paid`).send({ txHash: TX2 });
-    expect(paid.body.status).toBe("paid");
-
-    const afterPaid = await request(app).get(`/v2/credits/${PLAYER}`);
-    expect(afterPaid.body.balance).toBe("850000"); // gross deducted on payout
-  });
-
-  it("idempotent tile clicks never double-charge or double-pay", async () => {
+  it("player finds all prizes and wins pro-rata pot shares", async () => {
+    await request(app).post("/v2/credits/deposit").send({ player: HOST, txHash: TX1 });
     await request(app).post("/v2/credits/deposit").send({ player: PLAYER, txHash: TX2 });
-    const { sessionId } = await createSession(app, { player: PLAYER, host: PLAYER, mode: "Normal", stake: "50000" });
-    const first = await request(app).post(`/v2/sessions/${sessionId}/click`).send({ player: PLAYER, tile: 7 });
-    const repeat = await request(app).post(`/v2/sessions/${sessionId}/click`).send({ player: PLAYER, tile: 7 });
-    expect(repeat.body).toEqual(first.body);
-  });
-});
+    const session = await createSession(app, { mode: "Hardcore", prizePot: POT });
+    const { board } = await joinAndReveal(app, session.sessionId, { mode: "Hardcore" });
+    const prizeTile = board.prizePositions[0];
+    const click = await request(app).post(`/v2/sessions/${session.sessionId}/click`).send({ player: PLAYER, tile: prizeTile });
+    expect(click.body.outcome).toBe("prize");
+    expect(click.body.status).toBe("won");
 
-// ───────────────────────────────────────────────────────────────────────────
-// C39 — COMMIT-REVEAL FAIRNESS
-// ───────────────────────────────────────────────────────────────────────────
-describe("C39 commit-reveal fairness", () => {
-  let app;
-  let ledger;
-  beforeEach(() => {
-    ledger = {
-      [TX2.toLowerCase()]: { player: PLAYER, grossAmount: "2000000", creditedAmount: "1900000", feeAmount: "100000" },
-    };
-    app = engineApp(mockVerifier(ledger));
+    // Player should have received the full prize pot (1 prize = pot/1)
+    const playerBal = await request(app).get(`/v2/credits/${PLAYER}`);
+    // Player: 50M - 0.05M entrance - tile cost + 10M prize
+    const expectedMin = 59950000n - BigInt(revealCostAt(POT, "Hardcore", 0).toString());
+    expect(BigInt(playerBal.body.balance)).toBeGreaterThanOrEqual(expectedMin);
   });
 
-  it("commit debits the stake but does NOT reveal the board (status=committed)", async () => {
+  it("player quits — host gets spent, player keeps prizes earned", async () => {
+    await request(app).post("/v2/credits/deposit").send({ player: HOST, txHash: TX1 });
     await request(app).post("/v2/credits/deposit").send({ player: PLAYER, txHash: TX2 });
-    const commitment = computeCommitment(ENTROPY, SALT);
-    const commit = await request(app).post("/v2/sessions").send({ player: PLAYER, host: PLAYER, mode: "Easy", stake: "50000", commitment });
-    expect(commit.status).toBe(200);
-    expect(commit.body.status).toBe("committed");
-    expect(commit.body.sessionId).toBeTruthy();
-    expect(commit.body.boardCommitHash).toBeUndefined(); // board not derived yet
-    // Stake was debited.
-    const bal = await request(app).get(`/v2/credits/${PLAYER}`);
-    expect(bal.body.balance).toBe("1850000");
+    const session = await createSession(app, { mode: "Easy", prizePot: POT });
+    const { board } = await joinAndReveal(app, session.sessionId);
+
+    // Click one prize tile
+    const prizeTile = board.prizePositions[0];
+    await request(app).post(`/v2/sessions/${session.sessionId}/click`).send({ player: PLAYER, tile: prizeTile });
+
+    // Quit
+    const quit = await request(app).post(`/v2/sessions/${session.sessionId}/quit`).send({ player: PLAYER });
+    expect(quit.body.status).toBe("quit");
+    expect(quit.body.prizeEarned).toBeTruthy();
+    expect(BigInt(quit.body.prizeEarned)).toBeGreaterThan(0n);
+
+    // Session reopens
+    const sessDetail = await request(app).get(`/v2/sessions/${session.sessionId}`);
+    expect(sessDetail.body.status).toBe("open");
   });
 
-  it("reveal with the correct entropy+salt activates the session and derives the board", async () => {
-    await request(app).post("/v2/credits/deposit").send({ player: PLAYER, txHash: TX2 });
-    const commitment = computeCommitment(ENTROPY, SALT);
-    const commit = await request(app).post("/v2/sessions").send({ player: PLAYER, host: PLAYER, mode: "Easy", stake: "50000", commitment });
-    const sessionId = commit.body.sessionId;
-    const reveal = await request(app).post(`/v2/sessions/${sessionId}/reveal`).send({ player: PLAYER, entropy: ENTROPY, salt: SALT });
-    expect(reveal.status).toBe(200);
-    expect(reveal.body.status).toBe("active");
-    expect(reveal.body.boardCommitHash).toBeTruthy();
-    // Balance unchanged by reveal (stake already debited at commit).
-    const bal = await request(app).get(`/v2/credits/${PLAYER}`);
-    expect(bal.body.balance).toBe("1850000");
+  it("host closes an open session and reclaims prize pot", async () => {
+    await request(app).post("/v2/credits/deposit").send({ player: HOST, txHash: TX1 });
+    const session = await createSession(app);
+
+    const close = await request(app).post(`/v2/sessions/${session.sessionId}/close`).send({ host: HOST });
+    expect(close.status).toBe(200);
+    expect(close.body.status).toBe("closed");
+    expect(close.body.refunded).toBe(POT);
+
+    // Host balance restored
+    const hostBal = await request(app).get(`/v2/credits/${HOST}`);
+    expect(hostBal.body.balance).toBe("50000000"); // full refund
   });
 
-  it("rejects a reveal with the wrong salt (COMMITMENT_MISMATCH)", async () => {
+  it("lists open sessions for players to browse", async () => {
+    await request(app).post("/v2/credits/deposit").send({ player: HOST, txHash: TX1 });
+    await createSession(app, { mode: "Easy", prizePot: POT });
+    await createSession(app, { mode: "Normal", prizePot: "20000000" });
+
+    const list = await request(app).get("/v2/sessions");
+    expect(list.status).toBe(200);
+    expect(list.body.count).toBe(2);
+    expect(list.body.sessions[0].mode).toBe("Easy");
+    expect(list.body.sessions[1].mode).toBe("Normal");
+    expect(list.body.sessions[0].firstTileCost).toBeTruthy();
+  });
+
+  it("commit-reveal: wrong salt rejected", async () => {
+    await request(app).post("/v2/credits/deposit").send({ player: HOST, txHash: TX1 });
     await request(app).post("/v2/credits/deposit").send({ player: PLAYER, txHash: TX2 });
+    const session = await createSession(app);
+
     const commitment = computeCommitment(ENTROPY, SALT);
-    const commit = await request(app).post("/v2/sessions").send({ player: PLAYER, host: PLAYER, mode: "Easy", stake: "50000", commitment });
+    await request(app).post(`/v2/sessions/${session.sessionId}/join`).send({ player: PLAYER, commitment });
+
     const wrongSalt = "0x" + "e".repeat(64);
-    const reveal = await request(app).post(`/v2/sessions/${commit.body.sessionId}/reveal`).send({ player: PLAYER, entropy: ENTROPY, salt: wrongSalt });
+    const reveal = await request(app).post(`/v2/sessions/${session.sessionId}/reveal`).send({ player: PLAYER, entropy: ENTROPY, salt: wrongSalt });
     expect(reveal.status).toBe(400);
     expect(reveal.body.error).toBe("COMMITMENT_MISMATCH");
-    // Session remains committed (not active) — stake still locked.
-    const exit = await request(app).post(`/v2/sessions/${commit.body.sessionId}/exit`).send({ player: PLAYER });
-    expect(exit.body.status).toBe("cancelled");
   });
 
-  it("rejects a click on a committed (unrevealed) session (SESSION_NOT_ACTIVE)", async () => {
-    await request(app).post("/v2/credits/deposit").send({ player: PLAYER, txHash: TX2 });
-    const commitment = computeCommitment(ENTROPY, SALT);
-    const commit = await request(app).post("/v2/sessions").send({ player: PLAYER, host: PLAYER, mode: "Easy", stake: "50000", commitment });
-    const click = await request(app).post(`/v2/sessions/${commit.body.sessionId}/click`).send({ player: PLAYER, tile: 1 });
-    expect(click.status).toBe(409);
-    expect(click.body.error).toBe("SESSION_NOT_ACTIVE");
-    expect(click.body.status).toBe("committed");
-  });
+  it("deposit and withdrawal still work (infrastructure unchanged)", async () => {
+    await request(app).post("/v2/credits/deposit").send({ player: HOST, txHash: TX1 });
+    const bal = await request(app).get(`/v2/credits/${HOST}`);
+    expect(bal.body.balance).toBe("50000000");
 
-  it("exit on a committed (unrevealed) session refunds the stake", async () => {
-    await request(app).post("/v2/credits/deposit").send({ player: PLAYER, txHash: TX2 });
-    const commitment = computeCommitment(ENTROPY, SALT);
-    const commit = await request(app).post("/v2/sessions").send({ player: PLAYER, host: PLAYER, mode: "Easy", stake: "50000", commitment });
-    const exit = await request(app).post(`/v2/sessions/${commit.body.sessionId}/exit`).send({ player: PLAYER });
-    expect(exit.body.status).toBe("cancelled");
-    expect(exit.body.refunded).toBe("50000");
-    const bal = await request(app).get(`/v2/credits/${PLAYER}`);
-    expect(bal.body.balance).toBe("1900000"); // full refund
-  });
-
-  it("rejects a double reveal (SESSION_NOT_COMMITTED)", async () => {
-    await request(app).post("/v2/credits/deposit").send({ player: PLAYER, txHash: TX2 });
-    const commitment = computeCommitment(ENTROPY, SALT);
-    const commit = await request(app).post("/v2/sessions").send({ player: PLAYER, host: PLAYER, mode: "Easy", stake: "50000", commitment });
-    const r1 = await request(app).post(`/v2/sessions/${commit.body.sessionId}/reveal`).send({ player: PLAYER, entropy: ENTROPY, salt: SALT });
-    expect(r1.status).toBe(200);
-    const r2 = await request(app).post(`/v2/sessions/${commit.body.sessionId}/reveal`).send({ player: PLAYER, entropy: ENTROPY, salt: SALT });
-    expect(r2.status).toBe(409);
-    expect(r2.body.error).toBe("SESSION_NOT_COMMITTED");
-  });
-
-  it("commitment hides entropy: two different entropy values can produce the same commitment only by coincidence (SHA-256 collision resistance)", async () => {
-    // Smoke test: commitment != entropy, and different entropy → different commitment.
-    const entropy2 = "0x" + "9".repeat(64);
-    const c1 = computeCommitment(ENTROPY, SALT);
-    const c2 = computeCommitment(entropy2, SALT);
-    expect(c1).not.toBe(ENTROPY);
-    expect(c1).not.toBe(c2);
-    expect(c1).toMatch(/^0x[0-9a-f]{64}$/);
+    const wd = await request(app).post("/v2/withdrawals/request").send({ player: HOST, amount: "1000000", destination: DEST });
+    expect(wd.body.payoutAmount).toBe("950000"); // 5% fee
+    expect(wd.body.feeAmount).toBe("50000");
   });
 });

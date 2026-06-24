@@ -55,10 +55,12 @@ CREATE TABLE IF NOT EXISTS withdrawals (
 
 CREATE TABLE IF NOT EXISTS sessions (
   session_id        TEXT PRIMARY KEY,
-  player            TEXT NOT NULL,
   host              TEXT NOT NULL,
   mode              TEXT NOT NULL,
-  stake             TEXT NOT NULL,
+  prize_pot         TEXT NOT NULL,
+  entrance_fee      TEXT NOT NULL DEFAULT '50000',
+  status            TEXT NOT NULL DEFAULT 'open',
+  active_player     TEXT,
   commitment        TEXT,
   commit_expires_at INTEGER,
   board             TEXT,
@@ -71,13 +73,17 @@ CREATE TABLE IF NOT EXISTS sessions (
   entropy_error     TEXT,
   clicked           TEXT NOT NULL DEFAULT '[]',
   bombs_hit         INTEGER NOT NULL DEFAULT 0,
-  prizes_collected  INTEGER NOT NULL DEFAULT 0,
-  status            TEXT NOT NULL,
-  payout            TEXT NOT NULL DEFAULT '0'
+  prizes_found      INTEGER NOT NULL DEFAULT 0,
+  spent_amount      TEXT NOT NULL DEFAULT '0',
+  prize_earned      TEXT NOT NULL DEFAULT '0',
+  run_status        TEXT,
+  last_action_at    INTEGER,
+  created_at        TEXT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_sessions_player ON sessions(player);
+CREATE INDEX IF NOT EXISTS idx_sessions_host ON sessions(host);
 CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
+CREATE INDEX IF NOT EXISTS idx_sessions_active_player ON sessions(active_player);
 CREATE INDEX IF NOT EXISTS idx_withdrawals_player ON withdrawals(player);
 CREATE INDEX IF NOT EXISTS idx_withdrawals_status ON withdrawals(status);
 CREATE INDEX IF NOT EXISTS idx_deposits_player ON deposits(player);
@@ -158,25 +164,30 @@ function loadSqliteStore(db) {
     const clickedArr = JSON.parse(row.clicked || "[]");
     store.sessions.set(row.session_id, {
       sessionId: row.session_id,
-      player: row.player,
       host: row.host,
       mode: row.mode,
-      stake: row.stake,
-      commitment: row.commitment || undefined,
-      commitExpiresAt: row.commit_expires_at || undefined,
+      prizePot: row.prize_pot,
+      entranceFee: row.entrance_fee || "50000",
+      status: row.status || "open",
+      activePlayer: row.active_player || null,
+      commitment: row.commitment || null,
+      commitExpiresAt: row.commit_expires_at || null,
       board: row.board ? JSON.parse(row.board) : null,
       boardCommitHash: row.board_commit_hash || null,
       entropy: row.entropy || null,
       salt: row.salt || null,
-      pythRandomNumber: row.pyth_random_number || undefined,
-      entropySequenceNumber: row.entropy_sequence_number || undefined,
-      entropyTxHash: row.entropy_tx_hash || undefined,
-      entropyError: row.entropy_error || undefined,
+      pythRandomNumber: row.pyth_random_number || null,
+      entropySequenceNumber: row.entropy_sequence_number || null,
+      entropyTxHash: row.entropy_tx_hash || null,
+      entropyError: row.entropy_error || null,
       clicked: new Map(clickedArr),
-      bombsHit: row.bombs_hit,
-      prizesCollected: row.prizes_collected,
-      status: row.status,
-      payout: row.payout || "0",
+      bombsHit: row.bombs_hit || 0,
+      prizesFound: row.prizes_found || 0,
+      spentAmount: row.spent_amount || "0",
+      prizeEarned: row.prize_earned || "0",
+      runStatus: row.run_status || null,
+      lastActionAt: row.last_action_at || null,
+      createdAt: row.created_at,
     });
   }
 
@@ -232,15 +243,16 @@ function persistSqliteStore(db, store) {
     // Sessions — wipe + bulk insert
     db.exec("DELETE FROM sessions");
     const insSession = db.prepare(
-      `INSERT INTO sessions (session_id, player, host, mode, stake, commitment, commit_expires_at,
-        board, board_commit_hash, entropy, salt, pyth_random_number, entropy_sequence_number, entropy_tx_hash, entropy_error,
-        clicked, bombs_hit, prizes_collected, status, payout)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO sessions (session_id, host, mode, prize_pot, entrance_fee, status, active_player,
+        commitment, commit_expires_at, board, board_commit_hash, entropy, salt,
+        pyth_random_number, entropy_sequence_number, entropy_tx_hash, entropy_error,
+        clicked, bombs_hit, prizes_found, spent_amount, prize_earned, run_status, last_action_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
     for (const [id, s] of store.sessions) {
       const clickedArr = [...s.clicked.entries()];
       insSession.run(
-        id, s.player, s.host, s.mode, s.stake,
+        id, s.host, s.mode, s.prizePot, s.entranceFee || "50000", s.status || "open", s.activePlayer || null,
         s.commitment || null, s.commitExpiresAt || null,
         s.board ? JSON.stringify(s.board) : null,
         s.boardCommitHash || null,
@@ -251,7 +263,8 @@ function persistSqliteStore(db, store) {
         s.entropyTxHash || null,
         s.entropyError || null,
         JSON.stringify(clickedArr),
-        s.bombsHit || 0, s.prizesCollected || 0, s.status, s.payout || "0"
+        s.bombsHit || 0, s.prizesFound || 0, s.spentAmount || "0", s.prizeEarned || "0",
+        s.runStatus || null, s.lastActionAt || null, s.createdAt || new Date().toISOString()
       );
     }
 
