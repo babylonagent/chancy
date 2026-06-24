@@ -24,11 +24,27 @@ const TX2 = "0x" + "b".repeat(64);
 const ENTROPY = "0x" + "c".repeat(64);
 const SALT = "0x" + "d".repeat(64);
 
-function engineApp(verifyDeposit) {
+// Mock entropy requester: simulates on-chain Pyth Entropy by passing the
+// userRandomNumber through as the randomNumber. This keeps deriveBoard
+// deterministic for test board computation (computeBoard uses ENTROPY directly,
+// and the mock returns ENTROPY as the Pyth result → same board).
+function mockRequestEntropy() {
+  let seq = 0n;
+  return async (userRandomNumber) => {
+    seq += 1n;
+    return {
+      sequenceNumber: seq,
+      randomNumber: userRandomNumber,
+      txHash: "0x" + "e".repeat(64),
+    };
+  };
+}
+
+function engineApp(verifyDeposit, requestEntropy = mockRequestEntropy()) {
   const app = express();
   app.use(cors());
   app.use(express.json());
-  installV2Routes(app, { storePath: "", verifyDeposit });
+  installV2Routes(app, { storePath: "", verifyDeposit, requestEntropy });
   return app;
 }
 

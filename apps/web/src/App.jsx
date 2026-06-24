@@ -234,6 +234,7 @@ export default function App() {
       const salt = randomEntropy();
       const commitment = await sha256Hex(entropy, salt);
       const created = await postJson('/v2/sessions', { player, host: host === ZERO_ADDRESS ? player : host, mode, stake: STAKE_UNITS, commitment });
+      setStatusMsg('Shuffling tiles…');
       await postJson(`/v2/sessions/${created.sessionId}/reveal`, { player, entropy, salt });
       setSession({ sessionId: created.sessionId, mode });
       setRevealed({});
@@ -413,7 +414,7 @@ export default function App() {
             </>
           )}
 
-          {statusMsg && <p className="status-text">{statusMsg}</p>}
+          {statusMsg && <p className={`status-text${statusMsg === 'Shuffling tiles…' ? ' shuffling' : ''}`}>{statusMsg}</p>}
         </div>
       )}
 
@@ -461,7 +462,7 @@ export default function App() {
           </div>
 
           {/* Status */}
-          {statusMsg && !gameEnded && <p className="status-text">{statusMsg}</p>}
+          {statusMsg && !gameEnded && <p className={`status-text${statusMsg === 'Shuffling tiles…' ? ' shuffling' : ''}`}>{statusMsg}</p>}
 
           {/* Result banner */}
           {gameEnded && (

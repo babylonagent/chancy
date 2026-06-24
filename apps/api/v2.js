@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const { z } = require("zod");
+const { persistSqliteStore } = require("./sqlite-store");
 
 // Economics verified 2026-06-24: all modes 5-6.25% house edge.
 // Easy 37.5% win / 2.5x (edge 6.25%), Normal 17.9% win / 5.3x (edge 5.4%),
@@ -77,7 +78,7 @@ function computeCommitment(entropy, salt) {
 
 // Refund any committed sessions that never got revealed past their timeout.
 // Called on each new commit so stale commits don't leak credits.
-function cleanupExpiredCommits(store, storePath) {
+function cleanupExpiredCommits(store, persist) {
   const now = Date.now();
   let changed = false;
   for (const session of store.sessions.values()) {
@@ -89,7 +90,7 @@ function cleanupExpiredCommits(store, storePath) {
       changed = true;
     }
   }
-  if (changed) persistStore(store, storePath);
+  if (changed) persist();
 }
 
 function createV2Store() {
@@ -170,12 +171,24 @@ async function defaultVerifyDeposit() {
   throw new Error("DEPOSIT_VERIFIER_NOT_CONFIGURED");
 }
 
+// Default entropy requester: rejects everything. The real on-chain Pyth-backed
+// requester is injected by server.js. Fail closed if not configured.
+async function defaultRequestEntropy() {
+  throw new Error("ENTROPY_REQUESTER_NOT_CONFIGURED");
+}
+
 function installV2Routes(app, {
   store = createV2Store(),
   storePath = "",
+  db = null,
   verifyDeposit = defaultVerifyDeposit,
+  requestEntropy = defaultRequestEntropy,
   adminToken = "",
 } = {}) {
+  // Unified persistence: SQLite when db is provided, JSON file otherwise.
+  const persist = db
+    ? () => persistSqliteStore(db, store)
+    : () => persistStore(store, storePath);
   // Deposit: client sends ONLY txHash + player. The server reads the on-chain
   // receipt, decodes the vault Deposited event, and credits the REAL net amount.
   // Idempotent by txHash so a retried POST never double-credits.
@@ -221,7 +234,7 @@ function installV2Routes(app, {
       feeAmount: String(verified.feeAmount),
       at: new Date().toISOString(),
     });
-    persistStore(store, storePath);
+    persist();
     return res.json({
       player,
       balance: next.toString(),
@@ -261,7 +274,7 @@ function installV2Routes(app, {
       createdAt: new Date().toISOString(),
     };
     store.withdrawals.set(withdrawalId, withdrawal);
-    persistStore(store, storePath);
+    persist();
     return res.json(withdrawal);
   });
 
@@ -300,7 +313,7 @@ function installV2Routes(app, {
     withdrawal.status = "paid";
     withdrawal.txHash = bodyParse.data.txHash;
     withdrawal.paidAt = new Date().toISOString();
-    persistStore(store, storePath);
+    persist();
     return res.json(withdrawal);
   });
 
@@ -316,7 +329,7 @@ function installV2Routes(app, {
     }).safeParse(req.body || {});
     if (!parsed.success) return res.status(400).json({ error: "INVALID_REQUEST", details: parsed.error.flatten() });
     const body = parsed.data;
-    cleanupExpiredCommits(store, storePath);
+    cleanupExpiredCommits(store, persist);
     const balance = getBalance(store, body.player);
     const stake = BigInt(body.stake);
     if (stake <= 0n) return res.status(400).json({ error: "INVALID_STAKE" });
@@ -344,13 +357,16 @@ function installV2Routes(app, {
       payout: "0",
     };
     store.sessions.set(sessionId, session);
-    persistStore(store, storePath);
+    persist();
     return res.json({ sessionId, player: body.player, host: body.host, mode: body.mode, stake: stake.toString(), commitment: body.commitment, status: "committed", commitExpiresAt });
   });
 
   // C39 Phase 2 — REVEAL: client sends plaintext entropy + salt.
-  // Server verifies commitment match, THEN derives the board. Too late to grind.
-  app.post("/v2/sessions/:sessionId/reveal", (req, res) => {
+  // Server verifies commitment, requests on-chain Pyth randomness, then derives
+  // the board. The board seed = Pyth randomNumber (oracle + client contribution
+  // mixed by Pyth). Neither server nor player alone controls it. The Pyth result
+  // is on-chain and independently verifiable by anyone.
+  app.post("/v2/sessions/:sessionId/reveal", async (req, res) => {
     const paramParse = z.object({ sessionId: z.string().regex(/^\d+$/) }).safeParse(req.params || {});
     const bodyParse = z.object({ player: addressSchema, entropy: bytes32Schema, salt: bytes32Schema }).safeParse(req.body || {});
     if (!paramParse.success || !bodyParse.success) return res.status(400).json({ error: "INVALID_REQUEST" });
@@ -361,16 +377,57 @@ function installV2Routes(app, {
     // Verify the reveal matches the stored commitment.
     const expected = computeCommitment(bodyParse.data.entropy, bodyParse.data.salt);
     if (expected !== session.commitment) return res.status(400).json({ error: "COMMITMENT_MISMATCH" });
-    // Now derive the board — server can no longer abort without refunding.
-    const board = deriveBoard({ entropy: bodyParse.data.entropy, sessionId: session.sessionId, player: session.player, mode: session.mode });
-    const commit = boardCommitHash({ entropy: bodyParse.data.entropy, sessionId: session.sessionId, player: session.player, mode: session.mode, board });
+
+    // Request on-chain randomness from Pyth Entropy. The player's entropy is
+    // passed as userRandomNumber — Pyth mixes it with oracle randomness. The
+    // server cannot predict or bias the result.
+    let entropyResult;
+    try {
+      entropyResult = await requestEntropy(bodyParse.data.entropy);
+    } catch (error) {
+      // Entropy request failed — refund the stake, mark as failed.
+      setBalance(store, session.player, getBalance(store, session.player) + BigInt(session.stake));
+      session.status = "failed";
+      session.entropy = bodyParse.data.entropy;
+      session.salt = bodyParse.data.salt;
+      session.entropyError = error.message || "ENTROPY_REQUEST_FAILED";
+      persist();
+      return res.status(503).json({
+        error: "ENTROPY_REQUEST_FAILED",
+        message: session.entropyError,
+        sessionId: session.sessionId,
+        refunded: true,
+      });
+    }
+
+    // Derive the board using the Pyth random number — the trustless seed that
+    // already incorporates both the client's and oracle's contributions.
+    const pythRandom = entropyResult.randomNumber;
+    const board = deriveBoard({ entropy: pythRandom, sessionId: session.sessionId, player: session.player, mode: session.mode });
+    const commit = boardCommitHash({ entropy: pythRandom, sessionId: session.sessionId, player: session.player, mode: session.mode, board });
+
     session.entropy = bodyParse.data.entropy;
     session.salt = bodyParse.data.salt;
+    session.pythRandomNumber = pythRandom;
+    session.entropySequenceNumber = String(entropyResult.sequenceNumber);
+    session.entropyTxHash = entropyResult.txHash;
     session.board = board;
     session.boardCommitHash = commit;
     session.status = "active";
-    persistStore(store, storePath);
-    return res.json({ sessionId: session.sessionId, boardCommitHash: commit, status: "active" });
+    persist();
+
+    // Client can independently verify:
+    //   1. Read getRequest(seq) from ChancyRandomness contract on-chain
+    //   2. Get pythRandomNumber
+    //   3. Run deriveBoard({ entropy: pythRandomNumber, sessionId, player, mode })
+    //   4. Compare boardCommitHash
+    return res.json({
+      sessionId: session.sessionId,
+      boardCommitHash: commit,
+      status: "active",
+      entropySequenceNumber: String(entropyResult.sequenceNumber),
+      entropyTxHash: entropyResult.txHash,
+    });
   });
 
   app.post("/v2/sessions/:sessionId/click", (req, res) => {
@@ -414,7 +471,7 @@ function installV2Routes(app, {
       payout: payoutCredited,
     };
     session.clicked.set(tile, result);
-    persistStore(store, storePath);
+    persist();
     return res.json(result);
   });
 
@@ -429,12 +486,23 @@ function installV2Routes(app, {
     if (session.status === "committed") {
       setBalance(store, session.player, getBalance(store, session.player) + BigInt(session.stake));
       session.status = "cancelled";
-      persistStore(store, storePath);
+      persist();
       return res.json({ sessionId: session.sessionId, status: "cancelled", payout: "0", refunded: session.stake, board: null, boardCommitHash: null, clicked: [] });
     }
     if (session.status === "active") session.status = "exited";
-    persistStore(store, storePath);
-    return res.json({ sessionId: session.sessionId, status: session.status, payout: session.payout || "0", boardCommitHash: session.boardCommitHash, entropy: session.entropy, board: session.board, clicked: [...session.clicked.values()] });
+    persist();
+    return res.json({
+      sessionId: session.sessionId,
+      status: session.status,
+      payout: session.payout || "0",
+      boardCommitHash: session.boardCommitHash,
+      entropy: session.entropy,
+      pythRandomNumber: session.pythRandomNumber || null,
+      entropySequenceNumber: session.entropySequenceNumber || null,
+      entropyTxHash: session.entropyTxHash || null,
+      board: session.board,
+      clicked: [...session.clicked.values()],
+    });
   });
 
   return store;

@@ -5,6 +5,9 @@ const { encodeFunctionData, createPublicClient, http, parseAbi, decodeEventLog }
 const chancyAbiJson = require("../../abi/ChancyGame.json");
 const chancyVaultAbiJson = require("../../abi/ChancyVault.json");
 const { installV2Routes, loadV2Store } = require("./v2");
+const { initDatabase, loadSqliteStore, migrateJsonToSqlite } = require("./sqlite-store");
+const { makeEntropyRequester } = require("./entropy");
+const chancyRandomnessAbiJson = require("../../abi/ChancyRandomness.json");
 const chancyAbi = chancyAbiJson.abi || chancyAbiJson;
 const chancyVaultAbi = chancyVaultAbiJson.abi || chancyVaultAbiJson;
 
@@ -179,8 +182,11 @@ function createApp({
   contractAddress = process.env.CHANCY_CONTRACT_ADDRESS || DEFAULT_CONTRACT_ADDRESS,
   vaultAddress = process.env.CHANCY_VAULT_ADDRESS || DEFAULT_CONTRACT_ADDRESS,
   usdcAddress = process.env.CHANCY_USDC_ADDRESS || process.env.VITE_CHANCY_BASE_USDC_ADDRESS || DEFAULT_CONTRACT_ADDRESS,
+  randomnessAddress = process.env.CHANCY_RANDOMNESS_ADDRESS || "",
+  hotWalletKey = process.env.CHANCY_HOT_WALLET_KEY || process.env.CHANCY_HOT_WALLET_PRIVATE_KEY || "",
   rpcUrl = process.env.BASE_RPC_URL || process.env.CHANCY_RPC_URL || DEFAULT_BASE_RPC_URL,
   v2StorePath = process.env.CHANCY_V2_STORE_PATH || "",
+  v2DbPath = process.env.CHANCY_V2_DB_PATH || "",
 } = {}) {
   const contract = addressSchema.parse(contractAddress);
   const vault = addressSchema.parse(vaultAddress);
@@ -193,10 +199,33 @@ function createApp({
   });
   app.use(cors());
   app.use(express.json());
+
+  // Persistence: SQLite when db path is set, JSON file otherwise.
+  let db = null;
+  let store;
+  if (v2DbPath) {
+    db = initDatabase(v2DbPath);
+    store = loadSqliteStore(db);
+  } else {
+    store = loadV2Store(v2StorePath);
+  }
+
+  // Entropy requester: on-chain Pyth randomness for cheat-proof board generation.
+  let requestEntropy = null;
+  if (randomnessAddress && hotWalletKey) {
+    requestEntropy = makeEntropyRequester({
+      contractAddress: randomnessAddress,
+      hotWalletKey,
+      rpcUrl,
+    });
+  }
+
   installV2Routes(app, {
-    store: loadV2Store(v2StorePath),
+    store,
     storePath: v2StorePath,
+    db,
     verifyDeposit: makeDepositVerifier({ vault, rpcUrl, minConfirmations: Number(process.env.CHANCY_DEPOSIT_MIN_CONFIRMATIONS || 1) }),
+    requestEntropy,
     adminToken: process.env.CHANCY_ADMIN_TOKEN || "",
   });
 
@@ -205,7 +234,15 @@ function createApp({
   });
 
   app.get("/v2/config", (_req, res) => {
-    res.json({ ok: true, vaultAddress: vault, usdcAddress: usdc, creditAsset: "USD_CREDIT", depositFeeBps: "500" });
+    res.json({
+      ok: true,
+      vaultAddress: vault,
+      usdcAddress: usdc,
+      randomnessAddress: randomnessAddress || null,
+      pythEntropyAddress: process.env.PYTH_ENTROPY_ADDRESS || null,
+      creditAsset: "USD_CREDIT",
+      depositFeeBps: "500",
+    });
   });
 
   app.post("/v2/tx/approve-usdc", validate(z.object({

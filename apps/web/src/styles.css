@@ -274,6 +274,8 @@ input { outline: none; }
 
 /* Status text */
 .status-text { text-align: center; color: var(--text-dim); font-size: 14px; font-weight: 600; min-height: 20px; }
+.status-text.shuffling { color: var(--gold); animation: pulse 1s ease-in-out infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 
 /* Error */
 .error-banner {
