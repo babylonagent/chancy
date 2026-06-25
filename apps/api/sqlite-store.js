@@ -78,7 +78,12 @@ CREATE TABLE IF NOT EXISTS sessions (
   prize_earned      TEXT NOT NULL DEFAULT '0',
   run_status        TEXT,
   last_action_at    INTEGER,
-  created_at        TEXT NOT NULL
+  created_at        TEXT NOT NULL,
+  cumulative_earnings TEXT NOT NULL DEFAULT '0',
+  cumulative_players INTEGER NOT NULL DEFAULT 0,
+  cumulative_runs    INTEGER NOT NULL DEFAULT 0,
+  last_played_at     TEXT,
+  players_seen       TEXT NOT NULL DEFAULT '[]'
 );
 
 CREATE INDEX IF NOT EXISTS idx_sessions_host ON sessions(host);
@@ -162,6 +167,7 @@ function loadSqliteStore(db) {
   // Sessions
   for (const row of db.prepare("SELECT * FROM sessions").all()) {
     const clickedArr = JSON.parse(row.clicked || "[]");
+    const playersSeen = JSON.parse(row.players_seen || "[]");
     store.sessions.set(row.session_id, {
       sessionId: row.session_id,
       host: row.host,
@@ -188,6 +194,11 @@ function loadSqliteStore(db) {
       runStatus: row.run_status || null,
       lastActionAt: row.last_action_at || null,
       createdAt: row.created_at,
+      cumulativeEarnings: row.cumulative_earnings || "0",
+      cumulativePlayers: row.cumulative_players || 0,
+      cumulativeRuns: row.cumulative_runs || 0,
+      lastPlayedAt: row.last_played_at || null,
+      _playersSeen: new Set(playersSeen),
     });
   }
 
@@ -246,11 +257,13 @@ function persistSqliteStore(db, store) {
       `INSERT INTO sessions (session_id, host, mode, prize_pot, entrance_fee, status, active_player,
         commitment, commit_expires_at, board, board_commit_hash, entropy, salt,
         pyth_random_number, entropy_sequence_number, entropy_tx_hash, entropy_error,
-        clicked, bombs_hit, prizes_found, spent_amount, prize_earned, run_status, last_action_at, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        clicked, bombs_hit, prizes_found, spent_amount, prize_earned, run_status, last_action_at, created_at,
+        cumulative_earnings, cumulative_players, cumulative_runs, last_played_at, players_seen)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
     for (const [id, s] of store.sessions) {
       const clickedArr = [...s.clicked.entries()];
+      const playersSeenArr = s._playersSeen ? [...s._playersSeen] : [];
       insSession.run(
         id, s.host, s.mode, s.prizePot, s.entranceFee || "50000", s.status || "open", s.activePlayer || null,
         s.commitment || null, s.commitExpiresAt || null,
@@ -264,7 +277,9 @@ function persistSqliteStore(db, store) {
         s.entropyError || null,
         JSON.stringify(clickedArr),
         s.bombsHit || 0, s.prizesFound || 0, s.spentAmount || "0", s.prizeEarned || "0",
-        s.runStatus || null, s.lastActionAt || null, s.createdAt || new Date().toISOString()
+        s.runStatus || null, s.lastActionAt || null, s.createdAt || new Date().toISOString(),
+        s.cumulativeEarnings || "0", s.cumulativePlayers || 0, s.cumulativeRuns || 0,
+        s.lastPlayedAt || null, JSON.stringify(playersSeenArr)
       );
     }
 
@@ -303,7 +318,11 @@ function migrateJsonToSqlite(jsonPath, dbPath) {
     store.balances.set(key, BigInt(value));
   }
   for (const [id, session] of Object.entries(raw?.sessions || {})) {
-    store.sessions.set(id, { ...session, clicked: new Map(session.clicked || []) });
+    store.sessions.set(id, {
+      ...session,
+      clicked: new Map(session.clicked || []),
+      _playersSeen: new Set(session._playersSeen || []),
+    });
   }
   for (const [id, withdrawal] of Object.entries(raw?.withdrawals || {})) {
     store.withdrawals.set(id, withdrawal);

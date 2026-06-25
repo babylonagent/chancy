@@ -25,6 +25,27 @@
   text-rendering: optimizeLegibility;
 }
 
+/* ── LIGHT THEME ── */
+[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f5f5f8;
+  --bg-card: #ffffff;
+  --bg-elevated: #f0f0f4;
+  --bg-input: #eaeaef;
+  --border: rgba(0,0,0,0.1);
+  --border-hover: rgba(0,0,0,0.2);
+  --accent: #e89e00;
+  --accent-dim: rgba(232,158,0,0.12);
+  --accent-glow: rgba(232,158,0,0.3);
+  --green: #18a85a;
+  --green-dim: rgba(24,168,90,0.1);
+  --red: #e03838;
+  --red-dim: rgba(224,56,56,0.08);
+  --text: #1a1a22;
+  --text-dim: #6a6a78;
+  --text-faint: #9a9aa8;
+}
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html { scroll-behavior: smooth; }
 body {
@@ -45,6 +66,12 @@ body::before {
     radial-gradient(ellipse 60% 50% at 50% 0%, rgba(255,184,0,0.08), transparent 70%),
     radial-gradient(ellipse 40% 30% at 80% 80%, rgba(62,235,128,0.04), transparent 60%),
     radial-gradient(ellipse 40% 30% at 20% 90%, rgba(255,84,84,0.03), transparent 60%);
+}
+[data-theme="light"] body::before {
+  background:
+    radial-gradient(ellipse 60% 50% at 50% 0%, rgba(232,158,0,0.06), transparent 70%),
+    radial-gradient(ellipse 40% 30% at 80% 80%, rgba(24,168,90,0.03), transparent 60%),
+    radial-gradient(ellipse 40% 30% at 20% 90%, rgba(224,56,56,0.02), transparent 60%);
 }
 
 h1, h2, h3, .display { font-family: 'Space Grotesk', 'Inter', sans-serif; letter-spacing: -0.03em; }
@@ -528,6 +555,71 @@ input { outline: none; }
 .rule-item .rule-icon.blue { background: rgba(100, 160, 255, 0.12); color: #64a0ff; }
 
 /* ═══ DEPOSIT VIEW ═══ */
+
+/* ═══ THEME TOGGLE ═══ */
+.theme-toggle-btn {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  color: var(--text-dim);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; transition: all 0.15s;
+}
+.theme-toggle-btn:hover { color: var(--accent); border-color: var(--accent); }
+.theme-toggle-btn:active { transform: scale(0.9); }
+
+.theme-toggle-fab {
+  position: fixed; right: 20px; bottom: 24px; z-index: 25;
+  width: 44px; height: 44px; border-radius: 50%;
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-dim);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+  transition: all 0.15s;
+}
+.theme-toggle-fab:hover { color: var(--accent); border-color: var(--accent); }
+.theme-toggle-fab:active { transform: scale(0.9); }
+
+/* ═══ GAME CARD STATS ═══ */
+.game-card-badges { display: flex; gap: 6px; align-items: center; }
+.my-game-badge {
+  padding: 4px 10px; border-radius: 999px;
+  background: var(--green-dim); color: var(--green);
+  font-weight: 800; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.game-card.my-game { border-color: var(--green); border-left-width: 3px; }
+.game-card-stats { display: flex; flex-wrap: wrap; gap: 6px; }
+.stat-chip {
+  padding: 4px 10px; border-radius: 8px;
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  font-size: 12px; font-weight: 600; color: var(--text-dim);
+}
+.stat-chip.earnings { color: var(--accent); border-color: var(--accent); background: var(--accent-dim); }
+
+/* ═══ TILE REVEALING STATE ═══ */
+.tile.revealing {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  animation: tilePulse 0.6s ease-in-out infinite;
+}
+@keyframes tilePulse {
+  0%, 100% { opacity: 0.6; transform: scale(0.97); }
+  50% { opacity: 1; transform: scale(1.02); }
+}
+
+/* ═══ QUIT FEEDBACK ═══ */
+.back-btn:disabled { opacity: 0.6; }
+.back-btn .quitting-spinner {
+  display: inline-block; width: 12px; height: 12px;
+  border: 2px solid var(--text-faint); border-top-color: var(--text);
+  border-radius: 50%; animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ═══ LIGHT THEME OVERRIDES ═══ */
+[data-theme="light"] .btn-primary { color: #fff; }
+[data-theme="light"] .tile.empty { background: #eaeaef; }
+[data-theme="light"] .modal-backdrop { background: rgba(0,0,0,0.3); }
+[data-theme="light"] .qr-code { background: #fff; }
 
 /* === RESPONSIVE === */
 @media (min-width: 520px) {

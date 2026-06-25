@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import chancyLogo from './assets/chancy-logo.svg';
 
 // ─── CONFIG ─────────────────────────────────────────────────────────────────
@@ -14,6 +14,39 @@ const MODES = {
 };
 
 const POT_PRESETS = ['5', '10', '25', '50'];
+
+// ─── ERROR MAPPING ──────────────────────────────────────────────────────────
+// Translate raw API error codes into player-friendly messages.
+function friendlyError(err) {
+  const msg = err?.message || String(err);
+  const map = {
+    INSUFFICIENT_CREDITS_FOR_REVEAL: 'Not enough credits for the next tile. Quit to keep what you found, or add more credits.',
+    INSUFFICIENT_CREDITS: 'Not enough credits to do that.',
+    SESSION_NOT_FOUND: 'This game no longer exists.',
+    SESSION_NOT_OPEN: 'This game is already occupied or closed.',
+    SESSION_NOT_ACTIVE: 'This game round has ended.',
+    NOT_ACTIVE_PLAYER: 'You are not the active player in this game.',
+    HOST_CANNOT_PLAY: 'You cannot play your own game.',
+    ENTROPY_REQUEST_FAILED: 'Randomness service unavailable. Your credits were refunded — try again.',
+    TOO_MANY_OPEN_SESSIONS: 'You have too many open games. Close one first.',
+    PRIZE_POT_TOO_LOW: 'Minimum prize pot is $5.',
+    PRIZE_POT_TOO_HIGH: 'Maximum prize pot is $1,000.',
+    SESSION_NOT_COMMITTED: 'Game state mismatch. Please rejoin.',
+    COMMITMENT_MISMATCH: 'Security check failed. Please rejoin.',
+    INVALID_TILE: 'Invalid tile selection.',
+  };
+  for (const [code, friendly] of Object.entries(map)) {
+    if (msg.includes(code)) return friendly;
+  }
+  return msg;
+}
+
+// ─── THEME ──────────────────────────────────────────────────────────────────
+function getInitialTheme() {
+  const saved = localStorage.getItem('chancy_theme');
+  if (saved === 'light' || saved === 'dark') return saved;
+  return 'dark';
+}
 
 // ─── UTILS ──────────────────────────────────────────────────────────────────
 function formatUsdc(units) {
@@ -133,9 +166,21 @@ export default function App({ wallet }) {
   const [busy, setBusy] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
   const [error, setError] = useState('');
+  const [quitting, setQuitting] = useState(false);
+  const [theme, setTheme] = useState(getInitialTheme);
 
   const addr = address || '';
   const modeCfg = session ? MODES[session.mode] : MODES.Normal;
+
+  // ── Theme management ──
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('chancy_theme', theme);
+  }, [theme]);
+
+  function toggleTheme() {
+    setTheme((t) => t === 'dark' ? 'light' : 'dark');
+  }
 
   // ── Health + config ──
   useEffect(() => {
@@ -177,6 +222,13 @@ export default function App({ wallet }) {
 
   useEffect(() => {
     if (view === 'lobby') refreshSessions();
+  }, [view, refreshSessions]);
+
+  // ── Auto-poll sessions while in lobby (host sees player joins/finishes) ──
+  useEffect(() => {
+    if (view !== 'lobby') return;
+    const interval = setInterval(() => refreshSessions(), 8000);
+    return () => clearInterval(interval);
   }, [view, refreshSessions]);
 
   useEffect(() => { if (addr) refreshCredits(addr); }, [addr, refreshCredits]);
@@ -251,7 +303,7 @@ export default function App({ wallet }) {
       setView('lobby');
       await refreshSessions();
     } catch (err) {
-      setError(err.message || String(err));
+      setError(friendlyError(err));
       setStatusMsg('');
     } finally { setBusy(false); }
   }
@@ -266,7 +318,7 @@ export default function App({ wallet }) {
       await refreshSessions();
       setStatusMsg('Game closed — pot reclaimed');
     } catch (err) {
-      setError(err.message || String(err));
+      setError(friendlyError(err));
     } finally { setBusy(false); }
   }
 
@@ -291,7 +343,7 @@ export default function App({ wallet }) {
       setStatusMsg('');
       await refreshCredits(addr);
     } catch (err) {
-      setError(err.message || String(err));
+      setError(friendlyError(err));
       setStatusMsg('');
     } finally { setBusy(false); }
   }
@@ -300,6 +352,8 @@ export default function App({ wallet }) {
   async function clickTile(tile) {
     if (!session || run.status !== 'active' || revealed[tile] || busy) return;
     setBusy(true);
+    // Optimistic: immediately show the tile as "revealing"
+    setRevealed((prev) => ({ ...prev, [tile]: 'revealing' }));
     try {
       const result = await postJson(`/v2/sessions/${session.sessionId}/click`, { player: addr, tile });
       setRevealed((prev) => ({ ...prev, [result.tile]: result.outcome }));
@@ -308,19 +362,33 @@ export default function App({ wallet }) {
         status: result.status, spentTotal: result.spentTotal || '0',
         prizeEarned: result.prizeEarned || '0', nextTileCost: result.nextTileCost || '0',
       });
+      // Live credit update: optimistically debit the tile cost
+      if (result.cost) {
+        setBalance((prev) => {
+          const newBal = BigInt(prev) - BigInt(result.cost);
+          return newBal < 0n ? '0' : newBal.toString();
+        });
+      }
+      // If player won a prize, credit it immediately
+      if (result.prizeCredited && BigInt(result.prizeCredited) > 0n) {
+        setBalance((prev) => (BigInt(prev) + BigInt(result.prizeCredited)).toString());
+      }
       if (result.status === 'won') { setStatusMsg(`Won ${dollars(result.prizeEarned)}!`); await refreshCredits(addr); }
       else if (result.status === 'lost') { setStatusMsg('Game over — 3 bombs'); }
       else if (result.outcome === 'prize') { setStatusMsg('Prize!'); }
       else if (result.outcome === 'bomb') { setStatusMsg(`Bomb — ${result.bombsHit}/3`); }
       else { setStatusMsg('Empty'); }
     } catch (err) {
-      setError(err.message || String(err));
+      // Remove the "revealing" state on error
+      setRevealed((prev) => { const next = { ...prev }; delete next[tile]; return next; });
+      setError(friendlyError(err));
     } finally { setBusy(false); }
   }
 
   // ── PLAYER: QUIT ──
   async function quitRound() {
     if (!session) { setView('lobby'); return; }
+    setQuitting(true);
     setBusy(true);
     try {
       if (run.status === 'active') {
@@ -339,8 +407,11 @@ export default function App({ wallet }) {
       setStatusMsg('');
       await refreshSessions();
     } catch (err) {
-      setError(err.message || String(err));
-    } finally { setBusy(false); }
+      setError(friendlyError(err));
+    } finally {
+      setBusy(false);
+      setQuitting(false);
+    }
   }
 
   // ── WITHDRAW ──
@@ -357,7 +428,7 @@ export default function App({ wallet }) {
       await refreshCredits(addr);
       setStatusMsg(`${dollars(result.payoutAmount)} → your wallet`);
     } catch (err) {
-      setError(err.message || String(err));
+      setError(friendlyError(err));
       setStatusMsg('');
     } finally { setBusy(false); }
   }
@@ -389,8 +460,17 @@ export default function App({ wallet }) {
               <span className="dot" />
               {addr ? dollars(balance) : '—'}
             </div>
+            <button className="theme-toggle-btn" onClick={toggleTheme} title="Toggle theme" aria-label="Toggle theme">
+              {theme === 'dark' ? (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+              )}
+            </button>
             {isConnected && !isPlaying && (
-              <button className="disconnect-btn" onClick={disconnect} title="Disconnect">⏻</button>
+              <button className="disconnect-btn" onClick={disconnect} title="Disconnect" aria-label="Disconnect wallet">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/></svg>
+              </button>
             )}
           </div>
         </header>
@@ -520,23 +600,39 @@ export default function App({ wallet }) {
             </div>
           ) : (
             <div className="game-list">
-              {sessions.map((s) => (
-                <div key={s.sessionId} className={`game-card mode-${s.mode.toLowerCase()}`}>
+              {sessions.map((s) => {
+                const isMine = s.host.toLowerCase() === addr.toLowerCase();
+                return (
+                <div key={s.sessionId} className={`game-card mode-${s.mode.toLowerCase()} ${isMine ? 'my-game' : ''}`}>
                   <div className="game-card-top">
-                    <span className="game-mode-badge">{s.mode}</span>
+                    <div className="game-card-badges">
+                      <span className="game-mode-badge">{s.mode}</span>
+                      {isMine && <span className="my-game-badge">Your game</span>}
+                    </div>
                     <span className="game-pot">{dollars(s.prizePot)}</span>
                   </div>
                   <div className="game-card-mid">
                     <span>{MODES[s.mode]?.copy}</span>
                     <span className="dim">First tile {dollars(s.firstTileCost)} · Entry {dollars(s.entranceFee)}</span>
                   </div>
-                  {s.host.toLowerCase() === addr.toLowerCase() ? (
+                  {(s.earnings && BigInt(s.earnings) > 0n) || s.players > 0 ? (
+                    <div className="game-card-stats">
+                      <span className="stat-chip">#{s.sessionId}</span>
+                      {s.earnings && BigInt(s.earnings) > 0n && <span className="stat-chip earnings">Earned {dollars(s.earnings)}</span>}
+                      {s.players > 0 && <span className="stat-chip">{s.players} player{s.players > 1 ? 's' : ''}</span>}
+                      {s.runs > 0 && <span className="stat-chip">{s.runs} run{s.runs > 1 ? 's' : ''}</span>}
+                    </div>
+                  ) : (
+                    <div className="game-card-stats"><span className="stat-chip">#{s.sessionId}</span><span className="stat-chip">No plays yet</span></div>
+                  )}
+                  {isMine ? (
                     <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => closeSession(s.sessionId)}>Close & refund</button>
                   ) : (
                     <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => joinSession(s)}>Join · {dollars(s.entranceFee)}</button>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
 
@@ -655,7 +751,9 @@ export default function App({ wallet }) {
       {view === 'round' && session && (
         <div className="round-view">
           <div className="round-header">
-            <button className="back-btn" onClick={quitRound}>← {gameEnded ? 'Done' : 'Quit'}</button>
+            <button className="back-btn" onClick={quitRound} disabled={quitting}>
+              {quitting ? 'Quitting…' : `← ${gameEnded ? 'Done' : 'Quit'}`}
+            </button>
             <span className="mode-badge">{session.mode}</span>
           </div>
           <div className="meters">
@@ -718,6 +816,15 @@ export default function App({ wallet }) {
 
       {/* ── Help FAB ── */}
       {view !== 'splash' && <button className="help-fab" onClick={() => setShowRules(true)}>?</button>}
+      {view === 'splash' && (
+        <button className="theme-toggle-fab" onClick={toggleTheme} title="Toggle theme" aria-label="Toggle theme">
+          {theme === 'dark' ? (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+          ) : (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          )}
+        </button>
+      )}
       {showRules && <RulesSheet onClose={closeRules} />}
     </div>
   );

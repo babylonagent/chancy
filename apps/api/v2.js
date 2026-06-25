@@ -93,6 +93,20 @@ function computeCommitment(entropy, salt) {
   return sha256Hex(`${entropy}:${salt}`);
 }
 
+// Record cumulative stats when a run ends (host earns spent).
+function recordRunEnd(session, hostEarnings) {
+  session.cumulativeEarnings = (BigInt(session.cumulativeEarnings || "0") + BigInt(hostEarnings || "0")).toString();
+  session.cumulativeRuns = (session.cumulativeRuns || 0) + 1;
+  session.lastPlayedAt = new Date().toISOString();
+}
+
+// Track unique players per session (by address).
+function trackPlayer(session) {
+  if (!session._playersSeen) session._playersSeen = new Set();
+  session._playersSeen.add(session.activePlayer?.toLowerCase());
+  session.cumulativePlayers = session._playersSeen.size;
+}
+
 // Reset a session's run state so it can accept a new player.
 function resetRun(session) {
   session.activePlayer = null;
@@ -137,6 +151,7 @@ function cleanupStaleSessions(store, persist) {
       if (spent > 0n) {
         setBalance(store, session.host, getBalance(store, session.host) + spent);
       }
+      recordRunEnd(session, spent);
       session.runStatus = "idle_kicked";
       resetRun(session);
       changed = true;
@@ -168,6 +183,7 @@ function serializeStore(store) {
     sessions: Object.fromEntries([...store.sessions.entries()].map(([id, session]) => [id, {
       ...session,
       clicked: [...session.clicked.entries()],
+      _playersSeen: session._playersSeen ? [...session._playersSeen] : [],
     }])),
     withdrawals: Object.fromEntries(store.withdrawals.entries()),
     deposits: Object.fromEntries((store.deposits || new Map()).entries()),
@@ -180,7 +196,11 @@ function hydrateStore(raw) {
   store.nextWithdrawalId = Number(raw?.nextWithdrawalId || 1);
   for (const [key, value] of Object.entries(raw?.balances || {})) store.balances.set(key, BigInt(value));
   for (const [id, session] of Object.entries(raw?.sessions || {})) {
-    store.sessions.set(id, { ...session, clicked: new Map(session.clicked || []) });
+    store.sessions.set(id, {
+      ...session,
+      clicked: new Map(session.clicked || []),
+      _playersSeen: new Set(session._playersSeen || []),
+    });
   }
   for (const [id, withdrawal] of Object.entries(raw?.withdrawals || {})) store.withdrawals.set(id, withdrawal);
   for (const [txHash, record] of Object.entries(raw?.deposits || {})) store.deposits.set(txHash, record);
@@ -378,6 +398,11 @@ function installV2Routes(app, {
       runStatus: null,
       lastActionAt: null,
       createdAt: new Date().toISOString(),
+      // Cumulative stats (never reset by resetRun)
+      cumulativeEarnings: "0",
+      cumulativePlayers: 0,
+      cumulativeRuns: 0,
+      lastPlayedAt: null,
     };
     store.sessions.set(sessionId, session);
     persist();
@@ -408,6 +433,10 @@ function installV2Routes(app, {
         prizes: modeConfig[s.mode].prizes,
         firstTileCost: revealCostAt(s.prizePot, s.mode, 0).toString(),
         createdAt: s.createdAt,
+        earnings: s.cumulativeEarnings || "0",
+        players: s.cumulativePlayers || 0,
+        runs: s.cumulativeRuns || 0,
+        lastPlayedAt: s.lastPlayedAt || null,
       }));
     return res.json({ sessions: open, count: open.length });
   });
@@ -441,6 +470,7 @@ function installV2Routes(app, {
     session.commitExpiresAt = Date.now() + REVEAL_TIMEOUT_MS;
     session.status = "occupied";
     session.runStatus = "committed";
+    trackPlayer(session);
     persist();
     return res.json({
       sessionId: session.sessionId,
@@ -542,6 +572,7 @@ function installV2Routes(app, {
         // Game over — host gets all spent, session reopens
         const spent = BigInt(session.spentAmount);
         if (spent > 0n) setBalance(store, session.host, getBalance(store, session.host) + spent);
+        recordRunEnd(session, spent);
         session.runStatus = "lost";
         const result = {
           sessionId: session.sessionId, tile, outcome,
@@ -567,6 +598,7 @@ function installV2Routes(app, {
         // All prizes found — player wins, host gets spent, session reopens
         const spent = BigInt(session.spentAmount);
         if (spent > 0n) setBalance(store, session.host, getBalance(store, session.host) + spent);
+        recordRunEnd(session, spent);
         session.runStatus = "won";
         const result = {
           sessionId: session.sessionId, tile, outcome,
@@ -618,6 +650,7 @@ function installV2Routes(app, {
     // Active → host gets spent, player keeps prizeEarned
     const spent = BigInt(session.spentAmount);
     if (spent > 0n) setBalance(store, session.host, getBalance(store, session.host) + spent);
+    recordRunEnd(session, spent);
     session.runStatus = "quit";
     const resp = {
       sessionId: session.sessionId,
@@ -663,6 +696,7 @@ function installV2Routes(app, {
     // Host gets spent, session reopens
     const spent = BigInt(session.spentAmount);
     if (spent > 0n) setBalance(store, session.host, getBalance(store, session.host) + spent);
+    recordRunEnd(session, spent);
     session.runStatus = "idle_kicked";
     const resp = { sessionId: session.sessionId, status: "idle_kicked", spentTotal: session.spentAmount, prizeEarned: session.prizeEarned };
     resetRun(session);
@@ -692,6 +726,10 @@ function installV2Routes(app, {
       spentAmount: session.spentAmount,
       prizeEarned: session.prizeEarned,
       createdAt: session.createdAt,
+      earnings: session.cumulativeEarnings || "0",
+      players: session.cumulativePlayers || 0,
+      runs: session.cumulativeRuns || 0,
+      lastPlayedAt: session.lastPlayedAt || null,
     });
   });
 
