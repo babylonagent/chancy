@@ -54,6 +54,7 @@ function WalletWrapper({ children }) {
   const { open } = useAppKit();
   const { isConnected, address } = useAppKitAccount();
   const { walletProvider } = useAppKitProvider();
+  const { disconnect } = useDisconnect();
 
   // Inject wallet functions into children via context
   return children({
@@ -61,6 +62,7 @@ function WalletWrapper({ children }) {
     isConnected,    // boolean
     address,        // string | undefined
     walletProvider, // EIP1193 provider for txs
+    disconnect,     // () => disconnects wallet
   });
 }
 

@@ -64,8 +64,18 @@ input { outline: none; }
   padding: 16px 0 12px;
   background: linear-gradient(180deg, var(--bg) 80%, transparent);
 }
+.header-right { display: flex; align-items: center; gap: 8px; }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 900; font-size: 22px; letter-spacing: -0.04em; }
 .brand img { width: 36px; height: 36px; }
+.disconnect-btn {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  color: var(--text-dim); font-size: 16px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; transition: all 0.15s;
+}
+.disconnect-btn:hover { color: var(--red); border-color: var(--red); }
+.disconnect-btn:active { transform: scale(0.9); }
 .balance-pill {
   display: flex; align-items: center; gap: 6px;
   padding: 8px 14px; border-radius: 999px;

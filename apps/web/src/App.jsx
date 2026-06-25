@@ -96,7 +96,7 @@ function RulesSheet({ onClose }) {
 
 // ─── MAIN APP ───────────────────────────────────────────────────────────────
 export default function App({ wallet }) {
-  const { open: openModal, isConnected, address } = wallet;
+  const { open: openModal, isConnected, address, disconnect } = wallet;
 
   // view: splash (pre-connect) | lobby (main hub) | host | deposit | round
   const [view, setView] = useState('splash');
@@ -180,6 +180,20 @@ export default function App({ wallet }) {
   }, [view, refreshSessions]);
 
   useEffect(() => { if (addr) refreshCredits(addr); }, [addr, refreshCredits]);
+
+  // ── Auto-poll balance while on deposit page ──
+  // Instead of only polling when user clicks "send", poll continuously on deposit view
+  useEffect(() => {
+    if (view !== 'deposit' || !addr) return;
+    const interval = setInterval(async () => {
+      const bal = await refreshCredits(addr);
+      if (BigInt(bal) > BigInt(preDepositBalance)) {
+        setPollingDeposit(false);
+        setStatusMsg(`+${dollars((BigInt(bal) - BigInt(preDepositBalance)).toString())} added`);
+      }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [view, addr, preDepositBalance, refreshCredits]);
 
   function closeRules() { localStorage.setItem('chancy_rules_seen', '1'); setShowRules(false); }
 
@@ -370,9 +384,14 @@ export default function App({ wallet }) {
           <button className="brand" onClick={goHome}>
             <img src={chancyLogo} alt="" /> Chancy
           </button>
-          <div className={`balance-pill ${online === false ? 'offline' : ''}`} onClick={addr ? goHome : undefined}>
-            <span className="dot" />
-            {addr ? dollars(balance) : '—'}
+          <div className="header-right">
+            <div className={`balance-pill ${online === false ? 'offline' : ''}`} onClick={addr ? goHome : undefined}>
+              <span className="dot" />
+              {addr ? dollars(balance) : '—'}
+            </div>
+            {isConnected && !isPlaying && (
+              <button className="disconnect-btn" onClick={disconnect} title="Disconnect">⏻</button>
+            )}
           </div>
         </header>
       )}
