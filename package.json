@@ -37,6 +37,11 @@
     "zod": "^3.25.76"
   },
   "dependencies": {
-    "@pythnetwork/entropy-sdk-solidity": "^2.2.1"
+    "@pythnetwork/entropy-sdk-solidity": "^2.2.1",
+    "@reown/appkit": "^1.8.21",
+    "@reown/appkit-adapter-wagmi": "^1.8.21",
+    "@tanstack/react-query": "^5.101.1",
+    "@wagmi/core": "^3.5.4",
+    "wagmi": "^3.6.20"
   }
 }

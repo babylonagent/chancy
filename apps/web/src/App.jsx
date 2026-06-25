@@ -3,20 +3,9 @@ import chancyLogo from './assets/chancy-logo.svg';
 
 // ─── CONFIG ─────────────────────────────────────────────────────────────────
 const API = import.meta.env?.VITE_CHANCY_API_URL || '';
-const BASE_CHAIN_ID = '0x2105';
-const TARGET_CHAIN_ID = BASE_CHAIN_ID;
 const USDC_DECIMALS = 1_000_000n;
 const BOMB_LIVES = 3;
 const TILES = Array.from({ length: 64 }, (_, i) => i + 1);
-
-const CHAIN_PARAMS = {
-  [BASE_CHAIN_ID]: {
-    chainId: BASE_CHAIN_ID, chainName: 'Base',
-    nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-    rpcUrls: ['https://mainnet.base.org'],
-    blockExplorerUrls: ['https://basescan.org'],
-  },
-};
 
 const MODES = {
   Easy:     { bombs: 5,  prizes: 3, copy: '5 bombs · 3 prizes' },
@@ -70,11 +59,6 @@ async function getJson(path) {
   return data;
 }
 
-function getWalletProvider() {
-  if (!window.ethereum) throw new Error('No wallet found. Install a supported wallet first.');
-  return window.ethereum;
-}
-
 // ─── RULES MODAL ────────────────────────────────────────────────────────────
 function RulesSheet({ onClose }) {
   useEffect(() => {
@@ -111,12 +95,12 @@ function RulesSheet({ onClose }) {
 }
 
 // ─── MAIN APP ───────────────────────────────────────────────────────────────
-export default function App() {
+export default function App({ wallet }) {
+  const { open: openModal, isConnected, address } = wallet;
+
   // view: splash (pre-connect) | lobby (main hub) | host | deposit | round
   const [view, setView] = useState('splash');
   const [online, setOnline] = useState(null);
-  const [wallet, setWallet] = useState('');
-  const [chainId, setChainId] = useState('');
   const [showRules, setShowRules] = useState(() => !localStorage.getItem('chancy_rules_seen'));
 
   // Credits
@@ -150,6 +134,9 @@ export default function App() {
   const [statusMsg, setStatusMsg] = useState('');
   const [error, setError] = useState('');
 
+  const addr = address || '';
+  const modeCfg = session ? MODES[session.mode] : MODES.Normal;
+
   // ── Health + config ──
   useEffect(() => {
     getJson('/health').then(() => setOnline(true)).catch(() => setOnline(false));
@@ -158,31 +145,15 @@ export default function App() {
     }).catch(() => {});
   }, []);
 
-  // ── Wallet events ──
+  // ── Auto-switch to lobby when connected ──
   useEffect(() => {
-    if (!window.ethereum) return undefined;
-    const onAccts = (a) => {
-      const addr = a?.[0] || '';
-      setWallet(addr);
-      if (addr) setView('lobby');
-    };
-    const onChain = (c) => setChainId(c || '');
-    window.ethereum.request({ method: 'eth_accounts' }).then((a) => {
-      const addr = a?.[0] || '';
-      setWallet(addr);
-      if (addr) setView('lobby');
-    }).catch(() => {});
-    window.ethereum.request({ method: 'eth_chainId' }).then(onChain).catch(() => {});
-    window.ethereum.on?.('accountsChanged', onAccts);
-    window.ethereum.on?.('chainChanged', onChain);
-    return () => {
-      window.ethereum.removeListener?.('accountsChanged', onAccts);
-      window.ethereum.removeListener?.('chainChanged', onChain);
-    };
-  }, []);
+    if (isConnected && address) {
+      setView((prev) => prev === 'splash' ? 'lobby' : prev);
+    }
+  }, [isConnected, address]);
 
-  const refreshCredits = useCallback(async (addr) => {
-    const player = addr || wallet;
+  const refreshCredits = useCallback(async (a) => {
+    const player = a || addr;
     if (!player) return '0';
     try {
       const d = await getJson(`/v2/credits/${player}`);
@@ -190,7 +161,7 @@ export default function App() {
       setWithdrawable(d.withdrawable || '0');
       return d.balance || '0';
     } catch { return '0'; }
-  }, [wallet]);
+  }, [addr]);
 
   const refreshSessions = useCallback(async () => {
     setSessionsLoading(true);
@@ -201,44 +172,15 @@ export default function App() {
     setSessionsLoading(false);
   }, []);
 
-  // Auto-refresh sessions when entering lobby
   useEffect(() => {
     if (view === 'lobby') refreshSessions();
   }, [view, refreshSessions]);
 
-  useEffect(() => { if (wallet) refreshCredits(wallet); }, [wallet, refreshCredits]);
+  useEffect(() => { if (addr) refreshCredits(addr); }, [addr, refreshCredits]);
 
   function closeRules() { localStorage.setItem('chancy_rules_seen', '1'); setShowRules(false); }
 
-  async function ensureChain(provider) {
-    const current = await provider.request({ method: 'eth_chainId' });
-    if (current?.toLowerCase() === TARGET_CHAIN_ID) return;
-    try {
-      await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: TARGET_CHAIN_ID }] });
-    } catch (err) {
-      if (err?.code === 4902 && CHAIN_PARAMS[TARGET_CHAIN_ID]) {
-        await provider.request({ method: 'wallet_addEthereumChain', params: [CHAIN_PARAMS[TARGET_CHAIN_ID]] });
-        await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: TARGET_CHAIN_ID }] });
-      } else throw err;
-    }
-    setChainId(TARGET_CHAIN_ID);
-  }
-
-  async function connectWallet() {
-    setError('');
-    try {
-      const provider = getWalletProvider();
-      const accts = await provider.request({ method: 'eth_requestAccounts' });
-      const next = accts[0] || '';
-      setWallet(next);
-      await ensureChain(provider);
-      if (next) setView('lobby');
-      return next;
-    } catch (err) {
-      setError(err.message || String(err));
-      return '';
-    }
-  }
+  function connectWallet() { openModal(); }
 
   // ── DEPOSIT ──
   async function copyVaultAddress() {
@@ -252,34 +194,31 @@ export default function App() {
   }
 
   async function openWalletSend() {
+    if (!isConnected) { openModal(); return; }
     try {
-      const provider = getWalletProvider();
+      const provider = wallet.walletProvider;
+      if (!provider) { await copyVaultAddress(); setPollingDeposit(true); return; }
       await provider.request({
         method: 'eth_sendTransaction',
-        params: [{ from: wallet, to: vaultAddress, value: '0x0' }],
+        params: [{ from: addr, to: vaultAddress, value: '0x0' }],
       });
       setPollingDeposit(true);
     } catch (err) {
-      if (err.code !== 4001) {
-        await copyVaultAddress();
-        setStatusMsg('Address copied — send from your wallet');
-        setPollingDeposit(true);
-      }
+      if (err.code !== 4001) { await copyVaultAddress(); setStatusMsg('Address copied — send from your wallet'); setPollingDeposit(true); }
     }
   }
 
-  // Poll for balance change after deposit
   useEffect(() => {
-    if (!pollingDeposit || !wallet) return;
+    if (!pollingDeposit || !addr) return;
     const interval = setInterval(async () => {
-      const bal = await refreshCredits(wallet);
+      const bal = await refreshCredits(addr);
       if (BigInt(bal) > BigInt(preDepositBalance)) {
         setPollingDeposit(false);
         setStatusMsg(`+${dollars((BigInt(bal) - BigInt(preDepositBalance)).toString())} added`);
       }
     }, 4000);
     return () => clearInterval(interval);
-  }, [pollingDeposit, wallet, preDepositBalance, refreshCredits]);
+  }, [pollingDeposit, addr, preDepositBalance, refreshCredits]);
 
   // ── HOST: CREATE ──
   async function hostCreateSession() {
@@ -289,8 +228,8 @@ export default function App() {
     if (BigInt(pot) > BigInt(balance)) { setError('Not enough credits.'); return; }
     setBusy(true); setStatusMsg('Creating game…');
     try {
-      const result = await postJson('/v2/sessions/create', { host: wallet, mode: hostMode, prizePot: pot });
-      await refreshCredits(wallet);
+      const result = await postJson('/v2/sessions/create', { host: addr, mode: hostMode, prizePot: pot });
+      await refreshCredits(addr);
       setStatusMsg(`Game #${result.sessionId} live`);
       setView('lobby');
       await refreshSessions();
@@ -302,11 +241,11 @@ export default function App() {
 
   // ── HOST: CLOSE ──
   async function closeSession(sessionId) {
-    if (!wallet) return;
+    if (!addr) return;
     setBusy(true);
     try {
-      await postJson(`/v2/sessions/${sessionId}/close`, { host: wallet });
-      await refreshCredits(wallet);
+      await postJson(`/v2/sessions/${sessionId}/close`, { host: addr });
+      await refreshCredits(addr);
       await refreshSessions();
       setStatusMsg('Game closed — pot reclaimed');
     } catch (err) {
@@ -318,23 +257,22 @@ export default function App() {
   async function joinSession(sess) {
     setError('');
     if (BigInt(balance) < BigInt(sess.entranceFee)) {
-      setError(`Need ${dollars(sess.entranceFee)} to join.`);
-      return;
+      setError(`Need ${dollars(sess.entranceFee)} to join.`); return;
     }
     setBusy(true); setStatusMsg('Joining…');
     try {
       const entropy = randomEntropy();
       const salt = randomEntropy();
       const commitment = await sha256Hex(entropy, salt);
-      await postJson(`/v2/sessions/${sess.sessionId}/join`, { player: wallet, commitment });
+      await postJson(`/v2/sessions/${sess.sessionId}/join`, { player: addr, commitment });
       setStatusMsg('Shuffling…');
-      await postJson(`/v2/sessions/${sess.sessionId}/reveal`, { player: wallet, entropy, salt });
+      await postJson(`/v2/sessions/${sess.sessionId}/reveal`, { player: addr, entropy, salt });
       setSession({ sessionId: sess.sessionId, mode: sess.mode, prizePot: sess.prizePot });
       setRevealed({});
       setRun({ bombsHit: 0, prizesFound: 0, status: 'active', spentTotal: '0', prizeEarned: '0', nextTileCost: sess.firstTileCost || '0' });
       setView('round');
       setStatusMsg('');
-      await refreshCredits(wallet);
+      await refreshCredits(addr);
     } catch (err) {
       setError(err.message || String(err));
       setStatusMsg('');
@@ -346,14 +284,14 @@ export default function App() {
     if (!session || run.status !== 'active' || revealed[tile] || busy) return;
     setBusy(true);
     try {
-      const result = await postJson(`/v2/sessions/${session.sessionId}/click`, { player: wallet, tile });
+      const result = await postJson(`/v2/sessions/${session.sessionId}/click`, { player: addr, tile });
       setRevealed((prev) => ({ ...prev, [result.tile]: result.outcome }));
       setRun({
         bombsHit: result.bombsHit, prizesFound: result.prizesFound,
         status: result.status, spentTotal: result.spentTotal || '0',
         prizeEarned: result.prizeEarned || '0', nextTileCost: result.nextTileCost || '0',
       });
-      if (result.status === 'won') { setStatusMsg(`Won ${dollars(result.prizeEarned)}!`); await refreshCredits(wallet); }
+      if (result.status === 'won') { setStatusMsg(`Won ${dollars(result.prizeEarned)}!`); await refreshCredits(addr); }
       else if (result.status === 'lost') { setStatusMsg('Game over — 3 bombs'); }
       else if (result.outcome === 'prize') { setStatusMsg('Prize!'); }
       else if (result.outcome === 'bomb') { setStatusMsg(`Bomb — ${result.bombsHit}/3`); }
@@ -369,7 +307,7 @@ export default function App() {
     setBusy(true);
     try {
       if (run.status === 'active') {
-        const final = await postJson(`/v2/sessions/${session.sessionId}/quit`, { player: wallet });
+        const final = await postJson(`/v2/sessions/${session.sessionId}/quit`, { player: addr });
         if (final.board) {
           const full = {};
           (final.board.bombPositions || []).forEach((t) => { full[t] = 'bomb'; });
@@ -377,7 +315,7 @@ export default function App() {
           setRevealed((prev) => ({ ...full, ...prev }));
         }
       }
-      await refreshCredits(wallet);
+      await refreshCredits(addr);
       setSession(null);
       setRun({ bombsHit: 0, prizesFound: 0, status: 'idle', spentTotal: '0', prizeEarned: '0', nextTileCost: '0' });
       setView('lobby');
@@ -396,10 +334,10 @@ export default function App() {
     if (BigInt(amount) > BigInt(withdrawable)) { setError('Exceeds withdrawable.'); return; }
     setBusy(true); setStatusMsg('Requesting…');
     try {
-      const result = await postJson('/v2/withdrawals/request', { player: wallet, amount, destination: wallet });
+      const result = await postJson('/v2/withdrawals/request', { player: addr, amount, destination: addr });
       setWithdrawAmt('');
       setShowWithdraw(false);
-      await refreshCredits(wallet);
+      await refreshCredits(addr);
       setStatusMsg(`${dollars(result.payoutAmount)} → your wallet`);
     } catch (err) {
       setError(err.message || String(err));
@@ -411,14 +349,10 @@ export default function App() {
   const lives = BOMB_LIVES - run.bombsHit;
   const isPlaying = view === 'round' && session && run.status === 'active';
   const gameEnded = run.status === 'won' || run.status === 'lost';
-  const wrongChain = wallet && chainId && chainId.toLowerCase() !== TARGET_CHAIN_ID;
-  const modeCfg = session ? MODES[session.mode] : MODES.Normal;
 
   function goHome() {
     if (!isPlaying) {
-      setSession(null);
-      setStatusMsg('');
-      setError('');
+      setSession(null); setStatusMsg(''); setError('');
       setView('lobby');
     }
   }
@@ -428,43 +362,34 @@ export default function App() {
   // ═══════════════════════════════════════════════════════════════════════════
   return (
     <div className="app">
-      {/* ── Header ── */}
       {view !== 'splash' && (
         <header className="header">
           <button className="brand" onClick={goHome}>
             <img src={chancyLogo} alt="" /> Chancy
           </button>
-          <div className={`balance-pill ${online === false ? 'offline' : ''}`} onClick={wallet ? goHome : undefined}>
+          <div className={`balance-pill ${online === false ? 'offline' : ''}`} onClick={addr ? goHome : undefined}>
             <span className="dot" />
-            {wallet ? dollars(balance) : '—'}
+            {addr ? dollars(balance) : '—'}
           </div>
         </header>
       )}
 
-      {wrongChain && (
-        <div className="error-banner" style={{ marginBottom: 12 }} onClick={connectWallet}>
-          ⚠ Wrong network — tap to switch to Base
-        </div>
-      )}
       {error && <div className="error-banner" style={{ marginBottom: 12 }} onClick={() => setError('')}>{error}</div>}
 
-      {/* ═══ SPLASH (pre-connect) ═══ */}
+      {/* ═══ SPLASH ═══ */}
       {view === 'splash' && (
         <div className="splash">
           <img className="hero-logo" src={chancyLogo} alt="Chancy" />
           <h1>Host a game.<br/>Beat the board.<br/><span className="gold">Win the pot.</span></h1>
           <p className="tagline">Player-funded prize pots. Pay per tile, dodge bombs, collect every prize to sweep the pot.</p>
-          <button className="btn btn-primary" onClick={connectWallet}>
-            Connect wallet →
-          </button>
+          <button className="btn btn-primary" onClick={connectWallet}>Connect wallet →</button>
           <button className="btn btn-ghost" onClick={() => setShowRules(true)}>How to play</button>
         </div>
       )}
 
-      {/* ═══ LOBBY (main hub) ═══ */}
-      {view === 'lobby' && wallet && (
+      {/* ═══ LOBBY ═══ */}
+      {view === 'lobby' && isConnected && (
         <div className="lobby-view">
-          {/* Balance card */}
           <div className="credit-card">
             <div className="credit-top">
               <div className="credit-big">
@@ -479,23 +404,14 @@ export default function App() {
               )}
             </div>
             <div className="credit-actions-simple">
-              <button className="btn btn-primary btn-sm" onClick={() => { setPreDepositBalance(balance); setView('deposit'); }}>
-                + Add credits
-              </button>
-              {BigInt(withdrawable) > 0n && (
-                <button className="btn btn-ghost btn-sm" onClick={() => setShowWithdraw(true)}>
-                  Withdraw
-                </button>
-              )}
+              <button className="btn btn-primary btn-sm" onClick={() => { setPreDepositBalance(balance); setView('deposit'); }}>+ Add credits</button>
+              {BigInt(withdrawable) > 0n && <button className="btn btn-ghost btn-sm" onClick={() => setShowWithdraw(true)}>Withdraw</button>}
             </div>
           </div>
 
-          {/* Open games */}
           <div className="lobby-section-header">
             <span className="section-title">Open games</span>
-            <button className="refresh-icon" onClick={refreshSessions} disabled={sessionsLoading}>
-              {sessionsLoading ? '⋯' : '↻'}
-            </button>
+            <button className="refresh-icon" onClick={refreshSessions} disabled={sessionsLoading}>{sessionsLoading ? '⋯' : '↻'}</button>
           </div>
 
           {sessions.length === 0 ? (
@@ -515,44 +431,34 @@ export default function App() {
                     <span>{MODES[s.mode]?.copy}</span>
                     <span className="dim">First tile {dollars(s.firstTileCost)} · Entry {dollars(s.entranceFee)}</span>
                   </div>
-                  {s.host.toLowerCase() === wallet.toLowerCase() ? (
-                    <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => closeSession(s.sessionId)}>
-                      Close & refund
-                    </button>
+                  {s.host.toLowerCase() === addr.toLowerCase() ? (
+                    <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => closeSession(s.sessionId)}>Close & refund</button>
                   ) : (
-                    <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => joinSession(s)}>
-                      Join · {dollars(s.entranceFee)}
-                    </button>
+                    <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => joinSession(s)}>Join · {dollars(s.entranceFee)}</button>
                   )}
                 </div>
               ))}
             </div>
           )}
 
-          {/* Host button */}
           <div className="bottom-bar">
-            <button className="btn btn-secondary" onClick={() => setView('host')}>
-              + Host a game
-            </button>
+            <button className="btn btn-secondary" onClick={() => setView('host')}>+ Host a game</button>
           </div>
-
           {statusMsg && <p className="status-text">{statusMsg}</p>}
         </div>
       )}
 
       {/* ═══ HOST ═══ */}
-      {view === 'host' && wallet && (
+      {view === 'host' && isConnected && (
         <div className="host-view">
           <div className="lobby-section-header">
             <button className="back-btn" onClick={() => setView('lobby')}>← Back</button>
             <span className="section-title" style={{ margin: 0 }}>Host a game</span>
           </div>
-
           <div className="host-balance">
             <span>You have</span>
             <span className="value gold">{dollars(balance)}</span>
           </div>
-
           <div className="section-title">Difficulty</div>
           <div className="mode-selector">
             {Object.entries(MODES).map(([name, cfg]) => (
@@ -562,7 +468,6 @@ export default function App() {
               </button>
             ))}
           </div>
-
           <div className="section-title">Prize pot</div>
           <div className="pot-input-group">
             <span className="pot-prefix">$</span>
@@ -573,50 +478,35 @@ export default function App() {
               <button key={p} className={`preset-chip ${potAmt === p ? 'selected' : ''}`} onClick={() => setPotAmt(p)}>${p}</button>
             ))}
           </div>
-
           <button className="btn btn-primary" disabled={busy || BigInt(usdcUnits(potAmt)) > BigInt(balance)} onClick={hostCreateSession}>
             {busy ? 'Creating…' : `Create game — ${dollars(usdcUnits(potAmt))}`}
           </button>
-
           {statusMsg && <p className="status-text">{statusMsg}</p>}
         </div>
       )}
 
       {/* ═══ DEPOSIT ═══ */}
-      {view === 'deposit' && wallet && (
+      {view === 'deposit' && isConnected && (
         <div className="deposit-view">
           <div className="lobby-section-header">
             <button className="back-btn" onClick={() => { setPollingDeposit(false); setView('lobby'); }}>← Back</button>
             <span className="section-title" style={{ margin: 0 }}>Add credits</span>
           </div>
-
           <p className="view-sub">Send USDC (Base) to this address. Credits appear automatically. No approval needed.</p>
-
           {vaultAddress && (
             <div className="qr-section">
-              <img
-                className="qr-code"
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(vaultAddress)}`}
-                alt="Deposit QR"
-              />
+              <img className="qr-code" src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(vaultAddress)}`} alt="Deposit QR" />
             </div>
           )}
-
           <div className="vault-address-card" onClick={copyVaultAddress}>
             <div className="vault-label">Deposit address</div>
             <div className="vault-address">{vaultAddress || 'Loading…'}</div>
             <div className="vault-copy-hint">{copied ? '✓ Copied' : 'Tap to copy'}</div>
           </div>
-
           <div className="deposit-actions">
-            {window.ethereum && (
-              <button className="btn btn-primary" onClick={openWalletSend}>Send from wallet</button>
-            )}
-            <button className="btn btn-secondary" onClick={() => { copyVaultAddress(); setPollingDeposit(true); }}>
-              {copied ? '✓ Copied' : 'Copy address'}
-            </button>
+            {isConnected && <button className="btn btn-primary" onClick={openWalletSend}>Send from wallet</button>}
+            <button className="btn btn-secondary" onClick={() => { copyVaultAddress(); setPollingDeposit(true); }}>{copied ? '✓ Copied' : 'Copy address'}</button>
           </div>
-
           {pollingDeposit ? (
             <div className="deposit-polling">
               <div className="pulse-dot" />
@@ -626,7 +516,6 @@ export default function App() {
           ) : statusMsg ? (
             <div className="deposit-success">{statusMsg}</div>
           ) : null}
-
           <div className="deposit-balance">
             <span className="label">Balance</span>
             <span className="value gold">{dollars(balance)}</span>
@@ -642,49 +531,29 @@ export default function App() {
             <button className="back-btn" onClick={quitRound}>← {gameEnded ? 'Done' : 'Quit'}</button>
             <span className="mode-badge">{session.mode}</span>
           </div>
-
           <div className="meters">
-            <div className="meter pot">
-              <span className="meter-label">Pot</span>
-              <span className="meter-value">{dollars(session.prizePot)}</span>
-            </div>
-            <div className="meter prizes">
-              <span className="meter-label">Prizes</span>
-              <span className="meter-value">{run.prizesFound}/{modeCfg.prizes}</span>
-            </div>
-            <div className="meter spent">
-              <span className="meter-label">Spent</span>
-              <span className="meter-value">{dollars(run.spentTotal)}</span>
-            </div>
+            <div className="meter pot"><span className="meter-label">Pot</span><span className="meter-value">{dollars(session.prizePot)}</span></div>
+            <div className="meter prizes"><span className="meter-label">Prizes</span><span className="meter-value">{run.prizesFound}/{modeCfg.prizes}</span></div>
+            <div className="meter spent"><span className="meter-label">Spent</span><span className="meter-value">{dollars(run.spentTotal)}</span></div>
           </div>
-
           <div className="bomb-lives">
             {Array.from({ length: BOMB_LIVES }).map((_, i) => (
               <div key={i} className={`bomb-life ${i >= lives ? 'lost' : ''}`} />
             ))}
           </div>
-
           {isPlaying && (
             <div className="next-cost-hint">Next tile: <strong className="gold">{dollars(run.nextTileCost)}</strong></div>
           )}
-
           <div className="board">
             {TILES.map((tile) => {
               const state = revealed[tile];
               const symbol = state === 'prize' ? '★' : state === 'bomb' ? '✺' : '';
               return (
-                <button
-                  key={tile}
-                  className={`tile ${state || ''}`}
-                  disabled={!!state || run.status !== 'active' || busy}
-                  onClick={() => clickTile(tile)}
-                >{symbol}</button>
+                <button key={tile} className={`tile ${state || ''}`} disabled={!!state || run.status !== 'active' || busy} onClick={() => clickTile(tile)}>{symbol}</button>
               );
             })}
           </div>
-
           {statusMsg && !gameEnded && <p className="status-text">{statusMsg}</p>}
-
           {gameEnded && (
             <div className={`result-banner ${run.status === 'won' ? 'win' : 'lose'}`}>
               <span className="result-title">{run.status === 'won' ? 'Pot won!' : 'Game over'}</span>
@@ -714,19 +583,14 @@ export default function App() {
               <input value={withdrawAmt} onChange={(e) => setWithdrawAmt(e.target.value)} placeholder={formatUsdc(withdrawable)} inputMode="decimal" />
             </div>
             <p className="hint-text">Withdrawable: {dollars(withdrawable)}</p>
-            <button className="btn btn-primary" disabled={busy} onClick={requestWithdrawal}>
-              {busy ? 'Processing…' : 'Withdraw'}
-            </button>
+            <button className="btn btn-primary" disabled={busy} onClick={requestWithdrawal}>{busy ? 'Processing…' : 'Withdraw'}</button>
             <button className="btn btn-ghost" style={{ marginTop: 8 }} onClick={() => setShowWithdraw(false)}>Cancel</button>
           </div>
         </div>
       )}
 
       {/* ── Help FAB ── */}
-      {view !== 'splash' && (
-        <button className="help-fab" onClick={() => setShowRules(true)}>?</button>
-      )}
-
+      {view !== 'splash' && <button className="help-fab" onClick={() => setShowRules(true)}>?</button>}
       {showRules && <RulesSheet onClose={closeRules} />}
     </div>
   );
