@@ -92,6 +92,7 @@ input { outline: none; }
   background: linear-gradient(180deg, var(--bg) 80%, transparent);
 }
 .header-right { display: flex; align-items: center; gap: 8px; }
+.fc-pfp { width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--border); object-fit: cover; }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 900; font-size: 22px; letter-spacing: -0.04em; }
 .brand img { width: 36px; height: 36px; }
 .disconnect-btn {
@@ -358,14 +359,106 @@ input { outline: none; }
 
 /* Landing footer */
 .landing-footer {
-  display: flex; justify-content: center; gap: 24px;
-  padding-top: 8px; border-top: 1px solid var(--border);
+  display: flex; flex-direction: column; align-items: center; gap: 16px;
+  padding-top: 24px; border-top: 1px solid var(--border);
 }
-.landing-footer a, .landing-footer .link-btn {
+.tech-logos {
+  display: flex; align-items: center; justify-content: center; gap: 20px;
+  flex-wrap: wrap;
+}
+.tech-logos img {
+  height: 22px; width: auto;
+  opacity: 0.4; filter: grayscale(1);
+  transition: opacity 0.2s, filter 0.2s;
+}
+.tech-logos img:hover { opacity: 0.85; filter: grayscale(0); }
+.babylon-credit {
+  font-size: 12px; color: var(--text-faint); text-align: center;
+}
+.babylon-credit a { color: var(--text-dim); font-weight: 600; text-decoration: none; }
+.babylon-credit a:hover { color: var(--accent); }
+.footer-links {
+  display: flex; justify-content: center; gap: 24px;
+}
+.footer-links a, .footer-links .link-btn {
   color: var(--text-faint); font-size: 13px; font-weight: 600;
   text-decoration: none; background: none; border: none; cursor: pointer;
 }
-.landing-footer a:hover, .landing-footer .link-btn:hover { color: var(--text-dim); }
+.footer-links a:hover, .footer-links .link-btn:hover { color: var(--text-dim); }
+
+/* ═══ API DOCS MODAL ═══ */
+.api-docs-modal {
+  max-height: 85vh;
+  overflow-y: auto;
+}
+.api-docs-modal::-webkit-scrollbar { width: 6px; }
+.api-docs-modal::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+.landing-sub {
+  color: var(--text-dim);
+  font-size: 15px;
+  line-height: 1.5;
+  margin-top: -8px;
+}
+.api-section { margin-bottom: 22px; }
+.api-h3 {
+  font-size: 16px; font-weight: 800; color: var(--accent);
+  margin-bottom: 10px; letter-spacing: -0.01em;
+}
+.api-flow {
+  list-style: decimal;
+  padding-left: 20px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.api-flow li {
+  color: var(--text-dim); font-size: 14px; line-height: 1.5;
+}
+.api-endpoints {
+  display: flex; flex-direction: column; gap: 6px;
+}
+.api-endpoint {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 12px; border-radius: var(--radius-sm);
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  font-size: 13px;
+}
+.api-method {
+  font-family: 'Space Grotesk', monospace; font-weight: 800; font-size: 11px;
+  padding: 3px 8px; border-radius: 6px; flex-shrink: 0;
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.api-method.free { background: var(--green-dim); color: var(--green); }
+.api-method.paid { background: var(--accent-dim); color: var(--accent); }
+.api-endpoint code {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 12px; color: var(--text); font-weight: 600;
+  word-break: break-all;
+}
+.api-note { color: var(--text-faint); font-size: 12px; margin-left: auto; }
+.api-contracts {
+  display: flex; flex-direction: column; gap: 8px;
+}
+.api-contract {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 12px; border-radius: var(--radius-sm);
+  background: var(--bg-elevated); border: 1px solid var(--border);
+}
+.api-contract-label {
+  font-size: 12px; font-weight: 700; color: var(--text-dim);
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+.api-contract code {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 12px; color: var(--accent); font-weight: 600;
+  word-break: break-all;
+}
+.api-code-block {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 13px; line-height: 1.6;
+  background: var(--bg); color: var(--text);
+  padding: 14px 16px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  overflow-x: auto; white-space: pre;
+}
 
 /* ═══ LOBBY SECTION HEADER ═══ */
 .lobby-section-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -640,6 +733,55 @@ input { outline: none; }
 @media (min-width: 520px) {
   .app { max-width: 480px; }
 }
+
+/* ── Desktop / laptop: landing page gets a wide multi-column layout ── */
+@media (min-width: 768px) {
+  /* Let the landing page break out of the 480px column */
+  .app { max-width: 960px; padding: 0 32px 120px; }
+  .bottom-bar { max-width: 960px; }
+
+  /* Hero: bigger, more spacious */
+  .landing-page { gap: 56px; padding: 48px 0 56px; }
+  .landing-hero { gap: 28px; }
+  .landing-hero .hero-logo { width: 112px; height: 112px; }
+  .landing-hero h1 { font-size: clamp(42px, 5vw, 56px); max-width: 520px; }
+  .landing-hero .tagline { font-size: 17px; max-width: 480px; }
+  .landing-hero .btn { max-width: 340px; }
+  .landing-h2 { font-size: 24px; }
+
+  /* How it works → 3-column row */
+  .how-steps { flex-direction: row; gap: 16px; }
+  .how-step { flex: 1; flex-direction: column; align-items: center; text-align: center; gap: 10px; padding: 24px 20px; }
+  .step-body { align-items: center; }
+
+  /* Mode cards → 3-column row */
+  .modes-preview { flex-direction: row; gap: 16px; }
+  .mode-info-card { flex: 1; }
+
+  /* Trust signals → 3-column row */
+  .trust-row { flex-direction: row; gap: 16px; }
+  .trust-item { flex: 1; flex-direction: column; text-align: center; gap: 8px; padding: 18px 16px; }
+  .trust-icon { font-size: 24px; }
+
+  /* Footer: wider spacing */
+  .landing-footer { gap: 32px; }
+
+  /* Modals: center on desktop instead of bottom sheet */
+  .modal-backdrop { align-items: center; }
+  .modal {
+    max-width: 520px;
+    border-radius: 28px;
+    border-bottom: 1px solid var(--border);
+    padding: 32px 28px;
+  }
+  @keyframes sheetUp { from { transform: translateY(40px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+}
+
+@media (min-width: 1100px) {
+  .app { max-width: 1080px; }
+  .bottom-bar { max-width: 1080px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }

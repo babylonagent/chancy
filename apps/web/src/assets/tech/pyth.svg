@@ -1,0 +1,7 @@
+<svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="60" cy="60" r="50" fill="none" stroke="currentColor" stroke-width="3"/>
+  <path d="M60 20L80 50L60 80L40 50L60 20Z" fill="currentColor" fill-opacity="0.3"/>
+  <circle cx="60" cy="50" r="6" fill="currentColor"/>
+  <line x1="60" y1="56" x2="60" y2="90" stroke="currentColor" stroke-width="3"/>
+  <line x1="50" y1="70" x2="70" y2="70" stroke="currentColor" stroke-width="3"/>
+</svg>

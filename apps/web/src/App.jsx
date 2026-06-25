@@ -1,5 +1,10 @@
 import React, { useCallback, useEffect, useState, useRef } from 'react';
 import chancyLogo from './assets/chancy-logo.svg';
+import baseLogo from './assets/tech/base.svg';
+import farcasterLogo from './assets/tech/farcaster.svg';
+import x402Logo from './assets/tech/x402.svg';
+import pythLogo from './assets/tech/pyth.svg';
+import usdcLogo from './assets/tech/usdc.svg';
 
 // ─── CONFIG ─────────────────────────────────────────────────────────────────
 const API = import.meta.env?.VITE_CHANCY_API_URL || '';
@@ -127,14 +132,74 @@ function RulesSheet({ onClose }) {
   );
 }
 
+// ─── API DOCS MODAL ─────────────────────────────────────────────────────────
+function ApiDocsSheet({ onClose }) {
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal api-docs-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-handle" />
+        <h2>API &amp; Agents</h2>
+        <p className="modal-sub">Chancy supports both human players (credit ledger) and AI agents (x402 pay-per-action).</p>
+
+        <div className="api-section">
+          <h3 className="api-h3">x402 Payment Flow</h3>
+          <ol className="api-flow">
+            <li>Agent calls an x402 endpoint &rarr; server returns HTTP 402 with payment requirements</li>
+            <li>Agent signs EIP-3009 USDC transfer &rarr; retries with PAYMENT-SIGNATURE header</li>
+            <li>Coinbase facilitator verifies &rarr; settles on-chain &rarr; game action executes</li>
+            <li>No pre-funding, no API keys, no accounts</li>
+          </ol>
+        </div>
+
+        <div className="api-section">
+          <h3 className="api-h3">Endpoints (x402 — pay per action)</h3>
+          <div className="api-endpoints">
+            <div className="api-endpoint"><span className="api-method free">GET</span><code>/v2/x402/sessions</code><span className="api-note">List open games (free)</span></div>
+            <div className="api-endpoint"><span className="api-method paid">POST</span><code>/v2/x402/sessions/create</code><span className="api-note">Host a game (pays prize pot)</span></div>
+            <div className="api-endpoint"><span className="api-method paid">POST</span><code>/v2/x402/sessions/:id/join</code><span className="api-note">Join a game (pays $0.05 entrance)</span></div>
+            <div className="api-endpoint"><span className="api-method free">POST</span><code>/v2/x402/sessions/:id/reveal</code><span className="api-note">Reveal entropy (free)</span></div>
+            <div className="api-endpoint"><span className="api-method paid">POST</span><code>/v2/x402/sessions/:id/click</code><span className="api-note">Reveal tile (pays tile cost)</span></div>
+            <div className="api-endpoint"><span className="api-method free">POST</span><code>/v2/x402/sessions/:id/quit</code><span className="api-note">Quit game (free)</span></div>
+          </div>
+        </div>
+
+        <div className="api-section">
+          <h3 className="api-h3">Contract Addresses (Base Mainnet)</h3>
+          <div className="api-contracts">
+            <div className="api-contract"><span className="api-contract-label">Vault</span><code>0xbE81cE9d9909A31184D1878075f60bbbf8571612</code></div>
+            <div className="api-contract"><span className="api-contract-label">USDC</span><code>0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913</code></div>
+            <div className="api-contract"><span className="api-contract-label">Randomness</span><code>0x705dF0f1667Ed82bB25E5a51273a9Ea6dE5C6e96</code></div>
+          </div>
+        </div>
+
+        <div className="api-section">
+          <h3 className="api-h3">Quick Start (Python)</h3>
+          <pre className="api-code-block">{`# Install: pip install eth-account web3 requests
+# Run: python3 chancy_x402_client.py --key 0xYOUR_KEY --list
+# Play: python3 chancy_x402_client.py --key 0xYOUR_KEY --play`}</pre>
+        </div>
+
+        <button className="btn btn-primary" onClick={onClose} style={{ marginTop: 16 }}>Close</button>
+      </div>
+    </div>
+  );
+}
+
 // ─── MAIN APP ───────────────────────────────────────────────────────────────
-export default function App({ wallet }) {
+export default function App({ wallet, farcaster }) {
   const { open: openModal, isConnected, address, disconnect } = wallet;
+  const isFarcaster = !!farcaster;
 
   // view: splash (pre-connect) | lobby (main hub) | host | deposit | round
   const [view, setView] = useState('splash');
   const [online, setOnline] = useState(null);
   const [showRules, setShowRules] = useState(() => !localStorage.getItem('chancy_rules_seen'));
+  const [showApiDocs, setShowApiDocs] = useState(false);
 
   // Credits
   const [balance, setBalance] = useState('0');
@@ -378,6 +443,10 @@ export default function App({ wallet }) {
   async function clickTile(tile) {
     if (!session || run.status !== 'active' || revealed[tile] || busy) return;
     setBusy(true);
+    // Haptic feedback in Farcaster Mini App
+    if (isFarcaster && farcaster.sdk?.haptics) {
+      farcaster.sdk.haptics.impact('light').catch(() => {});
+    }
     // Optimistic: immediately show the tile as "revealing"
     setRevealed((prev) => ({ ...prev, [tile]: 'revealing' }));
     try {
@@ -505,6 +574,9 @@ export default function App({ wallet }) {
             <img src={chancyLogo} alt="" /> Chancy
           </button>
           <div className="header-right">
+            {isFarcaster && farcaster.user?.pfpUrl && (
+              <img className="fc-pfp" src={farcaster.user.pfpUrl} alt={farcaster.user.displayName || ''} title={farcaster.user.displayName || farcaster.user.username || ''} />
+            )}
             <div className={`balance-pill ${online === false ? 'offline' : ''}`} onClick={addr ? goHome : undefined}>
               <span className="dot" />
               {addr ? dollars(balance) : '—'}
@@ -516,7 +588,7 @@ export default function App({ wallet }) {
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
               )}
             </button>
-            {isConnected && !isPlaying && (
+            {isConnected && !isPlaying && !isFarcaster && (
               <button className="disconnect-btn" onClick={disconnect} title="Disconnect" aria-label="Disconnect wallet">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/></svg>
               </button>
@@ -535,7 +607,11 @@ export default function App({ wallet }) {
             <img className="hero-logo" src={chancyLogo} alt="Chancy" />
             <h1>Host a game.<br/>Beat the board.<br/><span className="gold">Win the pot.</span></h1>
             <p className="tagline">Trustless P2P tile-reveal on Base. Hosts fund prize pots. Players pay per tile. Dodge bombs, collect prizes, sweep the pot.</p>
-            <button className="btn btn-primary" onClick={connectWallet}>Connect wallet →</button>
+            {isFarcaster && !isConnected ? (
+              <button className="btn btn-primary" onClick={connectWallet}>Connect Farcaster wallet →</button>
+            ) : (
+              <button className="btn btn-primary" onClick={connectWallet}>Connect wallet →</button>
+            )}
             <button className="btn btn-ghost" onClick={() => setShowRules(true)}>How to play</button>
           </div>
 
@@ -607,10 +683,43 @@ export default function App({ wallet }) {
             </div>
           </div>
 
+          {/* Agent-friendly */}
+          <div className="landing-section">
+            <h2 className="landing-h2">Agent-friendly</h2>
+            <p className="landing-sub">Built for humans and AI agents. Pay per action with x402 — no pre-funding needed.</p>
+            <div className="trust-row">
+              <div className="trust-item">
+                <span className="trust-icon">🤖</span>
+                <span>x402 pay-per-action — Agents pay USDC per tile, no deposit required</span>
+              </div>
+              <div className="trust-item">
+                <span className="trust-icon">⚡</span>
+                <span>HTTP 402 protocol — Standard payment flow any agent can implement</span>
+              </div>
+              <div className="trust-item">
+                <span className="trust-icon">🔌</span>
+                <span>REST API — Full game loop via /v2/x402/ endpoints</span>
+              </div>
+            </div>
+          </div>
+
           {/* Footer */}
           <div className="landing-footer">
-            <a href="https://github.com/babylonagent/chancy" target="_blank" rel="noopener">GitHub</a>
-            <button className="link-btn" onClick={() => setShowRules(true)}>How to play</button>
+            <div className="tech-logos">
+              <img src={baseLogo} alt="Base" title="Base L2" />
+              <img src={farcasterLogo} alt="Farcaster" title="Farcaster Mini App" />
+              <img src={x402Logo} alt="x402" title="x402 Pay-per-action" />
+              <img src={pythLogo} alt="Pyth Entropy" title="Pyth Entropy randomness" />
+              <img src={usdcLogo} alt="USDC" title="USDC payments" />
+            </div>
+            <div className="babylon-credit">
+              Built by <a href="https://x.com/babylonagent" target="_blank" rel="noopener">Babylon Agent</a>
+            </div>
+            <div className="footer-links">
+              <a href="https://github.com/babylonagent/chancy" target="_blank" rel="noopener">GitHub</a>
+              <button className="link-btn" onClick={() => setShowApiDocs(true)}>API &amp; Agents</button>
+              <button className="link-btn" onClick={() => setShowRules(true)}>How to play</button>
+            </div>
           </div>
         </div>
       )}
@@ -846,6 +955,14 @@ export default function App({ wallet }) {
                 <span className="result-sub">{dollars(run.spentTotal)} lost to host</span>
               )}
               <button className="btn btn-primary" style={{ marginTop: 8 }} onClick={quitRound}>Back to games →</button>
+              {isFarcaster && farcaster.sdk?.actions?.composeCast && (
+                <button className="btn btn-ghost" style={{ marginTop: 8 }} onClick={() => {
+                  const text = run.status === 'won'
+                    ? `Just won ${dollars(run.prizeEarned)} on Chancy! 🏆 Host-vs-player tile reveal on Base. Play → chancy.cash`
+                    : `Hit 3 bombs on Chancy 💣 Lost ${dollars(run.spentTotal)} but it was fun. Try your luck → chancy.cash`;
+                  farcaster.sdk.actions.composeCast({ text, embeds: ['https://chancy.cash'] }).catch(() => {});
+                }}>Share on Farcaster</button>
+              )}
             </div>
           )}
         </div>
@@ -881,6 +998,7 @@ export default function App({ wallet }) {
         </button>
       )}
       {showRules && <RulesSheet onClose={closeRules} />}
+      {showApiDocs && <ApiDocsSheet onClose={() => setShowApiDocs(false)} />}
     </div>
   );
 }
