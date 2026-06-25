@@ -296,13 +296,20 @@ export default function App({ wallet }) {
     if (BigInt(pot) < 5_000_000n) { setError('Minimum pot is $5.'); return; }
     if (BigInt(pot) > BigInt(balance)) { setError('Not enough credits.'); return; }
     setBusy(true); setStatusMsg('Creating game…');
+    // Optimistic: debit pot from balance immediately
+    setBalance((prev) => {
+      const newBal = BigInt(prev) - BigInt(pot);
+      return newBal < 0n ? '0' : newBal.toString();
+    });
     try {
       const result = await postJson('/v2/sessions/create', { host: addr, mode: hostMode, prizePot: pot });
-      await refreshCredits(addr);
       setStatusMsg(`Game #${result.sessionId} live`);
       setView('lobby');
+      await refreshCredits(addr);
       await refreshSessions();
     } catch (err) {
+      // Restore balance on failure
+      setBalance((prev) => (BigInt(prev) + BigInt(pot)).toString());
       setError(friendlyError(err));
       setStatusMsg('');
     } finally { setBusy(false); }
@@ -312,13 +319,24 @@ export default function App({ wallet }) {
   async function closeSession(sessionId) {
     if (!addr) return;
     setBusy(true);
+    setStatusMsg('Closing game…');
     try {
       await postJson(`/v2/sessions/${sessionId}/close`, { host: addr });
+      // Optimistic: refund the pot to balance immediately
+      const sess = sessions.find((s) => s.sessionId === sessionId);
+      if (sess) {
+        setBalance((prev) => (BigInt(prev) + BigInt(sess.prizePot)).toString());
+      }
+      setStatusMsg('Game closed — pot reclaimed');
+      setView('lobby');
       await refreshCredits(addr);
       await refreshSessions();
-      setStatusMsg('Game closed — pot reclaimed');
     } catch (err) {
+      // Even on error, try to refresh — in-memory state may be correct
+      await refreshCredits(addr);
+      await refreshSessions();
       setError(friendlyError(err));
+      setStatusMsg('');
     } finally { setBusy(false); }
   }
 
@@ -329,6 +347,11 @@ export default function App({ wallet }) {
       setError(`Need ${dollars(sess.entranceFee)} to join.`); return;
     }
     setBusy(true); setStatusMsg('Joining…');
+    // Optimistic: debit entrance fee immediately
+    setBalance((prev) => {
+      const newBal = BigInt(prev) - BigInt(sess.entranceFee);
+      return newBal < 0n ? '0' : newBal.toString();
+    });
     try {
       const entropy = randomEntropy();
       const salt = randomEntropy();
@@ -343,6 +366,8 @@ export default function App({ wallet }) {
       setStatusMsg('');
       await refreshCredits(addr);
     } catch (err) {
+      // Restore balance on failure
+      setBalance((prev) => (BigInt(prev) + BigInt(sess.entranceFee)).toString());
       setError(friendlyError(err));
       setStatusMsg('');
     } finally { setBusy(false); }
@@ -400,13 +425,23 @@ export default function App({ wallet }) {
           setRevealed((prev) => ({ ...full, ...prev }));
         }
       }
-      await refreshCredits(addr);
+      // Optimistic: credit any prizeEarned back to balance immediately
+      if (run.prizeEarned && BigInt(run.prizeEarned) > 0n) {
+        setBalance((prev) => (BigInt(prev) + BigInt(run.prizeEarned)).toString());
+      }
       setSession(null);
       setRun({ bombsHit: 0, prizesFound: 0, status: 'idle', spentTotal: '0', prizeEarned: '0', nextTileCost: '0' });
       setView('lobby');
       setStatusMsg('');
+      await refreshCredits(addr);
       await refreshSessions();
     } catch (err) {
+      // Even on error, refresh — in-memory state may be correct already
+      await refreshCredits(addr);
+      await refreshSessions();
+      setSession(null);
+      setRun({ bombsHit: 0, prizesFound: 0, status: 'idle', spentTotal: '0', prizeEarned: '0', nextTileCost: '0' });
+      setView('lobby');
       setError(friendlyError(err));
     } finally {
       setBusy(false);

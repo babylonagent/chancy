@@ -108,6 +108,26 @@ function initDatabase(dbPath) {
   db.exec("PRAGMA synchronous = NORMAL");
   db.exec("PRAGMA foreign_keys = ON");
   db.exec(SCHEMA_SQL);
+
+  // ── Migrations: add columns that may not exist in older databases ──
+  // CREATE TABLE IF NOT EXISTS won't add columns to an existing table,
+  // so we use ALTER TABLE for schema evolution.
+  const sessionCols = new Set(
+    db.prepare("PRAGMA table_info(sessions)").all().map((r) => r.name)
+  );
+  const migrations = [
+    { col: "cumulative_earnings", sql: "ALTER TABLE sessions ADD COLUMN cumulative_earnings TEXT NOT NULL DEFAULT '0'" },
+    { col: "cumulative_players", sql: "ALTER TABLE sessions ADD COLUMN cumulative_players INTEGER NOT NULL DEFAULT 0" },
+    { col: "cumulative_runs", sql: "ALTER TABLE sessions ADD COLUMN cumulative_runs INTEGER NOT NULL DEFAULT 0" },
+    { col: "last_played_at", sql: "ALTER TABLE sessions ADD COLUMN last_played_at TEXT" },
+    { col: "players_seen", sql: "ALTER TABLE sessions ADD COLUMN players_seen TEXT NOT NULL DEFAULT '[]'" },
+  ];
+  for (const m of migrations) {
+    if (!sessionCols.has(m.col)) {
+      try { db.exec(m.sql); } catch (e) { /* column may have been added concurrently */ }
+    }
+  }
+
   return db;
 }
 
@@ -286,7 +306,8 @@ function persistSqliteStore(db, store) {
     commit();
   } catch (err) {
     try { rollback(); } catch {}
-    throw err;
+    // Non-fatal: in-memory state is already correct. Log but don't crash the request.
+    console.error("[sqlite] persist failed (non-fatal):", err.message);
   }
 }
 
