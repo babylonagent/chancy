@@ -572,21 +572,48 @@ export default function App({ wallet }) {
             <button className="back-btn" onClick={() => { setPollingDeposit(false); setView('lobby'); }}>← Back</button>
             <span className="section-title" style={{ margin: 0 }}>Add credits</span>
           </div>
-          <p className="view-sub">Send USDC (Base) to this address. Credits appear automatically. No approval needed.</p>
-          {vaultAddress && (
-            <div className="qr-section">
-              <img className="qr-code" src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(vaultAddress)}`} alt="Deposit QR" />
+
+          {/* Step 1: Fund wallet (if empty) */}
+          <div className="deposit-step">
+            <div className="deposit-step-num">1</div>
+            <div className="deposit-step-body">
+              <strong>Get USDC into your wallet</strong>
+              <p>Send USDC (on Base) to your wallet address below — from an exchange, another wallet, or anywhere.</p>
+              <div className="your-address-card" onClick={() => {
+                try { navigator.clipboard.writeText(addr); } catch {}
+              }}>
+                <div className="vault-label">Your wallet</div>
+                <div className="vault-address">{addr ? `${addr.slice(0,10)}…${addr.slice(-8)}` : '—'}</div>
+                <div className="vault-copy-hint">Tap to copy</div>
+              </div>
             </div>
-          )}
-          <div className="vault-address-card" onClick={copyVaultAddress}>
-            <div className="vault-label">Deposit address</div>
-            <div className="vault-address">{vaultAddress || 'Loading…'}</div>
-            <div className="vault-copy-hint">{copied ? '✓ Copied' : 'Tap to copy'}</div>
           </div>
+
+          {/* Step 2: Send to vault */}
+          <div className="deposit-step">
+            <div className="deposit-step-num">2</div>
+            <div className="deposit-step-body">
+              <strong>Send USDC to the vault</strong>
+              <p>Transfer from your wallet to this address. Credits appear automatically (~10 seconds). 5% fee applies.</p>
+              {vaultAddress && (
+                <div className="qr-section">
+                  <img className="qr-code" src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(vaultAddress)}`} alt="Deposit QR" />
+                </div>
+              )}
+              <div className="vault-address-card" onClick={copyVaultAddress}>
+                <div className="vault-label">Vault address</div>
+                <div className="vault-address">{vaultAddress || 'Loading…'}</div>
+                <div className="vault-copy-hint">{copied ? '✓ Copied' : 'Tap to copy'}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Actions */}
           <div className="deposit-actions">
             {isConnected && <button className="btn btn-primary" onClick={openWalletSend}>Send from wallet</button>}
-            <button className="btn btn-secondary" onClick={() => { copyVaultAddress(); setPollingDeposit(true); }}>{copied ? '✓ Copied' : 'Copy address'}</button>
+            <button className="btn btn-secondary" onClick={() => { copyVaultAddress(); setPollingDeposit(true); }}>{copied ? '✓ Copied' : 'Copy vault address'}</button>
           </div>
+
           {pollingDeposit ? (
             <div className="deposit-polling">
               <div className="pulse-dot" />
@@ -596,11 +623,12 @@ export default function App({ wallet }) {
           ) : statusMsg ? (
             <div className="deposit-success">{statusMsg}</div>
           ) : null}
+
           <div className="deposit-balance">
             <span className="label">Balance</span>
             <span className="value gold">{dollars(balance)}</span>
           </div>
-          <p className="fee-note">5% fee · 1:1 with USDC</p>
+          <p className="fee-note">5% fee · 1:1 with USDC · USDC must be on Base network</p>
         </div>
       )}
 

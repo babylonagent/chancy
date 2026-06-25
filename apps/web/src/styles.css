@@ -444,6 +444,31 @@ input { outline: none; }
 }
 .next-cost-hint .gold { color: var(--accent); font-weight: 800; }
 
+/* ═══ DEPOSIT STEPS ═══ */
+.deposit-step {
+  display: flex; gap: 14px;
+  padding: 18px 20px; border-radius: var(--radius);
+  background: var(--bg-card); border: 1px solid var(--border);
+}
+.deposit-step-num {
+  width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+  background: var(--accent-dim); color: var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 900; font-size: 15px; font-family: 'Space Grotesk';
+}
+.deposit-step-body { display: flex; flex-direction: column; gap: 8px; flex: 1; }
+.deposit-step-body strong { font-size: 15px; }
+.deposit-step-body p { color: var(--text-dim); font-size: 13px; line-height: 1.5; }
+
+.your-address-card {
+  padding: 14px 16px; border-radius: var(--radius-sm);
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 4px; text-align: center;
+  cursor: pointer; transition: border-color 0.15s;
+}
+.your-address-card:active { transform: scale(0.98); }
+.your-address-card .vault-address { font-size: 14px; color: var(--text); }
+
 /* ═══ DEPOSIT ═══ */
 .deposit-view { display: flex; flex-direction: column; gap: 16px; padding: 12px 0 80px; }
 .qr-section { display: flex; justify-content: center; padding: 8px 0; }
