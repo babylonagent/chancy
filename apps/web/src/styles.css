@@ -97,89 +97,8 @@ input { outline: none; }
 .btn-ghost:hover:not(:disabled) { color: var(--text); border-color: var(--border-hover); }
 .btn-sm { padding: 10px 16px; font-size: 14px; width: auto; }
 
-/* === LANDING === */
-.landing { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 40px 0 24px; gap: 28px; }
-.landing .hero-logo { width: 80px; height: 80px; filter: drop-shadow(0 0 24px var(--accent-glow)); animation: float 4s ease-in-out infinite; }
-@keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
-
-.landing h1 { font-size: clamp(36px, 9vw, 48px); line-height: 1.05; max-width: 360px; }
-.landing h1 .gold { color: var(--accent); }
-.landing .tagline { color: var(--text-dim); font-size: 17px; line-height: 1.5; max-width: 340px; }
-
-.mode-preview { display: flex; flex-direction: column; gap: 10px; width: 100%; }
-.mode-card {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 18px 20px; border-radius: var(--radius);
-  background: var(--bg-card); border: 1px solid var(--border);
-  transition: border-color 0.2s, transform 0.12s;
-}
-.mode-card:active { transform: scale(0.98); }
-.mode-card .info { display: flex; flex-direction: column; gap: 4px; text-align: left; }
-.mode-card .name { font-size: 20px; font-weight: 800; }
-.mode-card .desc { color: var(--text-dim); font-size: 13px; }
-.mode-card .mult {
-  font-family: 'Space Grotesk'; font-size: 28px; font-weight: 700;
-  color: var(--accent); letter-spacing: -0.04em;
-}
-.mode-card.selected { border-color: var(--accent); background: var(--accent-dim); }
-
-/* === PLAY VIEW === */
-.play-view { display: flex; flex-direction: column; gap: 20px; padding: 20px 0; }
+/* === SHARED === */
 .section-title { font-size: 14px; font-weight: 800; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: -8px; }
-
-.mode-selector { display: flex; gap: 8px; }
-.mode-tab {
-  flex: 1; padding: 14px 8px; border-radius: var(--radius-sm);
-  background: var(--bg-card); border: 1px solid var(--border);
-  display: flex; flex-direction: column; align-items: center; gap: 4px;
-  transition: all 0.15s;
-}
-.mode-tab .tab-name { font-weight: 800; font-size: 14px; }
-.mode-tab .tab-mult { font-family: 'Space Grotesk'; font-size: 22px; font-weight: 700; color: var(--text-dim); }
-.mode-tab.selected { border-color: var(--accent); background: var(--accent-dim); }
-.mode-tab.selected .tab-mult { color: var(--accent); }
-
-.mode-detail {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 16px 20px; border-radius: var(--radius);
-  background: var(--bg-card); border: 1px solid var(--border);
-}
-.mode-detail .left { display: flex; flex-direction: column; gap: 2px; }
-.mode-detail .bombs-prizes { font-size: 14px; color: var(--text-dim); }
-.mode-detail .payout-amount { font-family: 'Space Grotesk'; font-size: 32px; font-weight: 700; color: var(--accent); }
-
-/* === WALLET PANEL === */
-.wallet-bar {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 16px 20px; border-radius: var(--radius);
-  background: var(--bg-card); border: 1px solid var(--border);
-}
-.wallet-bar .wallet-info { display: flex; flex-direction: column; gap: 2px; }
-.wallet-bar .wallet-label { font-size: 12px; color: var(--text-faint); font-weight: 700; }
-.wallet-bar .wallet-addr { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
-
-.credit-display {
-  display: flex; flex-direction: column; gap: 16px;
-  padding: 24px 20px; border-radius: var(--radius);
-  background: linear-gradient(135deg, var(--bg-card), var(--bg-elevated));
-  border: 1px solid var(--border);
-}
-.credit-row { display: flex; justify-content: space-between; align-items: center; }
-.credit-row .label { font-size: 14px; color: var(--text-dim); font-weight: 700; }
-.credit-row .value { font-family: 'Space Grotesk'; font-size: 28px; font-weight: 700; }
-.credit-row .value.gold { color: var(--accent); }
-.credit-row .value.green { color: var(--green); }
-
-.deposit-section { display: flex; flex-direction: column; gap: 12px; }
-.input-group { display: flex; gap: 10px; }
-.input-group input {
-  flex: 1; padding: 14px 16px; border-radius: var(--radius-sm);
-  background: var(--bg-input); border: 1px solid var(--border);
-  color: var(--text); font-size: 16px; font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-.input-group input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
-.input-group input::placeholder { color: var(--text-faint); }
 
 /* === ROUND VIEW === */
 .round-view { display: flex; flex-direction: column; gap: 16px; padding: 8px 0; }
@@ -274,7 +193,7 @@ input { outline: none; }
 
 /* Status text */
 .status-text { text-align: center; color: var(--text-dim); font-size: 14px; font-weight: 600; min-height: 20px; }
-.status-text.shuffling { color: var(--gold); animation: pulse 1s ease-in-out infinite; }
+.status-text.shuffling { color: var(--accent); animation: pulse 1s ease-in-out infinite; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 
 /* Error */
@@ -431,11 +350,19 @@ input { outline: none; }
 .host-view { display: flex; flex-direction: column; gap: 16px; padding: 12px 0 80px; }
 .view-sub { color: var(--text-dim); font-size: 14px; line-height: 1.5; }
 
-/* ═══ MODE SELECTOR ═══ */
-.mode-selector .mode-tab { padding: 12px 8px; }
+/* ═══ MODE SELECTOR (host view) ═══ */
+.mode-selector { display: flex; gap: 8px; }
+.mode-tab {
+  flex: 1; padding: 14px 8px; border-radius: var(--radius-sm);
+  background: var(--bg-card); border: 1px solid var(--border);
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  transition: all 0.15s;
+}
+.mode-tab .tab-name { font-weight: 800; font-size: 14px; }
 .mode-tab .tab-sub { font-size: 11px; color: var(--text-faint); font-weight: 600; }
+.mode-tab.selected { border-color: var(--accent); background: var(--accent-dim); }
 
-/* ═══ POT INPUT ═══ */
+/* ═══ HOST ═══ */
 .pot-input-group {
   display: flex; align-items: center;
   border-radius: var(--radius-sm); overflow: hidden;

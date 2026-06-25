@@ -149,6 +149,9 @@ export default function App({ wallet }) {
   useEffect(() => {
     if (isConnected && address) {
       setView((prev) => prev === 'splash' ? 'lobby' : prev);
+    } else if (!isConnected) {
+      // If user disconnects, return to splash (unless in active game)
+      setView((prev) => prev === 'round' ? prev : 'splash');
     }
   }, [isConnected, address]);
 
