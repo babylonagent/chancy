@@ -379,14 +379,91 @@ export default function App({ wallet }) {
 
       {error && <div className="error-banner" style={{ marginBottom: 12 }} onClick={() => setError('')}>{error}</div>}
 
-      {/* ═══ SPLASH ═══ */}
+      {/* ═══ LANDING ═══ */}
       {view === 'splash' && (
-        <div className="splash">
-          <img className="hero-logo" src={chancyLogo} alt="Chancy" />
-          <h1>Host a game.<br/>Beat the board.<br/><span className="gold">Win the pot.</span></h1>
-          <p className="tagline">Player-funded prize pots. Pay per tile, dodge bombs, collect every prize to sweep the pot.</p>
-          <button className="btn btn-primary" onClick={connectWallet}>Connect wallet →</button>
-          <button className="btn btn-ghost" onClick={() => setShowRules(true)}>How to play</button>
+        <div className="landing-page">
+          {/* Hero */}
+          <div className="landing-hero">
+            <img className="hero-logo" src={chancyLogo} alt="Chancy" />
+            <h1>Host a game.<br/>Beat the board.<br/><span className="gold">Win the pot.</span></h1>
+            <p className="tagline">Trustless P2P tile-reveal on Base. Hosts fund prize pots. Players pay per tile. Dodge bombs, collect prizes, sweep the pot.</p>
+            <button className="btn btn-primary" onClick={connectWallet}>Connect wallet →</button>
+            <button className="btn btn-ghost" onClick={() => setShowRules(true)}>How to play</button>
+          </div>
+
+          {/* How it works */}
+          <div className="landing-section">
+            <h2 className="landing-h2">How it works</h2>
+            <div className="how-steps">
+              <div className="how-step">
+                <div className="step-num">1</div>
+                <div className="step-body">
+                  <strong>Host creates</strong>
+                  <p>Lock a prize pot from your credits. Pick difficulty. Earn when players fail.</p>
+                </div>
+              </div>
+              <div className="how-step">
+                <div className="step-num">2</div>
+                <div className="step-body">
+                  <strong>Player joins</strong>
+                  <p>Pay a small entry. Reveal tiles one by one. Each tile costs more than the last.</p>
+                </div>
+              </div>
+              <div className="how-step">
+                <div className="step-num">3</div>
+                <div className="step-body">
+                  <strong>Win or lose</strong>
+                  <p>Find every prize → sweep the pot. Hit 3 bombs → game over. Quit anytime → keep what you found.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Game modes preview */}
+          <div className="landing-section">
+            <h2 className="landing-h2">Game modes</h2>
+            <div className="modes-preview">
+              <div className="mode-info-card easy">
+                <span className="mode-name">Easy</span>
+                <span className="mode-stats">5 bombs · 3 prizes</span>
+                <span className="mode-desc">More prizes, fewer bombs. Higher chance to sweep.</span>
+              </div>
+              <div className="mode-info-card normal">
+                <span className="mode-name">Normal</span>
+                <span className="mode-stats">7 bombs · 2 prizes</span>
+                <span className="mode-desc">Balanced risk. Standard payouts.</span>
+              </div>
+              <div className="mode-info-card hardcore">
+                <span className="mode-name">Hardcore</span>
+                <span className="mode-stats">10 bombs · 1 prize</span>
+                <span className="mode-desc">One prize, maximum bombs. Highest reward.</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Trust signals */}
+          <div className="landing-section">
+            <div className="trust-row">
+              <div className="trust-item">
+                <span className="trust-icon">⛓</span>
+                <span>Onchain randomness via Pyth Entropy</span>
+              </div>
+              <div className="trust-item">
+                <span className="trust-icon">🔐</span>
+                <span>No approval needed — raw USDC send</span>
+              </div>
+              <div className="trust-item">
+                <span className="trust-icon">📜</span>
+                <span>Open source · verifiable contracts</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="landing-footer">
+            <a href="https://github.com/babylonagent/chancy" target="_blank" rel="noopener">GitHub</a>
+            <button className="link-btn" onClick={() => setShowRules(true)}>How to play</button>
+          </div>
         </div>
       )}
 
