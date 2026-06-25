@@ -3,11 +3,8 @@ import chancyLogo from './assets/chancy-logo.svg';
 
 // ─── CONFIG ─────────────────────────────────────────────────────────────────
 const API = import.meta.env?.VITE_CHANCY_API_URL || '';
-
-// Base mainnet (VPS is configured for mainnet)
 const BASE_CHAIN_ID = '0x2105';
 const TARGET_CHAIN_ID = BASE_CHAIN_ID;
-
 const USDC_DECIMALS = 1_000_000n;
 const BOMB_LIVES = 3;
 const TILES = Array.from({ length: 64 }, (_, i) => i + 1);
@@ -21,12 +18,13 @@ const CHAIN_PARAMS = {
   },
 };
 
-// Modes — must match backend modeConfig exactly
 const MODES = {
   Easy:     { bombs: 5,  prizes: 3, copy: '5 bombs · 3 prizes' },
   Normal:   { bombs: 7,  prizes: 2, copy: '7 bombs · 2 prizes' },
   Hardcore: { bombs: 10, prizes: 1, copy: '10 bombs · 1 prize' },
 };
+
+const POT_PRESETS = ['5', '10', '25', '50'];
 
 // ─── UTILS ──────────────────────────────────────────────────────────────────
 function formatUsdc(units) {
@@ -76,7 +74,6 @@ function getWalletProvider() {
   if (!window.ethereum) throw new Error('No wallet found. Install a supported wallet first.');
   return window.ethereum;
 }
-function shortAddr(a) { return !a || /^0x0{40}$/i.test(a) ? '—' : `${a.slice(0, 6)}…${a.slice(-4)}`; }
 
 // ─── RULES MODAL ────────────────────────────────────────────────────────────
 function RulesSheet({ onClose }) {
@@ -93,23 +90,19 @@ function RulesSheet({ onClose }) {
         <p className="modal-sub">Hosts fund prize pots. Players pay per tile. Find all prizes to win the pot.</p>
         <div className="rule-item">
           <div className="rule-icon gold">$</div>
-          <div className="rule-text"><strong>Add credits</strong><span>Deposit once → play instantly. No pop-ups mid-game.</span></div>
+          <div className="rule-text"><strong>Add credits</strong><span>Send USDC to your deposit address. Credits appear in seconds.</span></div>
         </div>
         <div className="rule-item">
           <div className="rule-icon blue">◉</div>
-          <div className="rule-text"><strong>Host a game</strong><span>Lock a prize pot. Earn when players fail. Close anytime to reclaim.</span></div>
+          <div className="rule-text"><strong>Host or join</strong><span>Hosts lock a pot. Players pay $0.05 to join and reveal tiles.</span></div>
         </div>
         <div className="rule-item">
           <div className="rule-icon green">★</div>
-          <div className="rule-text"><strong>Play & reveal</strong><span>Pay $0.05 to join. Tiles cost more as you reveal more. Find all prizes → win the pot.</span></div>
+          <div className="rule-text"><strong>Find all prizes</strong><span>Tiles cost more as you go. Collect every prize to sweep the pot.</span></div>
         </div>
         <div className="rule-item">
           <div className="rule-icon red">✺</div>
-          <div className="rule-text"><strong>Dodge bombs</strong><span>Three bombs ends your run. Quit anytime to keep prizes earned.</span></div>
-        </div>
-        <div className="rule-item">
-          <div className="rule-icon gold">↗</div>
-          <div className="rule-text"><strong>Cash out</strong><span>Withdraw credits to your wallet whenever you want.</span></div>
+          <div className="rule-text"><strong>Dodge bombs</strong><span>Three bombs ends your run. Quit anytime to keep what you found.</span></div>
         </div>
         <button className="btn btn-primary" onClick={onClose} style={{ marginTop: 16 }}>Got it</button>
       </div>
@@ -119,58 +112,66 @@ function RulesSheet({ onClose }) {
 
 // ─── MAIN APP ───────────────────────────────────────────────────────────────
 export default function App() {
-  const [view, setView] = useState('landing'); // landing | lobby | round | host
+  // view: splash (pre-connect) | lobby (main hub) | host | deposit | round
+  const [view, setView] = useState('splash');
   const [online, setOnline] = useState(null);
   const [wallet, setWallet] = useState('');
   const [chainId, setChainId] = useState('');
   const [showRules, setShowRules] = useState(() => !localStorage.getItem('chancy_rules_seen'));
 
-  // Wallet / credits
+  // Credits
   const [balance, setBalance] = useState('0');
   const [withdrawable, setWithdrawable] = useState('0');
-  const [withdrawAmt, setWithdrawAmt] = useState('');
 
-  // Deposit UI state
+  // Deposit
   const [vaultAddress, setVaultAddress] = useState('');
-  const [usdcAddress, setUsdcAddress] = useState('');
   const [copied, setCopied] = useState(false);
   const [pollingDeposit, setPollingDeposit] = useState(false);
   const [preDepositBalance, setPreDepositBalance] = useState('0');
 
-  // Lobby state
+  // Lobby
   const [sessions, setSessions] = useState([]);
-  const [mode, setMode] = useState('Normal');
+  const [sessionsLoading, setSessionsLoading] = useState(false);
 
-  // Host state
+  // Host
   const [hostMode, setHostMode] = useState('Normal');
   const [potAmt, setPotAmt] = useState('10');
 
-  // Active round state
+  // Round
   const [session, setSession] = useState(null);
   const [revealed, setRevealed] = useState({});
   const [run, setRun] = useState({ bombsHit: 0, prizesFound: 0, status: 'idle', spentTotal: '0', prizeEarned: '0', nextTileCost: '0' });
+
+  // Withdraw
+  const [showWithdraw, setShowWithdraw] = useState(false);
+  const [withdrawAmt, setWithdrawAmt] = useState('');
 
   const [busy, setBusy] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
   const [error, setError] = useState('');
 
-  const modeCfg = MODES[mode] || MODES.Normal;
-
-  // ── Health check + config ──
+  // ── Health + config ──
   useEffect(() => {
     getJson('/health').then(() => setOnline(true)).catch(() => setOnline(false));
     getJson('/v2/config').then((cfg) => {
       if (cfg.vaultAddress) setVaultAddress(cfg.vaultAddress);
-      if (cfg.usdcAddress) setUsdcAddress(cfg.usdcAddress);
     }).catch(() => {});
   }, []);
 
   // ── Wallet events ──
   useEffect(() => {
     if (!window.ethereum) return undefined;
-    const onAccts = (a) => setWallet(a?.[0] || '');
+    const onAccts = (a) => {
+      const addr = a?.[0] || '';
+      setWallet(addr);
+      if (addr) setView('lobby');
+    };
     const onChain = (c) => setChainId(c || '');
-    window.ethereum.request({ method: 'eth_accounts' }).then(onAccts).catch(() => {});
+    window.ethereum.request({ method: 'eth_accounts' }).then((a) => {
+      const addr = a?.[0] || '';
+      setWallet(addr);
+      if (addr) setView('lobby');
+    }).catch(() => {});
     window.ethereum.request({ method: 'eth_chainId' }).then(onChain).catch(() => {});
     window.ethereum.on?.('accountsChanged', onAccts);
     window.ethereum.on?.('chainChanged', onChain);
@@ -192,12 +193,18 @@ export default function App() {
   }, [wallet]);
 
   const refreshSessions = useCallback(async () => {
+    setSessionsLoading(true);
     try {
       const d = await getJson('/v2/sessions');
       setSessions(d.sessions || []);
-      return d.sessions || [];
-    } catch { return []; }
+    } catch { /* silent */ }
+    setSessionsLoading(false);
   }, []);
+
+  // Auto-refresh sessions when entering lobby
+  useEffect(() => {
+    if (view === 'lobby') refreshSessions();
+  }, [view, refreshSessions]);
 
   useEffect(() => { if (wallet) refreshCredits(wallet); }, [wallet, refreshCredits]);
 
@@ -225,6 +232,7 @@ export default function App() {
       const next = accts[0] || '';
       setWallet(next);
       await ensureChain(provider);
+      if (next) setView('lobby');
       return next;
     } catch (err) {
       setError(err.message || String(err));
@@ -232,17 +240,7 @@ export default function App() {
     }
   }
 
-  // ── DEPOSIT (indexer-based) ──
-  // User sends USDC directly to vault. Indexer auto-credits.
-  // Wallet remains optional — user can send from any wallet.
-  async function connectWalletForDeposit() {
-    const player = await connectWallet();
-    if (player) {
-      setPreDepositBalance(balance);
-      setView('deposit');
-    }
-  }
-
+  // ── DEPOSIT ──
   async function copyVaultAddress() {
     try {
       await navigator.clipboard.writeText(vaultAddress);
@@ -253,54 +251,47 @@ export default function App() {
     }
   }
 
-  // Open native wallet send to vault (if MetaMask/compatible)
   async function openWalletSend() {
-    if (!wallet) { await connectWalletForDeposit(); return; }
     try {
       const provider = getWalletProvider();
       await provider.request({
         method: 'eth_sendTransaction',
-        params: [{
-          from: wallet,
-          to: vaultAddress,
-          value: '0x0',
-          // No data — user picks amount in their wallet UI
-        }],
+        params: [{ from: wallet, to: vaultAddress, value: '0x0' }],
       });
+      setPollingDeposit(true);
     } catch (err) {
-      // Some wallets don't support pre-filling — fall back to copy
-      if (err.code === -32602 || err.message?.includes('parameters')) {
+      if (err.code !== 4001) {
         await copyVaultAddress();
-        setStatusMsg('Address copied — open your wallet and paste to send');
+        setStatusMsg('Address copied — send from your wallet');
+        setPollingDeposit(true);
       }
     }
   }
 
-  // Poll for balance change after user sends USDC
+  // Poll for balance change after deposit
   useEffect(() => {
     if (!pollingDeposit || !wallet) return;
     const interval = setInterval(async () => {
       const bal = await refreshCredits(wallet);
       if (BigInt(bal) > BigInt(preDepositBalance)) {
         setPollingDeposit(false);
-        setStatusMsg(`Credits added — ${dollars(bal)}`);
+        setStatusMsg(`+${dollars((BigInt(bal) - BigInt(preDepositBalance)).toString())} added`);
       }
     }, 4000);
     return () => clearInterval(interval);
   }, [pollingDeposit, wallet, preDepositBalance, refreshCredits]);
 
-  // ── HOST: CREATE SESSION ──
+  // ── HOST: CREATE ──
   async function hostCreateSession() {
     setError('');
-    const player = wallet || await connectWallet();
-    if (!player) return;
     const pot = usdcUnits(potAmt);
-    if (BigInt(pot) < 5_000_000n) { setError('Prize pot must be at least $5.'); return; }
+    if (BigInt(pot) < 5_000_000n) { setError('Minimum pot is $5.'); return; }
+    if (BigInt(pot) > BigInt(balance)) { setError('Not enough credits.'); return; }
     setBusy(true); setStatusMsg('Creating game…');
     try {
-      const result = await postJson('/v2/sessions/create', { host: player, mode: hostMode, prizePot: pot });
-      await refreshCredits(player);
-      setStatusMsg(`Game #${result.sessionId} live — ${dollars(result.prizePot)} pot`);
+      const result = await postJson('/v2/sessions/create', { host: wallet, mode: hostMode, prizePot: pot });
+      await refreshCredits(wallet);
+      setStatusMsg(`Game #${result.sessionId} live`);
       setView('lobby');
       await refreshSessions();
     } catch (err) {
@@ -309,9 +300,8 @@ export default function App() {
     } finally { setBusy(false); }
   }
 
-  // ── HOST: CLOSE SESSION ──
+  // ── HOST: CLOSE ──
   async function closeSession(sessionId) {
-    setError('');
     if (!wallet) return;
     setBusy(true);
     try {
@@ -327,33 +317,31 @@ export default function App() {
   // ── PLAYER: JOIN + REVEAL ──
   async function joinSession(sess) {
     setError('');
-    const player = wallet || await connectWallet();
-    if (!player) return;
     if (BigInt(balance) < BigInt(sess.entranceFee)) {
-      setError(`Need at least ${dollars(sess.entranceFee)} to join. Add credits first.`);
+      setError(`Need ${dollars(sess.entranceFee)} to join.`);
       return;
     }
-    setBusy(true); setStatusMsg('Joining game…');
+    setBusy(true); setStatusMsg('Joining…');
     try {
       const entropy = randomEntropy();
       const salt = randomEntropy();
       const commitment = await sha256Hex(entropy, salt);
-      await postJson(`/v2/sessions/${sess.sessionId}/join`, { player, commitment });
-      setStatusMsg('Shuffling tiles…');
-      const revealed = await postJson(`/v2/sessions/${sess.sessionId}/reveal`, { player, entropy, salt });
+      await postJson(`/v2/sessions/${sess.sessionId}/join`, { player: wallet, commitment });
+      setStatusMsg('Shuffling…');
+      await postJson(`/v2/sessions/${sess.sessionId}/reveal`, { player: wallet, entropy, salt });
       setSession({ sessionId: sess.sessionId, mode: sess.mode, prizePot: sess.prizePot });
       setRevealed({});
       setRun({ bombsHit: 0, prizesFound: 0, status: 'active', spentTotal: '0', prizeEarned: '0', nextTileCost: sess.firstTileCost || '0' });
       setView('round');
       setStatusMsg('');
-      await refreshCredits(player);
+      await refreshCredits(wallet);
     } catch (err) {
       setError(err.message || String(err));
       setStatusMsg('');
     } finally { setBusy(false); }
   }
 
-  // ── PLAYER: CLICK TILE ──
+  // ── PLAYER: CLICK ──
   async function clickTile(tile) {
     if (!session || run.status !== 'active' || revealed[tile] || busy) return;
     setBusy(true);
@@ -367,18 +355,17 @@ export default function App() {
       });
       if (result.status === 'won') { setStatusMsg(`Won ${dollars(result.prizeEarned)}!`); await refreshCredits(wallet); }
       else if (result.status === 'lost') { setStatusMsg('Game over — 3 bombs'); }
-      else if (result.outcome === 'prize') { setStatusMsg('Prize found!'); }
+      else if (result.outcome === 'prize') { setStatusMsg('Prize!'); }
       else if (result.outcome === 'bomb') { setStatusMsg(`Bomb — ${result.bombsHit}/3`); }
-      else { setStatusMsg('Empty tile'); }
+      else { setStatusMsg('Empty'); }
     } catch (err) {
       setError(err.message || String(err));
     } finally { setBusy(false); }
   }
 
-  // ── PLAYER: QUIT ROUND ──
+  // ── PLAYER: QUIT ──
   async function quitRound() {
     if (!session) { setView('lobby'); return; }
-    setError('');
     setBusy(true);
     try {
       if (run.status === 'active') {
@@ -405,16 +392,15 @@ export default function App() {
   async function requestWithdrawal() {
     setError('');
     const amount = usdcUnits(withdrawAmt);
-    if (BigInt(amount) <= 0n) { setError('Enter an amount to cash out.'); return; }
-    if (BigInt(amount) > BigInt(withdrawable)) { setError('Amount exceeds withdrawable credits.'); return; }
-    setBusy(true); setStatusMsg('Cashing out…');
+    if (BigInt(amount) <= 0n) { setError('Enter an amount.'); return; }
+    if (BigInt(amount) > BigInt(withdrawable)) { setError('Exceeds withdrawable.'); return; }
+    setBusy(true); setStatusMsg('Requesting…');
     try {
-      const player = wallet || await connectWallet();
-      if (!player) return;
-      const result = await postJson('/v2/withdrawals/request', { player, amount, destination: player });
+      const result = await postJson('/v2/withdrawals/request', { player: wallet, amount, destination: wallet });
       setWithdrawAmt('');
-      await refreshCredits(player);
-      setStatusMsg(`Cash-out requested — ${dollars(result.payoutAmount)} heading to your wallet.`);
+      setShowWithdraw(false);
+      await refreshCredits(wallet);
+      setStatusMsg(`${dollars(result.payoutAmount)} → your wallet`);
     } catch (err) {
       setError(err.message || String(err));
       setStatusMsg('');
@@ -425,7 +411,17 @@ export default function App() {
   const lives = BOMB_LIVES - run.bombsHit;
   const isPlaying = view === 'round' && session && run.status === 'active';
   const gameEnded = run.status === 'won' || run.status === 'lost';
-  const wrongChain = chainId && chainId.toLowerCase() !== TARGET_CHAIN_ID;
+  const wrongChain = wallet && chainId && chainId.toLowerCase() !== TARGET_CHAIN_ID;
+  const modeCfg = session ? MODES[session.mode] : MODES.Normal;
+
+  function goHome() {
+    if (!isPlaying) {
+      setSession(null);
+      setStatusMsg('');
+      setError('');
+      setView('lobby');
+    }
+  }
 
   // ═══════════════════════════════════════════════════════════════════════════
   //  RENDER
@@ -433,105 +429,79 @@ export default function App() {
   return (
     <div className="app">
       {/* ── Header ── */}
-      <header className="header">
-        <button className="brand" onClick={() => { if (!isPlaying) setView('landing'); }}>
-          <img src={chancyLogo} alt="" /> Chancy
-        </button>
-        <div className={`balance-pill ${online === false ? 'offline' : ''}`}>
-          <span className="dot" />
-          {wallet ? dollars(balance) : 'Not connected'}
-        </div>
-      </header>
+      {view !== 'splash' && (
+        <header className="header">
+          <button className="brand" onClick={goHome}>
+            <img src={chancyLogo} alt="" /> Chancy
+          </button>
+          <div className={`balance-pill ${online === false ? 'offline' : ''}`} onClick={wallet ? goHome : undefined}>
+            <span className="dot" />
+            {wallet ? dollars(balance) : '—'}
+          </div>
+        </header>
+      )}
 
-      {/* ── Wrong chain banner ── */}
       {wrongChain && (
-        <div className="error-banner" style={{ marginBottom: 12 }} onClick={() => wallet && connectWallet()}>
+        <div className="error-banner" style={{ marginBottom: 12 }} onClick={connectWallet}>
           ⚠ Wrong network — tap to switch to Base
         </div>
       )}
-
-      {/* ── Error ── */}
       {error && <div className="error-banner" style={{ marginBottom: 12 }} onClick={() => setError('')}>{error}</div>}
 
-      {/* ═══ LANDING ═══ */}
-      {view === 'landing' && (
-        <div className="landing">
+      {/* ═══ SPLASH (pre-connect) ═══ */}
+      {view === 'splash' && (
+        <div className="splash">
           <img className="hero-logo" src={chancyLogo} alt="Chancy" />
           <h1>Host a game.<br/>Beat the board.<br/><span className="gold">Win the pot.</span></h1>
-          <p className="tagline">Player-funded prize pots. Pay per tile, dodge bombs, collect every prize to sweep the pot. Cash out anytime.</p>
-
-          <div className="cta-row">
-            <button className="btn btn-primary" onClick={() => setView('lobby')}>
-              {wallet ? 'Browse games' : 'Connect & play'} →
-            </button>
-            <button className="btn btn-secondary" onClick={() => setView('host')}>
-              Host a game
-            </button>
-          </div>
-
-          <div className="mode-preview">
-            {Object.entries(MODES).map(([name, cfg]) => (
-              <div key={name} className="mode-card">
-                <div className="info">
-                  <span className="name">{name}</span>
-                  <span className="desc">{cfg.copy}</span>
-                </div>
-              </div>
-            ))}
-          </div>
+          <p className="tagline">Player-funded prize pots. Pay per tile, dodge bombs, collect every prize to sweep the pot.</p>
+          <button className="btn btn-primary" onClick={connectWallet}>
+            Connect wallet →
+          </button>
+          <button className="btn btn-ghost" onClick={() => setShowRules(true)}>How to play</button>
         </div>
       )}
 
-      {/* ═══ LOBBY (browse + play) ═══ */}
-      {view === 'lobby' && (
+      {/* ═══ LOBBY (main hub) ═══ */}
+      {view === 'lobby' && wallet && (
         <div className="lobby-view">
-          <div className="lobby-header">
-            <button className="back-btn" onClick={() => setView('landing')}>← Back</button>
-            <button className="btn btn-secondary btn-sm" onClick={() => setView('host')}>+ Host</button>
-          </div>
-
-          {/* Wallet / Credits */}
-          {!wallet && (
-            <div className="wallet-bar">
-              <div className="wallet-info">
-                <span className="wallet-label">Wallet</span>
-                <span className="wallet-addr">Not connected</span>
+          {/* Balance card */}
+          <div className="credit-card">
+            <div className="credit-top">
+              <div className="credit-big">
+                <span className="label">Credits</span>
+                <span className="value gold">{dollars(balance)}</span>
               </div>
-              <button className="btn btn-primary btn-sm" onClick={connectWallet}>Connect</button>
-            </div>
-          )}
-
-          {wallet && (
-            <div className="credit-card">
-              <div className="credit-top">
-                <div className="credit-big">
-                  <span className="label">Credits</span>
-                  <span className="value gold">{dollars(balance)}</span>
-                </div>
+              {BigInt(withdrawable) > 0n && (
                 <div className="credit-side">
                   <span className="label">Withdrawable</span>
                   <span className="value green small">{dollars(withdrawable)}</span>
                 </div>
-              </div>
-              <div className="credit-actions-simple">
-                <button className="btn btn-primary btn-sm" onClick={() => { setPreDepositBalance(balance); setView('deposit'); }}>
-                  + Add credits
-                </button>
-                <div className="withdraw-row">
-                  <input value={withdrawAmt} onChange={(e) => setWithdrawAmt(e.target.value)} placeholder={formatUsdc(withdrawable)} inputMode="decimal" className="credit-input" />
-                  <button className="btn btn-ghost btn-sm" disabled={busy || BigInt(withdrawable) <= 0n} onClick={requestWithdrawal}>Withdraw</button>
-                </div>
-              </div>
+              )}
             </div>
-          )}
+            <div className="credit-actions-simple">
+              <button className="btn btn-primary btn-sm" onClick={() => { setPreDepositBalance(balance); setView('deposit'); }}>
+                + Add credits
+              </button>
+              {BigInt(withdrawable) > 0n && (
+                <button className="btn btn-ghost btn-sm" onClick={() => setShowWithdraw(true)}>
+                  Withdraw
+                </button>
+              )}
+            </div>
+          </div>
 
-          {/* Open games list */}
-          <div className="section-title">Open games</div>
-          <button className="refresh-btn" onClick={refreshSessions}>↻ Refresh</button>
+          {/* Open games */}
+          <div className="lobby-section-header">
+            <span className="section-title">Open games</span>
+            <button className="refresh-icon" onClick={refreshSessions} disabled={sessionsLoading}>
+              {sessionsLoading ? '⋯' : '↻'}
+            </button>
+          </div>
+
           {sessions.length === 0 ? (
             <div className="empty-state">
-              <p>No open games right now.</p>
-              <button className="btn btn-secondary btn-sm" onClick={() => setView('host')}>Host the first game</button>
+              <p>No open games yet.</p>
+              <button className="btn btn-primary btn-sm" onClick={() => setView('host')}>Host the first game</button>
             </div>
           ) : (
             <div className="game-list">
@@ -539,38 +509,50 @@ export default function App() {
                 <div key={s.sessionId} className={`game-card mode-${s.mode.toLowerCase()}`}>
                   <div className="game-card-top">
                     <span className="game-mode-badge">{s.mode}</span>
-                    <span className="game-pot">{dollars(s.prizePot)} pot</span>
+                    <span className="game-pot">{dollars(s.prizePot)}</span>
                   </div>
-                  <div className="game-card-info">
-                    <span>{MODES[s.mode]?.copy || s.mode}</span>
-                    <span className="dim">First tile {dollars(s.firstTileCost)}</span>
-                    <span className="dim">Entry {dollars(s.entranceFee)}</span>
+                  <div className="game-card-mid">
+                    <span>{MODES[s.mode]?.copy}</span>
+                    <span className="dim">First tile {dollars(s.firstTileCost)} · Entry {dollars(s.entranceFee)}</span>
                   </div>
-                  {s.host.toLowerCase() === wallet?.toLowerCase() ? (
-                    <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => closeSession(s.sessionId)}>Close & refund</button>
+                  {s.host.toLowerCase() === wallet.toLowerCase() ? (
+                    <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => closeSession(s.sessionId)}>
+                      Close & refund
+                    </button>
                   ) : (
-                    <button className="btn btn-primary btn-sm" disabled={busy || !wallet} onClick={() => joinSession(s)}>Join — {dollars(s.entranceFee)}</button>
+                    <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => joinSession(s)}>
+                      Join · {dollars(s.entranceFee)}
+                    </button>
                   )}
                 </div>
               ))}
             </div>
           )}
 
+          {/* Host button */}
+          <div className="bottom-bar">
+            <button className="btn btn-secondary" onClick={() => setView('host')}>
+              + Host a game
+            </button>
+          </div>
+
           {statusMsg && <p className="status-text">{statusMsg}</p>}
         </div>
       )}
 
-      {/* ═══ HOST VIEW ═══ */}
-      {view === 'host' && (
+      {/* ═══ HOST ═══ */}
+      {view === 'host' && wallet && (
         <div className="host-view">
-          <div className="lobby-header">
+          <div className="lobby-section-header">
             <button className="back-btn" onClick={() => setView('lobby')}>← Back</button>
+            <span className="section-title" style={{ margin: 0 }}>Host a game</span>
           </div>
 
-          <h2 className="view-title">Host a game</h2>
-          <p className="view-sub">Lock a prize pot from your credits. Players pay to reveal tiles. You earn when they fail. Close anytime to reclaim.</p>
+          <div className="host-balance">
+            <span>You have</span>
+            <span className="value gold">{dollars(balance)}</span>
+          </div>
 
-          {/* Mode selector */}
           <div className="section-title">Difficulty</div>
           <div className="mode-selector">
             {Object.entries(MODES).map(([name, cfg]) => (
@@ -581,88 +563,79 @@ export default function App() {
             ))}
           </div>
 
-          {/* Pot input */}
           <div className="section-title">Prize pot</div>
           <div className="pot-input-group">
             <span className="pot-prefix">$</span>
             <input value={potAmt} onChange={(e) => setPotAmt(e.target.value)} placeholder="10" inputMode="decimal" />
           </div>
-          <p className="hint-text">Minimum $5 · {wallet ? `You have ${dollars(balance)}` : 'Connect wallet first'}</p>
+          <div className="pot-presets">
+            {POT_PRESETS.map((p) => (
+              <button key={p} className={`preset-chip ${potAmt === p ? 'selected' : ''}`} onClick={() => setPotAmt(p)}>${p}</button>
+            ))}
+          </div>
 
-          <button className="btn btn-primary" disabled={busy || !wallet || BigInt(usdcUnits(potAmt)) > BigInt(balance)} onClick={hostCreateSession}>
-            {wallet ? `Create game — ${dollars(usdcUnits(potAmt))}` : 'Connect wallet'}
+          <button className="btn btn-primary" disabled={busy || BigInt(usdcUnits(potAmt)) > BigInt(balance)} onClick={hostCreateSession}>
+            {busy ? 'Creating…' : `Create game — ${dollars(usdcUnits(potAmt))}`}
           </button>
-
-          {!wallet && (
-            <button className="btn btn-secondary" style={{ marginTop: 8 }} onClick={connectWallet}>Connect wallet</button>
-          )}
 
           {statusMsg && <p className="status-text">{statusMsg}</p>}
         </div>
       )}
 
-      {/* ═══ DEPOSIT (indexer-based) ═══ */}
-      {view === 'deposit' && (
+      {/* ═══ DEPOSIT ═══ */}
+      {view === 'deposit' && wallet && (
         <div className="deposit-view">
-          <div className="lobby-header">
+          <div className="lobby-section-header">
             <button className="back-btn" onClick={() => { setPollingDeposit(false); setView('lobby'); }}>← Back</button>
+            <span className="section-title" style={{ margin: 0 }}>Add credits</span>
           </div>
 
-          <h2 className="view-title">Add credits</h2>
-          <p className="view-sub">Send USDC (Base) to the address below. Credits appear automatically after confirmation (~10 seconds). No approval needed.</p>
+          <p className="view-sub">Send USDC (Base) to this address. Credits appear automatically. No approval needed.</p>
 
-          {/* QR Code */}
           {vaultAddress && (
             <div className="qr-section">
               <img
                 className="qr-code"
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(vaultAddress)}`}
-                alt="Vault address QR"
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(vaultAddress)}`}
+                alt="Deposit QR"
               />
             </div>
           )}
 
-          {/* Vault address */}
           <div className="vault-address-card" onClick={copyVaultAddress}>
-            <div className="vault-label">Deposit address (USDC · Base)</div>
+            <div className="vault-label">Deposit address</div>
             <div className="vault-address">{vaultAddress || 'Loading…'}</div>
             <div className="vault-copy-hint">{copied ? '✓ Copied' : 'Tap to copy'}</div>
           </div>
 
-          {/* Actions */}
           <div className="deposit-actions">
             {window.ethereum && (
-              <button className="btn btn-primary" onClick={() => { openWalletSend(); setPollingDeposit(true); }}>
-                Open wallet to send
-              </button>
+              <button className="btn btn-primary" onClick={openWalletSend}>Send from wallet</button>
             )}
             <button className="btn btn-secondary" onClick={() => { copyVaultAddress(); setPollingDeposit(true); }}>
-              {copied ? '✓ Copied — send from any wallet' : 'Copy address'}
+              {copied ? '✓ Copied' : 'Copy address'}
             </button>
           </div>
 
-          {/* Status / polling */}
           {pollingDeposit ? (
             <div className="deposit-polling">
               <div className="pulse-dot" />
-              <span>Waiting for your deposit…</span>
+              <span>Waiting for deposit…</span>
               <button className="btn btn-ghost btn-sm" onClick={() => setPollingDeposit(false)}>Cancel</button>
             </div>
           ) : statusMsg ? (
             <div className="deposit-success">{statusMsg}</div>
           ) : null}
 
-          {/* Current balance */}
           <div className="deposit-balance">
-            <span className="label">Current balance</span>
+            <span className="label">Balance</span>
             <span className="value gold">{dollars(balance)}</span>
           </div>
-
-          <p className="fee-note">5% deposit fee applies · Credits are 1:1 with USDC</p>
+          <p className="fee-note">5% fee · 1:1 with USDC</p>
         </div>
       )}
 
-      {/* ═══ ROUND (active game) ═══ */}
+      {/* ═══ ROUND ═══ */}
       {view === 'round' && session && (
         <div className="round-view">
           <div className="round-header">
@@ -670,7 +643,6 @@ export default function App() {
             <span className="mode-badge">{session.mode}</span>
           </div>
 
-          {/* Pot + cost meters */}
           <div className="meters">
             <div className="meter pot">
               <span className="meter-label">Pot</span>
@@ -686,21 +658,16 @@ export default function App() {
             </div>
           </div>
 
-          {/* Bomb lives */}
           <div className="bomb-lives">
             {Array.from({ length: BOMB_LIVES }).map((_, i) => (
               <div key={i} className={`bomb-life ${i >= lives ? 'lost' : ''}`} />
             ))}
           </div>
 
-          {/* Next tile cost hint */}
           {isPlaying && (
-            <div className="next-cost-hint">
-              Next tile: <strong className="gold">{dollars(run.nextTileCost)}</strong>
-            </div>
+            <div className="next-cost-hint">Next tile: <strong className="gold">{dollars(run.nextTileCost)}</strong></div>
           )}
 
-          {/* Board */}
           <div className="board">
             {TILES.map((tile) => {
               const state = revealed[tile];
@@ -716,33 +683,50 @@ export default function App() {
             })}
           </div>
 
-          {/* Status */}
           {statusMsg && !gameEnded && <p className="status-text">{statusMsg}</p>}
 
-          {/* Result banner */}
           {gameEnded && (
             <div className={`result-banner ${run.status === 'won' ? 'win' : 'lose'}`}>
               <span className="result-title">{run.status === 'won' ? 'Pot won!' : 'Game over'}</span>
               {run.status === 'won' ? (
                 <>
                   <span className="result-amount">{dollars(run.prizeEarned)}</span>
-                  <span className="result-sub">Credited to your balance</span>
+                  <span className="result-sub">Credited to balance</span>
                 </>
               ) : (
-                <span className="result-sub">Three bombs. {dollars(run.spentTotal)} lost to the host.</span>
+                <span className="result-sub">{dollars(run.spentTotal)} lost to host</span>
               )}
-              <button className="btn btn-primary" style={{ marginTop: 8 }} onClick={quitRound}>
-                Back to lobby →
-              </button>
+              <button className="btn btn-primary" style={{ marginTop: 8 }} onClick={quitRound}>Back to games →</button>
             </div>
           )}
         </div>
       )}
 
-      {/* ── Help FAB ── */}
-      <button className="help-fab" onClick={() => setShowRules(true)}>?</button>
+      {/* ── Withdraw modal ── */}
+      {showWithdraw && (
+        <div className="modal-backdrop" onClick={() => setShowWithdraw(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-handle" />
+            <h2>Withdraw</h2>
+            <p className="modal-sub">Send credits back to your wallet. 5% fee applies.</p>
+            <div className="pot-input-group" style={{ marginBottom: 8 }}>
+              <span className="pot-prefix">$</span>
+              <input value={withdrawAmt} onChange={(e) => setWithdrawAmt(e.target.value)} placeholder={formatUsdc(withdrawable)} inputMode="decimal" />
+            </div>
+            <p className="hint-text">Withdrawable: {dollars(withdrawable)}</p>
+            <button className="btn btn-primary" disabled={busy} onClick={requestWithdrawal}>
+              {busy ? 'Processing…' : 'Withdraw'}
+            </button>
+            <button className="btn btn-ghost" style={{ marginTop: 8 }} onClick={() => setShowWithdraw(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
 
-      {/* ── Rules sheet ── */}
+      {/* ── Help FAB ── */}
+      {view !== 'splash' && (
+        <button className="help-fab" onClick={() => setShowRules(true)}>?</button>
+      )}
+
       {showRules && <RulesSheet onClose={closeRules} />}
     </div>
   );
