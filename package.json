@@ -38,6 +38,7 @@
     "zod": "^3.25.76"
   },
   "dependencies": {
+    "@farcaster/miniapp-sdk": "^0.3.0",
     "@pythnetwork/entropy-sdk-solidity": "^2.2.1",
     "@reown/appkit": "^1.8.21",
     "@reown/appkit-adapter-wagmi": "^1.8.21",

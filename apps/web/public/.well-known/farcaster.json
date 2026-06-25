@@ -1,0 +1,25 @@
+{
+  "miniapp": {
+    "version": "1",
+    "name": "Chancy",
+    "iconUrl": "https://chancy.cash/icon-512.png",
+    "homeUrl": "https://chancy.cash",
+    "splashImageUrl": "https://chancy.cash/icon-192.png",
+    "splashBackgroundColor": "#08080c",
+    "subtitle": "Onchain tile-reveal game",
+    "description": "Trustless P2P tile-reveal on Base. Hosts fund prize pots. Players pay per tile. Dodge bombs, collect prizes, sweep the pot.",
+    "primaryCategory": "games",
+    "tags": ["base", "onchain", "minesweeper", "usdc", "x402"],
+    "requiredChains": ["eip155:8453"],
+    "requiredCapabilities": [
+      "wallet.getEthereumProvider",
+      "actions.signIn"
+    ],
+    "heroImageUrl": "https://chancy.cash/icon-512.png",
+    "tagline": "Onchain tile-reveal game",
+    "ogTitle": "Chancy",
+    "ogDescription": "Trustless P2P tile-reveal on Base. Hosts fund prize pots. Players pay per tile. Dodge bombs, collect prizes, sweep the pot.",
+    "ogImageUrl": "https://chancy.cash/icon-512.png",
+    "noindex": false
+  }
+}
