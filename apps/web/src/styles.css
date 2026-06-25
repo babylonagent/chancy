@@ -621,6 +621,21 @@ input { outline: none; }
 [data-theme="light"] .modal-backdrop { background: rgba(0,0,0,0.3); }
 [data-theme="light"] .qr-code { background: #fff; }
 
+/* ═══ WITHDRAW SUCCESS BANNER ═══ */
+.withdraw-success-banner {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 18px; border-radius: var(--radius-sm);
+  background: var(--green-dim); border: 1px solid var(--green);
+  color: var(--green); font-weight: 700; font-size: 14px;
+  cursor: pointer; animation: slideUp 0.3s ease;
+}
+.withdraw-success-banner .withdraw-success-icon {
+  display: flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: 50%;
+  background: var(--green); color: var(--bg);
+  font-size: 14px; font-weight: 900; flex-shrink: 0;
+}
+
 /* === RESPONSIVE === */
 @media (min-width: 520px) {
   .app { max-width: 480px; }

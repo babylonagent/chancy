@@ -162,6 +162,7 @@ export default function App({ wallet }) {
   // Withdraw
   const [showWithdraw, setShowWithdraw] = useState(false);
   const [withdrawAmt, setWithdrawAmt] = useState('');
+  const [withdrawSuccess, setWithdrawSuccess] = useState('');
 
   const [busy, setBusy] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
@@ -455,14 +456,27 @@ export default function App({ wallet }) {
     const amount = usdcUnits(withdrawAmt);
     if (BigInt(amount) <= 0n) { setError('Enter an amount.'); return; }
     if (BigInt(amount) > BigInt(withdrawable)) { setError('Exceeds withdrawable.'); return; }
-    setBusy(true); setStatusMsg('Requesting…');
+    setBusy(true); setStatusMsg('Processing withdrawal…');
+    // Optimistic: debit withdrawn amount from balance + withdrawable immediately
+    setBalance((prev) => {
+      const newBal = BigInt(prev) - BigInt(amount);
+      return newBal < 0n ? '0' : newBal.toString();
+    });
+    setWithdrawable((prev) => {
+      const newW = BigInt(prev) - BigInt(amount);
+      return newW < 0n ? '0' : newW.toString();
+    });
     try {
       const result = await postJson('/v2/withdrawals/request', { player: addr, amount, destination: addr });
       setWithdrawAmt('');
       setShowWithdraw(false);
+      // Show success banner in lobby
+      setWithdrawSuccess(`${dollars(result.payoutAmount)} withdrawal submitted — check your wallet shortly`);
       await refreshCredits(addr);
-      setStatusMsg(`${dollars(result.payoutAmount)} → your wallet`);
     } catch (err) {
+      // Restore balance on failure
+      setBalance((prev) => (BigInt(prev) + BigInt(amount)).toString());
+      setWithdrawable((prev) => (BigInt(prev) + BigInt(amount)).toString());
       setError(friendlyError(err));
       setStatusMsg('');
     } finally { setBusy(false); }
@@ -604,6 +618,12 @@ export default function App({ wallet }) {
       {/* ═══ LOBBY ═══ */}
       {view === 'lobby' && isConnected && (
         <div className="lobby-view">
+          {withdrawSuccess && (
+            <div className="withdraw-success-banner" onClick={() => setWithdrawSuccess('')}>
+              <span className="withdraw-success-icon">✓</span>
+              <span>{withdrawSuccess}</span>
+            </div>
+          )}
           <div className="credit-card">
             <div className="credit-top">
               <div className="credit-big">
