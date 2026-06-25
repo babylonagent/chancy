@@ -104,6 +104,84 @@ test/               Hardhat contract tests
 docs/               Specs and handoff docs
 ```
 
+## Agent-Friendly / x402 Payments
+
+Chancy supports both **human players** (credit ledger) and **AI agents** (x402 pay-per-action). Agents can play the full game loop via REST API without pre-funding, API keys, or accounts.
+
+### How x402 works
+
+The [x402 protocol](https://github.com/coinbase/x402) turns HTTP 402 (Payment Required) into a standard machine-to-machine payment flow:
+
+```
+Agent calls an x402 endpoint
+         ↓
+Server returns HTTP 402 + payment requirements (amount, USDC, facilitator)
+         ↓
+Agent signs EIP-3009 USDC transferAuthorization
+         ↓
+Agent retries request with PAYMENT-SIGNATURE header
+         ↓
+Coinbase facilitator verifies signature → settles on-chain
+         ↓
+Game action executes (join, click, etc.)
+```
+
+No deposits, no wallets connected in a UI, no spending-cap approvals — agents sign a single USDC transfer per action.
+
+### x402 Endpoints
+
+All agent endpoints live under `/v2/x402/`. Free endpoints never return 402; paid endpoints return 402 until payment is attached.
+
+| Method | Endpoint | Cost | Description |
+|---|---|---|---|
+| `GET` | `/v2/x402/sessions` | Free | List open games |
+| `POST` | `/v2/x402/sessions/create` | Pays prize pot | Host a new game |
+| `POST` | `/v2/x402/sessions/:id/join` | $0.05 entrance | Join a game |
+| `POST` | `/v2/x402/sessions/:id/reveal` | Free | Reveal board entropy |
+| `POST` | `/v2/x402/sessions/:id/click` | Pays tile cost | Reveal a tile |
+| `POST` | `/v2/x402/sessions/:id/quit` | Free | Quit and settle |
+
+### Credit-based Endpoints (human players)
+
+The credit ledger endpoints (used by the web frontend) live under `/v2/`:
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/v2/config` | Server config (vault address) |
+| `GET` | `/v2/credits/:address` | Get credit balance |
+| `GET` | `/v2/sessions` | List open games |
+| `POST` | `/v2/sessions/create` | Host a game (debits credit) |
+| `POST` | `/v2/sessions/:id/join` | Join a game (debits credit) |
+| `POST` | `/v2/sessions/:id/reveal` | Reveal entropy |
+| `POST` | `/v2/sessions/:id/click` | Reveal a tile (debits credit) |
+| `POST` | `/v2/sessions/:id/quit` | Quit and settle |
+| `POST` | `/v2/sessions/:id/close` | Host closes game (refunds pot) |
+| `POST` | `/v2/withdrawals/request` | Withdraw credits to wallet |
+
+## How agents can play (Quick Start)
+
+The reference Python client (`chancy_x402_client.py`) implements the full x402 game loop:
+
+```bash
+# Install dependencies
+pip install eth-account web3 requests
+
+# List open games
+python3 chancy_x402_client.py --key 0xYOUR_PRIVATE_KEY --list
+
+# Play automatically (joins, reveals tiles, quits on low odds)
+python3 chancy_x402_client.py --key 0xYOUR_PRIVATE_KEY --play
+```
+
+The agent needs:
+- A funded EOA on Base with USDC
+- The private key (for signing EIP-3009 transfers)
+- No on-chain approvals — x402 uses `transferWithAuthorization`
+
+### Hermes agent integration
+
+Chancy ships a [Hermes Agent skill](https://hermes-agent.nousresearch.com/docs) for playing via x402 directly from an AI agent. See the skill under `skills/` to let Hermes host, join, and play Chancy games autonomously.
+
 ## Fee model
 
 | Fee | Rate | Destination |
