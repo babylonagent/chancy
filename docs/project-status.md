@@ -1,67 +1,69 @@
 # Chancy Project Status
 
-Updated: 2026-06-17T08:41:03Z
+Updated: 2026-06-26
 
 ## Current state
 
-Chancy V1 is live on Base mainnet and publicly deployed on the VPS domain with HTTPS enabled.
+Chancy V2 is live on Base mainnet at chancy.cash. P2P host-vs-player tile-reveal game with credit-ledger deposits, x402 agent payments, Farcaster Mini App support, and Bankr skill integration.
 
 - Public apex: `https://chancy.cash`
 - Public www: `https://www.chancy.cash`
 - VPS: `167.233.22.140`
-- Static web root: `/var/www/chancy.cash`
-- API service: `chancy-api.service`
-- API port: `8788`
-- nginx routes: `/health`, `/data/*`, `/tx/*`, `/read/*`
-- TLS: Let's Encrypt certificate issued for `chancy.cash` and `www.chancy.cash`, auto-renew scheduled by certbot.
+- API service: `chancy-api.service` (port 8788)
+- nginx routes: `/health`, `/v2/*`, `/data/*`, `/tx/*`, `/read/*`
+- TLS: Let's Encrypt, auto-renew via certbot
 
-## Production contract
+## Production contracts (Base mainnet)
 
 - Network: Base mainnet (`8453`)
-- ChancyGame: `0x2Cd96e21f3f3008ec6daFb464F12fa91C54DF36c`
-- Controller owner: `0xebb5d4628dc10981432e7bc3a0ee336884701afe`
+- ChancyVault: `0xbE81cE9d` (credit ledger, 5% deposit/withdraw fee)
 - Base USDC: `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`
 - Pyth Entropy: `0x6E7D74FA7d5c90FEF9F0512987605a6d546181Bb`
-- Verified: code exists, owner matches, USDC allowed, ETH allowed, entropy matches, `nextSessionId = 1` at deploy verification.
 
-## App/API status
+## Architecture
 
-- Vercel preview remains available: `https://chancy-preview.vercel.app`
-- Primary production domain is now the VPS-hosted `https://chancy.cash` / `https://www.chancy.cash` deployment.
-- Frontend loads real sessions from `/data/sessions`.
-- `/data/sessions` queries the Base mainnet contract instead of showing fake rooms.
-- Full API route surface is preserved on VPS deployment; do not reduce functionality to fit Vercel limits.
+| Component | Mechanism |
+|---|---|
+| Deposits | Raw USDC to vault → indexer credits sender 95% net (no approve needed) |
+| Board fairness | Commit-reveal + Pyth Entropy on-chain randomness |
+| Prize pots | Host deposits credits → locks pot → player joins for $0.05 |
+| Payouts | Hot wallet relayer auto-pays pending withdrawals |
+| Fund safety | 5% fees to controller, rebalance sweeps vault↔hot (cap $500) |
+| Agent payments | x402 pay-per-action on /v2/x402/* endpoints (Coinbase CDP facilitator) |
+| Agent integration | Bankr skill (PR #503), x402 client script |
+| Social | Farcaster Mini App SDK with dual-context wallet |
 
-## Latest verification
+## Recent work shipped (C46–C53)
 
-- Public DNS:
-  - `chancy.cash A -> 167.233.22.140`
-  - `www.chancy.cash A -> 167.233.22.140` observed via public resolvers; local resolver may lag.
-- HTTPS certificate: issued successfully for `chancy.cash` and `www.chancy.cash`.
-- `https://chancy.cash/` returns `200 OK`.
-- `https://www.chancy.cash/` verified with explicit resolve to VPS because local resolver still lagged at verification time.
-- `https://chancy.cash/health` returns mainnet contract `0x2Cd96e21f3f3008ec6daFb464F12fa91C54DF36c`.
-- `https://chancy.cash/data/sessions` returns contract-backed session data: `nextSessionId = 1`, no fake sessions.
-- `https://chancy.cash/tx/create-session` builds a transaction to the mainnet contract.
-- `https://chancy.cash/read/session/1` builds read payload.
-- `https://chancy.cash/read/current-reveal-cost/1` builds read payload.
-- Browser smoke: `https://chancy.cash` loads `Chancy`; sessions page shows live contract-backed empty state and room controls.
+| Task | What | Commits |
+|---|---|---|
+| C46 | P2P host-vs-player game mechanics + frontend rewrite | 617c2f0, aab22c0 |
+| C47 | Indexer-based deposits — no approve, raw USDC transfer | 5e56051 |
+| C48 | Reown AppKit (530+ wallets), landing page, favicon, manifest | 5ba417f, 132809b, 25ed10c, 9c2e90e, 9fd64ab |
+| C49 | Deposit flow polish — wallet display, auto-poll, disconnect | 52a2ce0, fbf0976 |
+| C50 | Player UX — error mapping, live credits, themes, optimistic updates | 2b709bb, 643cc7b, 1a6a96c |
+| C51 | Bankr skill for x402 agent play (PR #503 to BankrBot/skills) | 6f08153 |
+| C52 | Farcaster Mini App SDK + dual-context wallet | d59025f |
+| C53 | Babylon branding + tech logos + README x402/API docs | 75c074d, b340d62, ede3d5f |
+
+HEAD: `ede3d5f` — clean tree, 78 tracked files, zero secrets.
 
 ## Kanban state
 
-Completed:
+- **Done:** C1–C53 (53 tasks completed)
+- **Blocked:** C11 (optional mainnet deploy support), C12 (swap-to-USDC integration)
 
-- C17 Rebuild web flow for corrected mechanics
-- C18 Base Sepolia redeploy and smoke corrected game
-- C19 Final V1 mainnet handoff refresh
-- C20 DNS cutover + HTTPS verification
+## Open / next-up work
 
-Open / future work:
-
-- Optional mainnet gameplay smoke only after explicit approval because it spends real assets.
-- Optional production polish: create real first room, add public room examples, improve wallet/approval UX, monitor uptime.
+1. **Swap-to-USDC integration (C12)** — replace external "Get USDC" link with embedded one-click swap (Uniswap widget / 0x / Coinbase). Blocked on prioritization.
+2. **Live playthrough verification** — full deposit→play→win→withdraw cycle on mainnet with real assets. Requires explicit approval (spends real USDC).
+3. **Farcaster launch** — Mini App SDK integrated but not yet published to Farcaster catalog. Needs Farcaster account/app configuration.
+4. **Bankr skill adoption** — PR #503 submitted, awaiting merge. Promote to Bankr agent ecosystem.
+5. **VPS redeploy** — latest commits (C46–C53) need VPS deploy to push changes live to chancy.cash. Local repo is ahead of production.
 
 ## Safety notes
 
-- No private keys belong in Git, Vercel, docs, screenshots, or chats.
-- Mainnet gameplay smoke was not run because it spends real assets; only run it after explicit approval.
+- No private keys in Git, Vercel, docs, frontend bundles, or chats.
+- Mainnet gameplay smoke not run — spends real assets, requires explicit approval.
+- Hot wallet key on VPS filesystem — acceptable for small float, plan HSM/multisig for scale.
+- Admin token is static bearer — rotation mechanism documented but not yet implemented (C43).
