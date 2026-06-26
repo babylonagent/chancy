@@ -158,9 +158,9 @@ function createDepositIndexer({
 
       if (safeBlock <= lastScanned) return; // nothing new
 
-      // Scan in chunks of max 2000 blocks to avoid RPC limits
+      // Scan in small chunks to stay within Alchemy free-tier limits (max 10 blocks per eth_getLogs)
       const fromBlock = lastScanned + 1;
-      const toBlock = Math.min(safeBlock, fromBlock + 1999);
+      const toBlock = Math.min(safeBlock, fromBlock + 9);
 
       const count = await scanBlocks(fromBlock, toBlock);
       setLastBlock(toBlock);

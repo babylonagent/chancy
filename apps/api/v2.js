@@ -740,4 +740,5 @@ module.exports = {
   installV2Routes, createV2Store, loadV2Store, deriveBoard, boardCommitHash,
   computeCommitment, modeConfig, revealCostAt, prizePerTile,
   ENTRANCE_FEE, MIN_PRIZE_POT, MAX_PRIZE_POT, BOMBS_TO_GAME_OVER, IDLE_TIMEOUT_MS,
+  getBalance, setBalance, persistStore, trackPlayer, recordRunEnd, resetRun, cleanupStaleSessions,
 };

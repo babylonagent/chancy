@@ -5,9 +5,10 @@ const { z } = require("zod");
 const { encodeFunctionData, createPublicClient, http, parseAbi, decodeEventLog } = require("viem");
 const chancyAbiJson = require("../../abi/ChancyGame.json");
 const chancyVaultAbiJson = require("../../abi/ChancyVault.json");
-const { installV2Routes, loadV2Store } = require("./v2");
+const { installV2Routes, loadV2Store, getBalance, setBalance, trackPlayer, recordRunEnd, resetRun, cleanupStaleSessions, persistStore, modeConfig, revealCostAt, prizePerTile, deriveBoard, boardCommitHash, computeCommitment, ENTRANCE_FEE, MIN_PRIZE_POT, MAX_PRIZE_POT, MAX_CONCURRENT_SESSIONS: _unused } = require("./v2");
 const { initDatabase, loadSqliteStore, migrateJsonToSqlite } = require("./sqlite-store");
 const { makeEntropyRequester } = require("./entropy");
+const { createChancyX402 } = require("./x402-routes");
 const { createDepositIndexer } = require("./deposit-indexer");
 const { rateLimit, getClientIp, stakeCap, corsRestriction, securityHeaders, MAX_CONCURRENT_SESSIONS } = require("./security");
 const chancyRandomnessAbiJson = require("../../abi/ChancyRandomness.json");
@@ -274,6 +275,60 @@ function createApp({
     adminToken: process.env.CHANCY_ADMIN_TOKEN || "",
   });
 
+  // ── x402 Pay-Per-Action Integration ──
+  // Adds /v2/x402/* endpoints with HTTP 402 payment protocol.
+  // Agents pay USDC per-request via Coinbase facilitator — no pre-funding needed.
+  const x402Wallet = process.env.CHANCY_X402_WALLET || process.env.CHANCY_HOT_WALLET_ADDRESS || "0x0000000000000000000000000000000000000000";
+  const x402Testnet = process.env.CHANCY_X402_TESTNET === "true"; // default: mainnet (false)
+
+  const x402PersistFn = db
+    ? () => require("./sqlite-store").persistSqliteStore(db, store)
+    : () => persistStore(store, v2StorePath);
+
+  try {
+    // Load CDP API key for mainnet facilitator auth
+    const cdpKeyName = process.env.CHANCY_X402_CDP_KEY_NAME || "";
+    const cdpKeyFile = process.env.CHANCY_X402_CDP_KEY_FILE || "";
+    let cdpPrivateKey = "";
+    if (!x402Testnet && cdpKeyName && cdpKeyFile) {
+      try {
+        cdpPrivateKey = require("fs").readFileSync(cdpKeyFile, "utf8").trim();
+      } catch (e) {
+        console.error(JSON.stringify({ ok: false, x402: false, error: "CDP_KEY_FILE_READ_FAILED: " + e.message }));
+      }
+    }
+
+    const { middleware: x402Mw, installX402Routes } = createChancyX402({
+      receivingWallet: x402Wallet,
+      store,
+      revealCostAt,
+      modeConfig,
+      testnet: x402Testnet,
+      persist: x402PersistFn,
+      cdpKeyName,
+      cdpPrivateKey,
+    });
+
+    // x402 middleware must run BEFORE route handlers for protected routes
+    app.use(x402Mw);
+
+    // Install x402 game route handlers
+    const { MAX_CONCURRENT_SESSIONS } = require("./security");
+    installX402Routes(app, {
+      getBalance, setBalance,
+      generateCommitment: (entropy, salt) => computeCommitment(entropy, salt),
+      deriveBoard, boardCommitHash, computeCommitment,
+      requestEntropy: requestEntropy || (async () => { throw new Error("ENTROPY_NOT_CONFIGURED"); }),
+      prizePerTile, trackPlayer, recordRunEnd, resetRun, cleanupStaleSessions,
+      MAX_CONCURRENT_SESSIONS,
+      MIN_PRIZE_POT, MAX_PRIZE_POT,
+    });
+
+    console.log(JSON.stringify({ ok: true, x402: true, network: x402Testnet ? "base-sepolia" : "base-mainnet", wallet: x402Wallet }));
+  } catch (err) {
+    console.error(JSON.stringify({ ok: false, x402: false, error: err.message }));
+  }
+
   // ── Deposit Indexer — auto-credits raw USDC transfers to vault ──
   // Watches Transfer events, credits from address 95% net (5% fee stays in vault).
   // Replaces approve+deposit flow with single raw send.
@@ -308,7 +363,7 @@ function createApp({
       vaultAddress: vault,
       usdcAddress: usdc,
       store,
-      persist: persistFn,
+      persist: x402PersistFn,
       minConfirmations: Number(process.env.CHANCY_DEPOSIT_MIN_CONFIRMATIONS || 3),
       pollIntervalMs: Number(process.env.CHANCY_INDEXER_POLL_MS || 5000),
       getLastBlock,
