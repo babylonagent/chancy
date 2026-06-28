@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "npm run web:build",
+  "buildCommand": "npm run export:abi && npm run web:build",
   "outputDirectory": "dist/web",
   "functions": {
     "api/**/*.js": {
