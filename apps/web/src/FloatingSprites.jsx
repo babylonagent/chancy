@@ -35,7 +35,7 @@ export default function FloatingSprites() {
     let sprites = [];
 
     function initSprites() {
-      const count = window.innerWidth < 768 ? 5 : 9;
+      const count = window.innerWidth < 768 ? 15 : 27;
       sprites = [];
       for (let i = 0; i < count; i++) {
         const type = SPRITE_TYPES[i % SPRITE_TYPES.length];
