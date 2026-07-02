@@ -55,10 +55,13 @@
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
-html { scroll-behavior: smooth; }
+html {
+  scroll-behavior: smooth;
+  background: var(--bg);
+}
 body {
   min-width: 320px; min-height: 100dvh;
-  background: var(--bg); color: var(--text);
+  background: transparent; color: var(--text);
   overflow-x: hidden;
   image-rendering: pixelated;
 }
