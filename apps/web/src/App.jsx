@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState, useRef } from 'react';
+import sfx from './sound';
 import chancyLogo from './assets/chancy-logo.svg';
 import baseLogo from './assets/tech/base.svg';
 import farcasterLogo from './assets/tech/farcaster.svg';
@@ -18,6 +19,14 @@ import frameGold from './assets/pixel/frame-gold.png';
 import frameDark from './assets/pixel/frame-dark.png';
 import frameGreen from './assets/pixel/frame-green.png';
 import frameRed from './assets/pixel/frame-red.png';
+import btnGoldRaised from './assets/pixel/btn-gold-raised.png';
+import btnGoldPressed from './assets/pixel/btn-gold-pressed.png';
+import btnDarkRaised from './assets/pixel/btn-dark-raised.png';
+import btnDarkPressed from './assets/pixel/btn-dark-pressed.png';
+import btnGreenRaised from './assets/pixel/btn-green-raised.png';
+import btnGreenPressed from './assets/pixel/btn-green-pressed.png';
+import btnRedRaised from './assets/pixel/btn-red-raised.png';
+import btnRedPressed from './assets/pixel/btn-red-pressed.png';
 
 // ─── CONFIG ─────────────────────────────────────────────────────────────────
 const API = import.meta.env?.VITE_CHANCY_API_URL || '';
@@ -247,6 +256,7 @@ export default function App({ wallet, farcaster }) {
   const [error, setError] = useState('');
   const [quitting, setQuitting] = useState(false);
   const [theme, setTheme] = useState(getInitialTheme);
+  const [muted, setMuted] = useState(true); // start muted
 
   const addr = address || '';
   const modeCfg = session ? MODES[session.mode] : MODES.Normal;
@@ -260,6 +270,25 @@ export default function App({ wallet, farcaster }) {
   function toggleTheme() {
     setTheme((t) => t === 'dark' ? 'light' : 'dark');
   }
+
+  function toggleMute() {
+    sfx.init();
+    const newMuted = sfx.toggleMute();
+    setMuted(newMuted);
+    if (!newMuted) sfx.click();
+  }
+
+  // ── Global button click sound ──
+  useEffect(() => {
+    function handleClick(e) {
+      if (e.target.closest('button, .balance-pill, .preset-chip, .mode-tab, .your-address-card, .vault-address-card')) {
+        sfx.init();
+        sfx.click();
+      }
+    }
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, []);
 
   // ── Health + config ──
   useEffect(() => {
@@ -481,11 +510,11 @@ export default function App({ wallet, farcaster }) {
       if (result.prizeCredited && BigInt(result.prizeCredited) > 0n) {
         setBalance((prev) => (BigInt(prev) + BigInt(result.prizeCredited)).toString());
       }
-      if (result.status === 'won') { setStatusMsg(`Won ${dollars(result.prizeEarned)}!`); await refreshCredits(addr); }
-      else if (result.status === 'lost') { setStatusMsg('Game over — 3 bombs'); }
-      else if (result.outcome === 'prize') { setStatusMsg('Prize!'); }
-      else if (result.outcome === 'bomb') { setStatusMsg(`Bomb — ${result.bombsHit}/3`); }
-      else { setStatusMsg('Empty'); }
+      if (result.status === 'won') { setStatusMsg(`Won ${dollars(result.prizeEarned)}!`); sfx.win(); await refreshCredits(addr); }
+      else if (result.status === 'lost') { setStatusMsg('Game over — 3 bombs'); sfx.bomb(); }
+      else if (result.outcome === 'prize') { setStatusMsg('Prize!'); sfx.prize(); }
+      else if (result.outcome === 'bomb') { setStatusMsg(`Bomb — ${result.bombsHit}/3`); sfx.bomb(); }
+      else { setStatusMsg('Empty'); sfx.tileOpen(); }
     } catch (err) {
       // Remove the "revealing" state on error
       setRevealed((prev) => { const next = { ...prev }; delete next[tile]; return next; });
@@ -580,7 +609,7 @@ export default function App({ wallet, farcaster }) {
   //  RENDER
   // ═══════════════════════════════════════════════════════════════════════════
   return (
-    <div className="app" style={{ '--frame-gold': `url(${frameGold})`, '--frame-dark': `url(${frameDark})`, '--frame-green': `url(${frameGreen})`, '--frame-red': `url(${frameRed})` }}>
+    <div className="app" style={{ '--frame-gold': `url(${frameGold})`, '--frame-dark': `url(${frameDark})`, '--frame-green': `url(${frameGreen})`, '--frame-red': `url(${frameRed})`, '--btn-gold-up': `url(${btnGoldRaised})`, '--btn-gold-down': `url(${btnGoldPressed})`, '--btn-dark-up': `url(${btnDarkRaised})`, '--btn-dark-down': `url(${btnDarkPressed})`, '--btn-green-up': `url(${btnGreenRaised})`, '--btn-green-down': `url(${btnGreenPressed})`, '--btn-red-up': `url(${btnRedRaised})`, '--btn-red-down': `url(${btnRedPressed})` }}>
       {view !== 'splash' && (
         <header className="header">
           <button className="brand" onClick={goHome}>
@@ -594,6 +623,13 @@ export default function App({ wallet, farcaster }) {
               <span className="dot" />
               {addr ? dollars(balance) : '—'}
             </div>
+            <button className="theme-toggle-btn" onClick={toggleMute} title={muted ? 'Unmute sound' : 'Mute sound'} aria-label="Toggle sound">
+              {muted ? (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+              )}
+            </button>
             <button className="theme-toggle-btn" onClick={toggleTheme} title="Toggle theme" aria-label="Toggle theme">
               {theme === 'dark' ? (
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
