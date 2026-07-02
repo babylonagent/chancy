@@ -51,7 +51,7 @@ export default function FloatingSprites() {
           rotation: Math.random() * Math.PI * 2,
           rotSpeed: (Math.random() - 0.5) * 0.008,
           img: type.img,
-          opacity: 0.12 + Math.random() * 0.08,
+          opacity: 0.75,
         });
       }
     }
