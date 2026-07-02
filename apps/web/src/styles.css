@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Silkscreen:wght@400;700&display=swap');
 
 :root {
   color-scheme: dark;
@@ -24,9 +24,10 @@
   --text-faint: #666677;
   --radius: 12px;
   --radius-sm: 8px;
-  font-family: 'Pixelify Sans', monospace;
-  font-size: 16px;
+  font-family: 'Silkscreen', monospace;
+  font-size: 15px;
   text-rendering: optimizeLegibility;
+  line-height: 1.5;
 }
 
 [data-theme="light"] {
@@ -70,9 +71,9 @@ body::before {
 [data-theme="light"] body::before { display: none; }
 
 h1, h2, h3, .display {
-  font-family: 'Pixelify Sans', monospace;
-  font-weight: 700;
-  letter-spacing: 0; line-height: 1.4;
+  font-family: 'Press Start 2P', monospace;
+  font-weight: 400;
+  letter-spacing: 0; line-height: 1.6;
 }
 
 button, input, select { font: inherit; }
@@ -94,7 +95,7 @@ input { outline: none; }
 .fc-pfp { width: 32px; height: 32px; border-radius: var(--radius-sm); border: 2px solid var(--border); object-fit: cover; image-rendering: pixelated; }
 .brand {
   display: flex; align-items: center; gap: 10px;
-  font-size: 22px; font-weight: 700; color: var(--accent);
+  font-family: 'Press Start 2P', monospace; font-size: 12px; line-height: 1.6; font-weight: 400; color: var(--accent);
   text-shadow: 2px 2px 0 var(--accent-dark);
 }
 .brand img { width: 40px; height: 40px; image-rendering: pixelated; }
@@ -124,7 +125,7 @@ input { outline: none; }
 /* ═══ BUTTONS — pixel art frames via border-image ═══ */
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  padding: 14px 24px; font-size: 18px; font-weight: 700;
+  padding: 16px 24px; font-family: 'Press Start 2P', monospace; font-size: 11px; font-weight: 400; line-height: 1.8;
   white-space: nowrap; text-transform: uppercase;
   transition: transform 0.1s, filter 0.1s; width: 100%; position: relative;
   border-radius: 0;
@@ -151,11 +152,12 @@ input { outline: none; }
   border-image: var(--frame-dark) 6 stretch;
 }
 .btn-ghost:hover:not(:disabled) { color: var(--text); }
-.btn-sm { font-size: 15px; padding: 10px 18px; width: auto; }
+.btn-sm { font-size: 9px; padding: 12px 18px; width: auto; }
 
 /* ═══ SHARED ═══ */
 .section-title {
-  font-size: 16px; font-weight: 700; color: var(--text-dim);
+  font-family: 'Press Start 2P', monospace;
+  font-size: 10px; font-weight: 400; color: var(--text-dim);
   text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: -8px;
 }
 
@@ -166,7 +168,7 @@ input { outline: none; }
   padding: 8px 16px; border-radius: 999px;
   background: var(--accent); color: #1a1000;
   border: 2px solid var(--accent-dark);
-  font-size: 16px; font-weight: 700;
+  font-family: 'Press Start 2P', monospace; font-size: 10px; font-weight: 400;
 }
 .back-btn {
   display: flex; align-items: center; gap: 6px;
@@ -188,7 +190,7 @@ input { outline: none; }
   text-transform: uppercase; letter-spacing: 0.04em;
 }
 .meter .meter-value {
-  font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums;
+  font-family: 'Press Start 2P', monospace; font-size: 14px; font-weight: 400; font-variant-numeric: tabular-nums;
 }
 .meter.bombs .meter-value { color: var(--red); }
 .meter.prizes .meter-value { color: var(--green); }
@@ -249,11 +251,11 @@ input { outline: none; }
 @keyframes slideUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
 .result-banner.win { background: var(--green-dim); border: 2px solid var(--green); }
 .result-banner.lose { background: var(--red-dim); border: 2px solid var(--red); }
-.result-banner .result-title { font-size: 24px; font-weight: 700; }
+.result-banner .result-title { font-family: 'Press Start 2P', monospace; font-size: 14px; font-weight: 400; }
 .result-banner.win .result-title { color: var(--green); }
 .result-banner.lose .result-title { color: var(--red); }
 .result-banner .result-sub { color: var(--text-dim); font-size: 16px; }
-.result-banner .result-amount { font-size: 32px; font-weight: 700; color: var(--accent); text-shadow: 2px 2px 0 var(--accent-dark); }
+.result-banner .result-amount { font-family: 'Press Start 2P', monospace; font-size: 20px; font-weight: 400; color: var(--accent); text-shadow: 2px 2px 0 var(--accent-dark); }
 
 /* Status text */
 .status-text { text-align: center; color: var(--text-dim); font-size: 16px; min-height: 20px; }
@@ -294,7 +296,7 @@ input { outline: none; }
 }
 @keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
 .modal-handle { width: 40px; height: 4px; border-radius: 2px; background: var(--border); margin: 0 auto 20px; }
-.modal h2 { font-size: 24px; margin-bottom: 8px; }
+.modal h2 { font-family: 'Press Start 2P', monospace; font-size: 14px; font-weight: 400; margin-bottom: 8px; line-height: 1.6; }
 .modal .modal-sub { color: var(--text-dim); font-size: 16px; margin-bottom: 24px; line-height: 1.5; }
 .rule-item {
   display: flex; gap: 14px; padding: 16px; border-radius: var(--radius);
@@ -336,14 +338,15 @@ input { outline: none; }
   image-rendering: pixelated;
 }
 @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
-.landing-hero h1 { font-size: 28px; line-height: 1.3; max-width: 320px; }
+.landing-hero h1 { font-size: 18px; line-height: 1.8; max-width: 320px; }
 .landing-hero h1 .gold { color: var(--accent); text-shadow: 2px 2px 0 var(--accent-dark); }
 .landing-hero .tagline { color: var(--text-dim); font-size: 16px; line-height: 1.5; max-width: 340px; }
 .landing-hero .btn { width: 100%; max-width: 320px; }
 
 .landing-section { display: flex; flex-direction: column; gap: 16px; }
 .landing-h2 {
-  font-size: 20px; font-weight: 700; color: var(--accent);
+  font-family: 'Press Start 2P', monospace;
+  font-size: 12px; font-weight: 400; color: var(--accent);
   text-shadow: 1px 1px 0 var(--accent-dark);
   border-bottom: 2px solid var(--accent-dark); padding-bottom: 8px;
 }
@@ -358,11 +361,11 @@ input { outline: none; }
   width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
   background: var(--accent); border: 2px solid var(--accent-dark);
   display: flex; align-items: center; justify-content: center;
-  font-weight: 700; font-size: 18px; color: #1a1000;
+  font-family: 'Press Start 2P', monospace; font-weight: 400; font-size: 12px; color: #1a1000;
 }
 .step-body { display: flex; flex-direction: column; gap: 4px; }
-.step-body strong { font-size: 17px; }
-.step-body p { color: var(--text-dim); font-size: 15px; line-height: 1.4; }
+.step-body strong { font-family: 'Press Start 2P', monospace; font-size: 10px; font-weight: 400; }
+.step-body p { color: var(--text-dim); font-size: 12px; line-height: 1.7; }
 
 /* Mode preview cards — pixel art frames applied via inline border-image in JSX */
 .modes-preview { display: flex; flex-direction: column; gap: 10px; }
@@ -375,9 +378,9 @@ input { outline: none; }
 .mode-info-card.easy { }
 .mode-info-card.normal { }
 .mode-info-card.hardcore { }
-.mode-info-card .mode-name { font-weight: 700; font-size: 18px; }
-.mode-info-card .mode-stats { color: var(--accent); font-weight: 700; font-size: 15px; }
-.mode-info-card .mode-desc { color: var(--text-dim); font-size: 14px; }
+.mode-info-card .mode-name { font-family: 'Press Start 2P', monospace; font-weight: 400; font-size: 11px; }
+.mode-info-card .mode-stats { color: var(--accent); font-family: 'Press Start 2P', monospace; font-weight: 400; font-size: 9px; }
+.mode-info-card .mode-desc { color: var(--text-dim); font-size: 11px; }
 
 /* Trust signals */
 .trust-row { display: flex; flex-direction: column; gap: 10px; }
@@ -412,7 +415,7 @@ input { outline: none; }
 .api-docs-modal::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 .landing-sub { color: var(--text-dim); font-size: 16px; line-height: 1.5; }
 .api-section { margin-bottom: 22px; }
-.api-h3 { font-size: 17px; font-weight: 700; color: var(--accent); margin-bottom: 10px; }
+.api-h3 { font-family: 'Press Start 2P', monospace; font-size: 10px; font-weight: 400; color: var(--accent); margin-bottom: 10px; line-height: 1.6; }
 .api-flow { list-style: decimal; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; }
 .api-flow li { color: var(--text-dim); font-size: 14px; line-height: 1.5; }
 .api-endpoints { display: flex; flex-direction: column; gap: 6px; }
@@ -422,7 +425,7 @@ input { outline: none; }
   background: var(--bg-elevated); border: 1px solid var(--border); font-size: 14px;
 }
 .api-method {
-  font-weight: 700; font-size: 12px; padding: 3px 8px; border-radius: 4px;
+  font-family: 'Press Start 2P', monospace; font-weight: 400; font-size: 8px; padding: 4px 8px; border-radius: 4px;
   flex-shrink: 0; text-transform: uppercase; letter-spacing: 0.04em;
 }
 .api-method.free { background: var(--green-dim); color: var(--green); }
@@ -455,7 +458,7 @@ input { outline: none; }
 .credit-top { display: flex; justify-content: space-between; align-items: flex-end; }
 .credit-big { display: flex; flex-direction: column; gap: 2px; }
 .credit-big .label { font-size: 14px; color: var(--text-faint); font-weight: 600; text-transform: uppercase; }
-.credit-big .value { font-size: 32px; font-weight: 700; }
+.credit-big .value { font-family: 'Press Start 2P', monospace; font-size: 18px; font-weight: 400; }
 .credit-big .value.gold { color: var(--accent); }
 .credit-side { display: flex; flex-direction: column; gap: 2px; text-align: right; }
 .credit-side .label { font-size: 12px; color: var(--text-faint); font-weight: 600; text-transform: uppercase; }
@@ -485,9 +488,9 @@ input { outline: none; }
 .game-mode-badge {
   padding: 4px 12px; border-radius: 999px;
   background: var(--accent-dim); color: var(--accent);
-  font-weight: 700; font-size: 14px;
+  font-family: 'Press Start 2P', monospace; font-weight: 400; font-size: 9px;
 }
-.game-pot { font-size: 22px; font-weight: 700; color: var(--accent); }
+.game-pot { font-family: 'Press Start 2P', monospace; font-size: 13px; font-weight: 400; color: var(--accent); }
 .game-card-mid { display: flex; flex-direction: column; gap: 2px; font-size: 14px; color: var(--text-dim); }
 .game-card-mid .dim { color: var(--text-faint); }
 .game-card-stats { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -512,7 +515,7 @@ input { outline: none; }
   padding: 16px 20px; border-radius: var(--radius);
   background: var(--bg-card); border: 2px solid var(--border);
 }
-.host-balance .value { font-size: 24px; font-weight: 700; }
+.host-balance .value { font-family: 'Press Start 2P', monospace; font-size: 14px; font-weight: 400; }
 .host-balance .value.gold { color: var(--accent); }
 
 .mode-selector { display: flex; gap: 8px; }
@@ -522,8 +525,8 @@ input { outline: none; }
   display: flex; flex-direction: column; align-items: center; gap: 4px;
   transition: all 0.1s;
 }
-.mode-tab .tab-name { font-weight: 700; font-size: 16px; }
-.mode-tab .tab-sub { font-size: 12px; color: var(--text-faint); }
+.mode-tab .tab-name { font-family: 'Press Start 2P', monospace; font-weight: 400; font-size: 10px; }
+.mode-tab .tab-sub { font-size: 10px; color: var(--text-faint); }
 .mode-tab.selected { border-color: var(--accent); background: var(--accent-dim); }
 
 .pot-input-group {
@@ -532,11 +535,11 @@ input { outline: none; }
   background: var(--bg-input); border: 2px solid var(--border);
 }
 .pot-input-group:focus-within { border-color: var(--accent); }
-.pot-prefix { padding: 14px 0 14px 16px; font-size: 22px; font-weight: 700; color: var(--text-dim); }
+.pot-prefix { padding: 14px 0 14px 16px; font-family: 'Press Start 2P', monospace; font-size: 13px; font-weight: 400; color: var(--text-dim); }
 .pot-input-group input {
   flex: 1; padding: 14px 16px 14px 4px;
   background: transparent; border: none; color: var(--text);
-  font-size: 22px; font-weight: 700;
+  font-family: 'Press Start 2P', monospace; font-size: 13px; font-weight: 400;
 }
 .hint-text { color: var(--text-faint); font-size: 14px; margin-top: -8px; }
 
@@ -544,7 +547,7 @@ input { outline: none; }
 .preset-chip {
   padding: 8px 16px; border-radius: 999px;
   background: var(--bg-card); border: 2px solid var(--border);
-  color: var(--text-dim); font-weight: 700; font-size: 15px; transition: all 0.1s;
+  color: var(--text-dim); font-family: 'Press Start 2P', monospace; font-weight: 400; font-size: 9px; transition: all 0.1s;
 }
 .preset-chip.selected { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
 
@@ -601,7 +604,7 @@ input { outline: none; }
   background: linear-gradient(135deg, var(--bg-card), var(--bg-elevated)); border: 2px solid var(--border);
 }
 .deposit-balance .label { font-size: 15px; color: var(--text-dim); }
-.deposit-balance .value { font-size: 26px; font-weight: 700; }
+.deposit-balance .value { font-family: 'Press Start 2P', monospace; font-size: 15px; font-weight: 400; }
 .deposit-balance .value.gold { color: var(--accent); }
 .fee-note { font-size: 13px; color: var(--text-faint); text-align: center; }
 
@@ -674,10 +677,10 @@ input { outline: none; }
   .landing-page { gap: 56px; padding: 48px 0 56px; }
   .landing-hero { gap: 28px; }
   .landing-hero .hero-logo { width: 112px; height: 112px; }
-  .landing-hero h1 { font-size: clamp(32px, 5vw, 42px); max-width: 520px; }
+  .landing-hero h1 { font-size: clamp(20px, 3vw, 26px); max-width: 520px; }
   .landing-hero .tagline { font-size: 17px; max-width: 480px; }
   .landing-hero .btn { max-width: 340px; }
-  .landing-h2 { font-size: 24px; }
+  .landing-h2 { font-size: 14px; }
   .how-steps { flex-direction: row; gap: 16px; }
   .how-step { flex: 1; flex-direction: column; align-items: center; text-align: center; gap: 10px; padding: 24px 20px; }
   .step-body { align-items: center; }
