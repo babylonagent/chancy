@@ -149,7 +149,7 @@ function RulesSheet({ onClose }) {
           <div className="rule-icon red">✺</div>
           <div className="rule-text"><strong>Dodge bombs</strong><span>Three bombs ends your run. Quit anytime to keep what you found.</span></div>
         </div>
-        <button className="btn btn-primary" onClick={onClose} style={{ marginTop: 16 }}>Got it</button>
+        <button className="btn btn-primary" data-sfx-back onClick={onClose} style={{ marginTop: 16 }}>Got it</button>
       </div>
     </div>
   );
@@ -207,7 +207,7 @@ function ApiDocsSheet({ onClose }) {
 # Play: python3 chancy_x402_client.py --key 0xYOUR_KEY --play`}</pre>
         </div>
 
-        <button className="btn btn-primary" onClick={onClose} style={{ marginTop: 16 }}>Close</button>
+        <button className="btn btn-primary" data-sfx-back onClick={onClose} style={{ marginTop: 16 }}>Close</button>
       </div>
     </div>
   );
@@ -284,7 +284,13 @@ export default function App({ wallet, farcaster }) {
     function handleClick(e) {
       // Skip sound for mute/theme buttons — those are utility toggles, not game actions
       if (e.target.closest('[data-no-sfx]')) return;
-      if (e.target.closest('button, .balance-pill, .preset-chip, .mode-tab, .your-address-card, .vault-address-card')) {
+      // Navigation/back/close buttons get a distinct descending sound
+      if (e.target.closest('[data-sfx-back]')) {
+        sfx.init();
+        sfx.back();
+        return;
+      }
+      if (e.target.closest('button, .balance-pill, .preset-chip, .mode-tab, .your-address-card, .vault-address-card, .tile, .help-fab')) {
         sfx.init();
         sfx.click();
       }
@@ -843,7 +849,7 @@ export default function App({ wallet, farcaster }) {
                     <div className="game-card-stats"><span className="stat-chip">#{s.sessionId}</span><span className="stat-chip">No plays yet</span></div>
                   )}
                   {isMine ? (
-                    <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => closeSession(s.sessionId)}>Close & refund</button>
+                    <button className="btn btn-ghost btn-sm" data-sfx-back disabled={busy} onClick={() => closeSession(s.sessionId)}>Close & refund</button>
                   ) : (
                     <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => joinSession(s)}>Join · {dollars(s.entranceFee)}</button>
                   )}
@@ -864,7 +870,7 @@ export default function App({ wallet, farcaster }) {
       {view === 'host' && isConnected && (
         <div className="host-view">
           <div className="lobby-section-header">
-            <button className="back-btn" onClick={() => setView('lobby')}>← Back</button>
+            <button className="back-btn" data-sfx-back onClick={() => setView('lobby')}>← Back</button>
             <span className="section-title" style={{ margin: 0 }}>Host a game</span>
           </div>
           <div className="host-balance">
@@ -901,7 +907,7 @@ export default function App({ wallet, farcaster }) {
       {view === 'deposit' && isConnected && (
         <div className="deposit-view">
           <div className="lobby-section-header">
-            <button className="back-btn" onClick={() => { setPollingDeposit(false); setView('lobby'); }}>← Back</button>
+            <button className="back-btn" data-sfx-back onClick={() => { setPollingDeposit(false); setView('lobby'); }}>← Back</button>
             <span className="section-title" style={{ margin: 0 }}>Add credits</span>
           </div>
 
@@ -968,7 +974,7 @@ export default function App({ wallet, farcaster }) {
       {view === 'round' && session && (
         <div className="round-view">
           <div className="round-header">
-            <button className="back-btn" onClick={quitRound} disabled={quitting}>
+            <button className="back-btn" data-sfx-back onClick={quitRound} disabled={quitting}>
               {quitting ? 'Quitting…' : `← ${gameEnded ? 'Done' : 'Quit'}`}
             </button>
             <span className="mode-badge">{session.mode}</span>

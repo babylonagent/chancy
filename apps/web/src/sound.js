@@ -66,6 +66,13 @@ function click() {
   tone(1320, 0.03, 'square', 0.02);
 }
 
+/** Back/close — descending blip (signals "leaving/closing") */
+function back() {
+  if (muted) return;
+  tone(660, 0.06, 'square');
+  tone(440, 0.08, 'square', 0.04);
+}
+
 /** Tile open — low blip */
 function tileOpen() {
   if (muted) return;
@@ -158,4 +165,4 @@ function init() {
   if (ctx.state === 'suspended') ctx.resume();
 }
 
-export default { click, tileOpen, prize, bomb, win, lose, startBgm, stopBgm, toggleMute, isMuted, init };
+export default { click, back, tileOpen, prize, bomb, win, lose, startBgm, stopBgm, toggleMute, isMuted, init };
