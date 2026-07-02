@@ -278,9 +278,11 @@ export default function App({ wallet, farcaster }) {
     if (!newMuted) sfx.click();
   }
 
-  // ── Global button click sound ──
+  // ── Global button click sound (excludes mute/theme toggles) ──
   useEffect(() => {
     function handleClick(e) {
+      // Skip sound for mute/theme buttons — those are utility toggles, not game actions
+      if (e.target.closest('[data-no-sfx]')) return;
       if (e.target.closest('button, .balance-pill, .preset-chip, .mode-tab, .your-address-card, .vault-address-card')) {
         sfx.init();
         sfx.click();
@@ -623,14 +625,14 @@ export default function App({ wallet, farcaster }) {
               <span className="dot" />
               {addr ? dollars(balance) : '—'}
             </div>
-            <button className="theme-toggle-btn" onClick={toggleMute} title={muted ? 'Unmute sound' : 'Mute sound'} aria-label="Toggle sound">
+            <button className="theme-toggle-btn" data-no-sfx onClick={toggleMute} title={muted ? 'Unmute sound' : 'Mute sound'} aria-label="Toggle sound">
               {muted ? (
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
               ) : (
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
               )}
             </button>
-            <button className="theme-toggle-btn" onClick={toggleTheme} title="Toggle theme" aria-label="Toggle theme">
+            <button className="theme-toggle-btn" data-no-sfx onClick={toggleTheme} title="Toggle theme" aria-label="Toggle theme">
               {theme === 'dark' ? (
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
               ) : (
@@ -1040,7 +1042,7 @@ export default function App({ wallet, farcaster }) {
       {/* ── Help FAB ── */}
       {view !== 'splash' && <button className="help-fab" onClick={() => setShowRules(true)}>?</button>}
       {view === 'splash' && (
-        <button className="theme-toggle-fab" onClick={toggleTheme} title="Toggle theme" aria-label="Toggle theme">
+        <button className="theme-toggle-fab" data-no-sfx onClick={toggleTheme} title="Toggle theme" aria-label="Toggle theme">
           {theme === 'dark' ? (
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
           ) : (

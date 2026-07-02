@@ -128,30 +128,30 @@ input { outline: none; }
   padding: 16px 24px; font-family: 'Press Start 2P', monospace; font-size: 11px; font-weight: 400; line-height: 1.8;
   white-space: nowrap; text-transform: uppercase;
   transition: transform 0.08s; width: 100%; position: relative;
-  border-radius: 0; border: 6px solid transparent;
+  border-radius: 0; border: 10px solid transparent;
   background-repeat: repeat;
   image-rendering: pixelated;
 }
 .btn:active { transform: translateY(2px); }
 .btn-primary {
-  border-image: var(--btn-gold-up) 6 stretch;
+  border-image: var(--btn-gold-up) 10 stretch;
   background-color: #c89000; color: #1a1000;
   text-shadow: 1px 1px 0 rgba(255,220,100,0.4);
 }
 .btn-primary:hover:not(:disabled) { filter: brightness(1.12); }
-.btn-primary:active { border-image: var(--btn-gold-down) 6 stretch; }
+.btn-primary:active { border-image: var(--btn-gold-down) 10 stretch; }
 .btn-secondary {
-  border-image: var(--btn-dark-up) 6 stretch;
+  border-image: var(--btn-dark-up) 10 stretch;
   background-color: #1e1e2e; color: var(--text);
 }
 .btn-secondary:hover:not(:disabled) { filter: brightness(1.2); }
-.btn-secondary:active { border-image: var(--btn-dark-down) 6 stretch; }
+.btn-secondary:active { border-image: var(--btn-dark-down) 10 stretch; }
 .btn-ghost {
-  border-image: var(--btn-dark-up) 6 stretch;
+  border-image: var(--btn-dark-up) 10 stretch;
   background-color: transparent; color: var(--text-dim);
 }
 .btn-ghost:hover:not(:disabled) { color: var(--text); }
-.btn-ghost:active { border-image: var(--btn-dark-down) 6 stretch; }
+.btn-ghost:active { border-image: var(--btn-dark-down) 10 stretch; }
 .btn-sm { font-size: 9px; padding: 12px 18px; width: auto; }
 
 /* ═══ SHARED ═══ */
