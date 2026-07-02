@@ -56,13 +56,27 @@ export default function FloatingSprites() {
       }
     }
 
+    let lastWidth = window.innerWidth;
+
     function resize() {
-      canvas.width = window.innerWidth;
+      const newWidth = window.innerWidth;
+      canvas.width = newWidth;
       canvas.height = window.innerHeight;
-      initSprites();
+      // Only re-seed sprites on real width changes (orientation/desktop resize).
+      // Mobile address bar show/hide changes height only — don't re-seed on that.
+      if (newWidth !== lastWidth) {
+        lastWidth = newWidth;
+        initSprites();
+      }
     }
     resize();
-    window.addEventListener('resize', resize);
+    // Debounce — mobile fires dozens of resize events during address bar transitions
+    let resizeTimer;
+    const debouncedResize = () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(resize, 150);
+    };
+    window.addEventListener('resize', debouncedResize);
 
     // --- Sprite-sprite elastic collision ---
     function resolveCollisions() {
@@ -149,7 +163,8 @@ export default function FloatingSprites() {
     animate();
 
     return () => {
-      window.removeEventListener('resize', resize);
+      window.removeEventListener('resize', debouncedResize);
+      clearTimeout(resizeTimer);
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
   }, []);
