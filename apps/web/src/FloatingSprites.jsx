@@ -56,7 +56,7 @@ export default function FloatingSprites() {
       }
     }
 
-    let lastWidth = window.innerWidth;
+    let lastWidth = 0;
 
     function resize() {
       const newWidth = window.innerWidth;
