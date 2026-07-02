@@ -14,6 +14,10 @@ import iconScroll from './assets/pixel/icon-scroll-v1.png';
 import iconRobot from './assets/pixel/icon-robot-v1.png';
 import iconBolt from './assets/pixel/icon-bolt-v1.png';
 import iconPlug from './assets/pixel/icon-plug-v1.png';
+import frameGold from './assets/pixel/frame-gold.png';
+import frameDark from './assets/pixel/frame-dark.png';
+import frameGreen from './assets/pixel/frame-green.png';
+import frameRed from './assets/pixel/frame-red.png';
 
 // ─── CONFIG ─────────────────────────────────────────────────────────────────
 const API = import.meta.env?.VITE_CHANCY_API_URL || '';
@@ -576,7 +580,7 @@ export default function App({ wallet, farcaster }) {
   //  RENDER
   // ═══════════════════════════════════════════════════════════════════════════
   return (
-    <div className="app">
+    <div className="app" style={{ '--frame-gold': `url(${frameGold})`, '--frame-dark': `url(${frameDark})`, '--frame-green': `url(${frameGreen})`, '--frame-red': `url(${frameRed})` }}>
       {view !== 'splash' && (
         <header className="header">
           <button className="brand" onClick={goHome}>
@@ -656,17 +660,17 @@ export default function App({ wallet, farcaster }) {
           <div className="landing-section">
             <h2 className="landing-h2">Game modes</h2>
             <div className="modes-preview">
-              <div className="mode-info-card easy">
+              <div className="mode-info-card easy" style={{ borderImage: `url(${frameGreen}) 6 stretch`, borderWidth: '6px', borderStyle: 'solid' }}>
                 <span className="mode-name">Easy</span>
                 <span className="mode-stats">5 bombs · 3 prizes</span>
                 <span className="mode-desc">More prizes, fewer bombs. Higher chance to sweep.</span>
               </div>
-              <div className="mode-info-card normal">
+              <div className="mode-info-card normal" style={{ borderImage: `url(${frameGold}) 6 stretch`, borderWidth: '6px', borderStyle: 'solid' }}>
                 <span className="mode-name">Normal</span>
                 <span className="mode-stats">7 bombs · 2 prizes</span>
                 <span className="mode-desc">Balanced risk. Standard payouts.</span>
               </div>
-              <div className="mode-info-card hardcore">
+              <div className="mode-info-card hardcore" style={{ borderImage: `url(${frameRed}) 6 stretch`, borderWidth: '6px', borderStyle: 'solid' }}>
                 <span className="mode-name">Hardcore</span>
                 <span className="mode-stats">10 bombs · 1 prize</span>
                 <span className="mode-desc">One prize, maximum bombs. Highest reward.</span>

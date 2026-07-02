@@ -121,18 +121,19 @@ input { outline: none; }
 .balance-pill.offline .dot { background: var(--red); box-shadow: 0 0 6px var(--red); }
 @keyframes blink { 50% { opacity: 0.3; } }
 
-/* ═══ BUTTONS — rounded with pixel art backgrounds ═══ */
+/* ═══ BUTTONS — pixel art frames via border-image ═══ */
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   padding: 14px 24px; font-size: 18px; font-weight: 700;
   white-space: nowrap; text-transform: uppercase;
   transition: transform 0.1s, filter 0.1s; width: 100%; position: relative;
-  border-radius: var(--radius);
+  border-radius: 0;
+  border: 4px solid transparent;
 }
 .btn:active { transform: scale(0.97); }
 .btn-primary {
   background: var(--accent); color: #1a1000;
-  border-radius: var(--radius);
+  border-image: var(--frame-gold) 6 stretch;
   box-shadow: 0 4px 0 var(--accent-dark), 0 6px 16px var(--accent-glow);
   text-shadow: 1px 1px 0 rgba(255,255,255,0.2);
 }
@@ -140,17 +141,17 @@ input { outline: none; }
 .btn-primary:active { box-shadow: 0 2px 0 var(--accent-dark); }
 .btn-secondary {
   background: var(--bg-elevated); color: var(--text);
-  border: 2px solid var(--border); border-radius: var(--radius);
+  border-image: var(--frame-dark) 6 stretch;
   box-shadow: 0 3px 0 rgba(0,0,0,0.3);
 }
-.btn-secondary:hover:not(:disabled) { border-color: var(--border-hover); }
+.btn-secondary:hover:not(:disabled) { filter: brightness(1.2); }
 .btn-secondary:active { box-shadow: 0 1px 0 rgba(0,0,0,0.3); }
 .btn-ghost {
   background: transparent; color: var(--text-dim);
-  border: 2px solid var(--border); border-radius: var(--radius);
+  border-image: var(--frame-dark) 6 stretch;
 }
-.btn-ghost:hover:not(:disabled) { color: var(--text); border-color: var(--border-hover); }
-.btn-sm { font-size: 15px; padding: 10px 18px; width: auto; border-radius: var(--radius-sm); }
+.btn-ghost:hover:not(:disabled) { color: var(--text); }
+.btn-sm { font-size: 15px; padding: 10px 18px; width: auto; }
 
 /* ═══ SHARED ═══ */
 .section-title {
@@ -363,17 +364,17 @@ input { outline: none; }
 .step-body strong { font-size: 17px; }
 .step-body p { color: var(--text-dim); font-size: 15px; line-height: 1.4; }
 
-/* Mode preview cards */
+/* Mode preview cards — pixel art frames applied via inline border-image in JSX */
 .modes-preview { display: flex; flex-direction: column; gap: 10px; }
 .mode-info-card {
   display: flex; flex-direction: column; gap: 4px;
-  padding: 16px 20px; border-radius: var(--radius);
-  background: var(--bg-card); border: 2px solid var(--border);
-  border-left: 4px solid var(--border);
+  padding: 16px 20px; border-radius: 0;
+  background: var(--bg-card); border: 6px solid var(--border);
+  image-rendering: pixelated;
 }
-.mode-info-card.easy { border-left-color: var(--green); }
-.mode-info-card.normal { border-left-color: var(--accent); }
-.mode-info-card.hardcore { border-left-color: var(--red); }
+.mode-info-card.easy { }
+.mode-info-card.normal { }
+.mode-info-card.hardcore { }
 .mode-info-card .mode-name { font-weight: 700; font-size: 18px; }
 .mode-info-card .mode-stats { color: var(--accent); font-weight: 700; font-size: 15px; }
 .mode-info-card .mode-desc { color: var(--text-dim); font-size: 14px; }
@@ -472,13 +473,14 @@ input { outline: none; }
 /* Game cards */
 .game-list { display: flex; flex-direction: column; gap: 10px; }
 .game-card {
-  padding: 16px; border-radius: var(--radius);
-  background: var(--bg-card); border: 2px solid var(--border);
+  padding: 16px; border-radius: 0;
+  background: var(--bg-card); border: 6px solid transparent;
+  border-image: var(--frame-dark) 6 stretch;
   display: flex; flex-direction: column; gap: 12px;
 }
-.game-card.mode-easy { border-left: 4px solid var(--green); }
-.game-card.mode-normal { border-left: 4px solid var(--accent); }
-.game-card.mode-hardcore { border-left: 4px solid var(--red); }
+.game-card.mode-easy { border-image: var(--frame-green, var(--frame-dark)) 6 stretch; }
+.game-card.mode-normal { border-image: var(--frame-gold, var(--frame-dark)) 6 stretch; }
+.game-card.mode-hardcore { border-image: var(--frame-red, var(--frame-dark)) 6 stretch; }
 .game-card-top { display: flex; justify-content: space-between; align-items: center; }
 .game-mode-badge {
   padding: 4px 12px; border-radius: 999px;
