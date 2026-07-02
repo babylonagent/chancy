@@ -5,6 +5,15 @@ import farcasterLogo from './assets/tech/farcaster.svg';
 import x402Logo from './assets/tech/x402.svg';
 import pythLogo from './assets/tech/pyth.svg';
 import usdcLogo from './assets/tech/usdc.svg';
+import bombSprite from './assets/pixel/bomb-v1.png';
+import gemSprite from './assets/pixel/gem-v1.png';
+import questionSprite from './assets/pixel/question-v1.png';
+import iconChain from './assets/pixel/icon-chain-v1.png';
+import iconLock from './assets/pixel/icon-lock-v1.png';
+import iconScroll from './assets/pixel/icon-scroll-v1.png';
+import iconRobot from './assets/pixel/icon-robot-v1.png';
+import iconBolt from './assets/pixel/icon-bolt-v1.png';
+import iconPlug from './assets/pixel/icon-plug-v1.png';
 
 // ─── CONFIG ─────────────────────────────────────────────────────────────────
 const API = import.meta.env?.VITE_CHANCY_API_URL || '';
@@ -669,15 +678,15 @@ export default function App({ wallet, farcaster }) {
           <div className="landing-section">
             <div className="trust-row">
               <div className="trust-item">
-                <span className="trust-icon">⛓</span>
+                <img className="trust-icon" src={iconChain} alt="" />
                 <span>Onchain randomness via Pyth Entropy</span>
               </div>
               <div className="trust-item">
-                <span className="trust-icon">🔐</span>
+                <img className="trust-icon" src={iconLock} alt="" />
                 <span>No approval needed — raw USDC send</span>
               </div>
               <div className="trust-item">
-                <span className="trust-icon">📜</span>
+                <img className="trust-icon" src={iconScroll} alt="" />
                 <span>Open source · verifiable contracts</span>
               </div>
             </div>
@@ -689,15 +698,15 @@ export default function App({ wallet, farcaster }) {
             <p className="landing-sub">Built for humans and AI agents. Pay per action with x402 — no pre-funding needed.</p>
             <div className="trust-row">
               <div className="trust-item">
-                <span className="trust-icon">🤖</span>
+                <img className="trust-icon" src={iconRobot} alt="" />
                 <span>x402 pay-per-action — Agents pay USDC per tile, no deposit required</span>
               </div>
               <div className="trust-item">
-                <span className="trust-icon">⚡</span>
+                <img className="trust-icon" src={iconBolt} alt="" />
                 <span>HTTP 402 protocol — Standard payment flow any agent can implement</span>
               </div>
               <div className="trust-item">
-                <span className="trust-icon">🔌</span>
+                <img className="trust-icon" src={iconPlug} alt="" />
                 <span>REST API — Full game loop via /v2/x402/ endpoints</span>
               </div>
             </div>
@@ -936,9 +945,11 @@ export default function App({ wallet, farcaster }) {
           <div className="board">
             {TILES.map((tile) => {
               const state = revealed[tile];
-              const symbol = state === 'prize' ? '★' : state === 'bomb' ? '✺' : '';
               return (
-                <button key={tile} className={`tile ${state || ''}`} disabled={!!state || run.status !== 'active' || busy} onClick={() => clickTile(tile)}>{symbol}</button>
+                <button key={tile} className={`tile ${state || ''}`} disabled={!!state || run.status !== 'active' || busy} onClick={() => clickTile(tile)}>
+                  {state === 'prize' && <img src={gemSprite} alt="prize" />}
+                  {state === 'bomb' && <img src={bombSprite} alt="bomb" />}
+                </button>
               );
             })}
           </div>
