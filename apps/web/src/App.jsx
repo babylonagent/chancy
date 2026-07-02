@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState, useRef } from 'react';
 import sfx from './sound';
+import FloatingSprites from './FloatingSprites';
 import chancyLogo from './assets/chancy-logo.svg';
 import baseLogo from './assets/tech/base.svg';
 import farcasterLogo from './assets/tech/farcaster.svg';
@@ -612,6 +613,7 @@ export default function App({ wallet, farcaster }) {
   // ═══════════════════════════════════════════════════════════════════════════
   return (
     <div className="app" style={{ '--frame-gold': `url(${frameGold})`, '--frame-dark': `url(${frameDark})`, '--frame-green': `url(${frameGreen})`, '--frame-red': `url(${frameRed})`, '--btn-gold-up': `url(${btnGoldRaised})`, '--btn-gold-down': `url(${btnGoldPressed})`, '--btn-dark-up': `url(${btnDarkRaised})`, '--btn-dark-down': `url(${btnDarkPressed})`, '--btn-green-up': `url(${btnGreenRaised})`, '--btn-green-down': `url(${btnGreenPressed})`, '--btn-red-up': `url(${btnRedRaised})`, '--btn-red-down': `url(${btnRedPressed})` }}>
+      <FloatingSprites />
       {view !== 'splash' && (
         <header className="header">
           <button className="brand" onClick={goHome}>

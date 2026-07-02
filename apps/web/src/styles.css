@@ -82,7 +82,7 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 input { outline: none; }
 
 /* ═══ LAYOUT ═══ */
-.app { width: 100%; max-width: 480px; margin: 0 auto; padding: 0 16px 120px; position: relative; }
+.app { width: 100%; max-width: 480px; margin: 0 auto; padding: 0 16px 120px; position: relative; z-index: 1; }
 
 /* ═══ HEADER ═══ */
 .header {
