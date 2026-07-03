@@ -3,7 +3,7 @@ import sfx from './sound';
 import FloatingSprites from './FloatingSprites';
 import chancyLogo from './assets/chancy-logo.svg';
 import baseLogo from './assets/tech/base-basemark.svg';
-import farcasterLogo from './assets/tech/farcaster.png';
+import farcasterLogo from './assets/tech/farcaster.svg';
 import x402Logo from './assets/tech/x402.svg';
 import pythLogo from './assets/tech/pyth.svg';
 import usdcLogo from './assets/tech/usdc.svg';
