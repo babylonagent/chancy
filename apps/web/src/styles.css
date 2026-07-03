@@ -146,15 +146,15 @@ input { outline: none; }
 .btn-primary:active { border-image: var(--btn-gold-down) 10 stretch; }
 .btn-secondary {
   border-image: var(--btn-dark-up) 10 stretch;
-  background-color: #1e1e2e; color: var(--text);
+  background-color: #1e1e2e; color: #f0f0f5;
 }
 .btn-secondary:hover:not(:disabled) { filter: brightness(1.2); }
 .btn-secondary:active { border-image: var(--btn-dark-down) 10 stretch; }
 .btn-ghost {
   border-image: var(--btn-dark-up) 10 stretch;
-  background-color: transparent; color: var(--text-dim);
+  background-color: transparent; color: #9999bb;
 }
-.btn-ghost:hover:not(:disabled) { color: var(--text); }
+.btn-ghost:hover:not(:disabled) { color: #f0f0f5; }
 .btn-ghost:active { border-image: var(--btn-dark-down) 10 stretch; }
 .btn-sm { font-size: 9px; padding: 12px 18px; width: auto; }
 
