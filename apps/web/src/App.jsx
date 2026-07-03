@@ -765,11 +765,11 @@ export default function App({ wallet, farcaster }) {
           {/* Footer */}
           <div className="landing-footer">
             <div className="tech-logos">
-              <img src={baseLogo} alt="Base" title="Base L2" />
-              <img src={farcasterLogo} alt="Farcaster" title="Farcaster Mini App" />
-              <img src={x402Logo} alt="x402" title="x402 Pay-per-action" />
-              <img src={pythLogo} alt="Pyth Entropy" title="Pyth Entropy randomness" />
-              <img src={usdcLogo} alt="USDC" title="USDC payments" />
+              <a href="https://base.org" target="_blank" rel="noopener"><img src={baseLogo} alt="Base" title="Base L2" /></a>
+              <a href="https://farcaster.xyz" target="_blank" rel="noopener"><img src={farcasterLogo} alt="Farcaster" title="Farcaster Mini App" /></a>
+              <a href="https://x402.org" target="_blank" rel="noopener" className="x402-logo"><img src={x402Logo} alt="x402" title="x402 Pay-per-action" /></a>
+              <a href="https://pyth.network" target="_blank" rel="noopener"><img src={pythLogo} alt="Pyth Entropy" title="Pyth Entropy randomness" /></a>
+              <a href="https://www.circle.com/en/usdc" target="_blank" rel="noopener"><img src={usdcLogo} alt="USDC" title="USDC payments" /></a>
             </div>
             <div className="babylon-credit">
               Built by <a href="https://x.com/babylon_agent" target="_blank" rel="noopener">Babylon Agent</a>
