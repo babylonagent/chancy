@@ -516,10 +516,9 @@ export default function App({ wallet, farcaster }) {
           return newBal < 0n ? '0' : newBal.toString();
         });
       }
-      // If player won a prize, credit it immediately
-      if (result.prizeCredited && BigInt(result.prizeCredited) > 0n) {
-        setBalance((prev) => (BigInt(prev) + BigInt(result.prizeCredited)).toString());
-      }
+      // All-or-nothing: prizes are PENDING until full sweep.
+      // Do NOT credit balance on individual prize — only on status 'won'.
+      // (refreshCredits after 'won' will sync the real balance from server.)
       if (result.status === 'won') { setStatusMsg(`Won ${dollars(result.prizeEarned)}!`); sfx.win(); await refreshCredits(addr); }
       else if (result.status === 'lost') { setStatusMsg('Game over — 3 bombs'); sfx.bomb(); }
       else if (result.outcome === 'prize') { setStatusMsg('Prize!'); sfx.prize(); }
@@ -547,10 +546,7 @@ export default function App({ wallet, farcaster }) {
           setRevealed((prev) => ({ ...full, ...prev }));
         }
       }
-      // Optimistic: credit any prizeEarned back to balance immediately
-      if (run.prizeEarned && BigInt(run.prizeEarned) > 0n) {
-        setBalance((prev) => (BigInt(prev) + BigInt(run.prizeEarned)).toString());
-      }
+      // All-or-nothing: player loses everything on quit — no prize credit.
       setSession(null);
       setRun({ bombsHit: 0, prizesFound: 0, status: 'idle', spentTotal: '0', prizeEarned: '0', nextTileCost: '0' });
       setView('lobby');
