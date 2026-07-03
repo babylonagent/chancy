@@ -200,7 +200,7 @@ describe("P2P host/player game mechanics", () => {
     expect(BigInt(playerBal.body.balance)).toBeGreaterThanOrEqual(expectedMin);
   });
 
-  it("player quits — host gets spent, player keeps prizes earned", async () => {
+  it("player quits mid-run — loses pending prizes, host reclaims all", async () => {
     await request(app).post("/v2/credits/deposit").send({ player: HOST, txHash: TX1 });
     await request(app).post("/v2/credits/deposit").send({ player: PLAYER, txHash: TX2 });
     const session = await createSession(app, { mode: "Easy", prizePot: POT });
@@ -208,13 +208,24 @@ describe("P2P host/player game mechanics", () => {
 
     // Click one prize tile
     const prizeTile = board.prizePositions[0];
-    await request(app).post(`/v2/sessions/${session.sessionId}/click`).send({ player: PLAYER, tile: prizeTile });
+    const prizeClick = await request(app).post(`/v2/sessions/${session.sessionId}/click`).send({ player: PLAYER, tile: prizeTile });
+    expect(prizeClick.body.outcome).toBe("prize");
+    expect(prizeClick.body.status).toBe("active"); // still active, not won yet
 
-    // Quit
+    // Player should NOT have received the prize to balance yet (pending)
+    const playerBalBeforeQuit = await request(app).get(`/v2/credits/${PLAYER}`);
+    const entranceAndTileCost = 50000n + BigInt(revealCostAt(POT, "Easy", 0).toString());
+    expect(BigInt(playerBalBeforeQuit.body.balance)).toBe(50000000n - entranceAndTileCost);
+
+    // Quit — player loses everything (pending prize + spent)
     const quit = await request(app).post(`/v2/sessions/${session.sessionId}/quit`).send({ player: PLAYER });
     expect(quit.body.status).toBe("quit");
     expect(quit.body.prizeEarned).toBeTruthy();
     expect(BigInt(quit.body.prizeEarned)).toBeGreaterThan(0n);
+
+    // Player balance unchanged from before quit — did NOT keep the prize
+    const playerBalAfterQuit = await request(app).get(`/v2/credits/${PLAYER}`);
+    expect(BigInt(playerBalAfterQuit.body.balance)).toBe(BigInt(playerBalBeforeQuit.body.balance));
 
     // Session reopens
     const sessDetail = await request(app).get(`/v2/sessions/${session.sessionId}`);

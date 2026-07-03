@@ -48,7 +48,7 @@ const POT_PRESETS = ['5', '10', '25', '50'];
 function friendlyError(err) {
   const msg = err?.message || String(err);
   const map = {
-    INSUFFICIENT_CREDITS_FOR_REVEAL: 'Not enough credits for the next tile. Quit to keep what you found, or add more credits.',
+    INSUFFICIENT_CREDITS_FOR_REVEAL: 'Not enough credits for the next tile. Add more credits or quit.',
     INSUFFICIENT_CREDITS: 'Not enough credits to do that.',
     SESSION_NOT_FOUND: 'This game no longer exists.',
     SESSION_NOT_OPEN: 'This game is already occupied or closed.',
@@ -147,7 +147,7 @@ function RulesSheet({ onClose }) {
         </div>
         <div className="rule-item">
           <div className="rule-icon red">✺</div>
-          <div className="rule-text"><strong>Dodge bombs</strong><span>Three bombs ends your run. Quit anytime to keep what you found.</span></div>
+          <div className="rule-text"><strong>Dodge bombs</strong><span>Three bombs ends your run. Quit or bomb out and you lose everything. Sweep all prizes to win the pot.</span></div>
         </div>
         <button className="btn btn-primary" data-sfx-back onClick={onClose} style={{ marginTop: 16 }}>Got it</button>
       </div>
@@ -693,7 +693,7 @@ export default function App({ wallet, farcaster }) {
                 <div className="step-num">3</div>
                 <div className="step-body">
                   <strong>Win or lose</strong>
-                  <p>Find every prize → sweep the pot. Hit 3 bombs → game over. Quit anytime → keep what you found.</p>
+                  <p>Find every prize → sweep the pot. Hit 3 bombs → lose it all. Quit → lose it all.</p>
                 </div>
               </div>
             </div>

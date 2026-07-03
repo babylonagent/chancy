@@ -145,13 +145,17 @@ function cleanupStaleSessions(store, persist) {
       changed = true;
       continue;
     }
-    // Player is idle → host gets spent, reopen
+    // Player is idle → all-or-nothing: host gets spent + pending prizes, reopen
     if (session.runStatus === "active" && session.lastActionAt && now > session.lastActionAt + IDLE_TIMEOUT_MS) {
       const spent = BigInt(session.spentAmount || "0");
+      const pendingPrizes = BigInt(session.prizeEarned || "0");
       if (spent > 0n) {
         setBalance(store, session.host, getBalance(store, session.host) + spent);
       }
-      recordRunEnd(session, spent);
+      if (pendingPrizes > 0n) {
+        setBalance(store, session.host, getBalance(store, session.host) + pendingPrizes);
+      }
+      recordRunEnd(session, spent + pendingPrizes);
       session.runStatus = "idle_kicked";
       resetRun(session);
       changed = true;
@@ -569,10 +573,12 @@ function installV2Routes(app, {
       outcome = "bomb";
       session.bombsHit += 1;
       if (session.bombsHit >= BOMBS_TO_GAME_OVER) {
-        // Game over — host gets all spent, session reopens
+        // Game over — all-or-nothing: host gets spent + pending prizes, session reopens
         const spent = BigInt(session.spentAmount);
+        const pendingPrizes = BigInt(session.prizeEarned);
         if (spent > 0n) setBalance(store, session.host, getBalance(store, session.host) + spent);
-        recordRunEnd(session, spent);
+        if (pendingPrizes > 0n) setBalance(store, session.host, getBalance(store, session.host) + pendingPrizes);
+        recordRunEnd(session, spent + pendingPrizes);
         session.runStatus = "lost";
         const result = {
           sessionId: session.sessionId, tile, outcome,
@@ -590,12 +596,14 @@ function installV2Routes(app, {
       outcome = "prize";
       session.prizesFound += 1;
       const prize = prizePerTile(session.prizePot, session.mode);
-      setBalance(store, session.activePlayer, getBalance(store, session.activePlayer) + prize);
+      // All-or-nothing: prize is PENDING until all prizes found.
+      // Do NOT credit to player balance yet.
       session.prizeEarned = (BigInt(session.prizeEarned) + prize).toString();
       prizeCredited = prize.toString();
 
       if (session.prizesFound >= modeConfig[session.mode].prizes) {
-        // All prizes found — player wins, host gets spent, session reopens
+        // SWEEP — all prizes found: player wins the full pot, host gets spent
+        setBalance(store, session.activePlayer, getBalance(store, session.activePlayer) + BigInt(session.prizeEarned));
         const spent = BigInt(session.spentAmount);
         if (spent > 0n) setBalance(store, session.host, getBalance(store, session.host) + spent);
         recordRunEnd(session, spent);
@@ -647,10 +655,14 @@ function installV2Routes(app, {
       return res.json(resp);
     }
 
-    // Active → host gets spent, player keeps prizeEarned
+    // Active → all-or-nothing: host gets spent + pending prizes, player loses all
     const spent = BigInt(session.spentAmount);
+    const pendingPrizes = BigInt(session.prizeEarned);
+    // Host reclaims spent reveal costs
     if (spent > 0n) setBalance(store, session.host, getBalance(store, session.host) + spent);
-    recordRunEnd(session, spent);
+    // Host reclaims any pending (un-swept) prizes back into the pot
+    if (pendingPrizes > 0n) setBalance(store, session.host, getBalance(store, session.host) + pendingPrizes);
+    recordRunEnd(session, spent + pendingPrizes);
     session.runStatus = "quit";
     const resp = {
       sessionId: session.sessionId,
