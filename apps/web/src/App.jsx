@@ -3,7 +3,7 @@ import sfx from './sound';
 import FloatingSprites from './FloatingSprites';
 import chancyLogo from './assets/chancy-logo.svg';
 import baseLogo from './assets/tech/base.svg';
-import farcasterLogo from './assets/tech/farcaster.svg';
+import farcasterLogo from './assets/tech/farcaster.png';
 import x402Logo from './assets/tech/x402.svg';
 import pythLogo from './assets/tech/pyth.svg';
 import usdcLogo from './assets/tech/usdc.svg';
@@ -768,7 +768,7 @@ export default function App({ wallet, farcaster }) {
             <div className="tech-logos">
               <a href="https://base.org" target="_blank" rel="noopener"><img src={baseLogo} alt="Base" title="Base L2" /></a>
               <a href="https://farcaster.xyz" target="_blank" rel="noopener"><img src={farcasterLogo} alt="Farcaster" title="Farcaster Mini App" /></a>
-              <a href="https://x402.org" target="_blank" rel="noopener" className="x402-logo"><img src={x402Logo} alt="x402" title="x402 Pay-per-action" /></a>
+              <a href="https://x402.org" target="_blank" rel="noopener" className="x402-logo">x402</a>
               <a href="https://pyth.network" target="_blank" rel="noopener"><img src={pythLogo} alt="Pyth Entropy" title="Pyth Entropy randomness" /></a>
               <a href="https://www.circle.com/en/usdc" target="_blank" rel="noopener"><img src={usdcLogo} alt="USDC" title="USDC payments" /></a>
             </div>

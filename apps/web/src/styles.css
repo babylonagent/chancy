@@ -404,11 +404,16 @@ input { outline: none; }
   display: flex; flex-direction: column; align-items: center; gap: 16px;
   padding-top: 24px; border-top: 2px dashed var(--border);
 }
-.tech-logos { display: flex; align-items: center; justify-content: center; gap: 24px; flex-wrap: wrap; }
-.tech-logos a { display: inline-flex; align-items: center; line-height: 0; }
-.tech-logos img { height: 22px; width: auto; image-rendering: auto; }
-.tech-logos .x402-logo { color: var(--text); display: inline-flex; }
-.tech-logos .x402-logo img { height: 18px; }
+.tech-logos { display: flex; align-items: center; justify-content: center; gap: 20px; flex-wrap: wrap; }
+.tech-logos a { display: inline-flex; align-items: center; justify-content: center; line-height: 0; }
+.tech-logos img { height: 22px; width: auto; max-width: none; }
+.tech-logos .x402-logo {
+  color: var(--text);
+  font-family: 'Courier New', monospace;
+  font-size: 18px; font-weight: bold;
+  text-decoration: none;
+  line-height: 1;
+}
 .babylon-credit { font-size: 14px; color: var(--text-faint); text-align: center; }
 .babylon-credit a { color: var(--accent); text-decoration: none; }
 .footer-links { display: flex; justify-content: center; gap: 24px; }
