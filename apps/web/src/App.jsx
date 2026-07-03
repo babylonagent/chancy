@@ -295,8 +295,9 @@ export default function App({ wallet, farcaster }) {
         sfx.click();
       }
     }
-    document.addEventListener('click', handleClick);
-    return () => document.removeEventListener('click', handleClick);
+    // Use capture phase so we fire BEFORE modal's stopPropagation blocks the event
+    document.addEventListener('click', handleClick, true);
+    return () => document.removeEventListener('click', handleClick, true);
   }, []);
 
   // ── Health + config ──
@@ -671,7 +672,7 @@ export default function App({ wallet, farcaster }) {
             ) : (
               <button className="btn btn-primary" onClick={connectWallet}>Connect wallet →</button>
             )}
-            <button className="btn btn-ghost" onClick={() => setShowRules(true)}>How to play</button>
+            <button className="btn btn-secondary" onClick={() => setShowRules(true)}>How to play</button>
           </div>
 
           {/* How it works */}
@@ -706,17 +707,17 @@ export default function App({ wallet, farcaster }) {
           <div className="landing-section">
             <h2 className="landing-h2">Game modes</h2>
             <div className="modes-preview">
-              <div className="mode-info-card easy" style={{ borderImage: `url(${frameGreen}) 6 stretch`, borderWidth: '6px', borderStyle: 'solid' }}>
+              <div className="mode-info-card easy">
                 <span className="mode-name">Easy</span>
                 <span className="mode-stats">5 bombs · 3 prizes</span>
                 <span className="mode-desc">More prizes, fewer bombs. Higher chance to sweep.</span>
               </div>
-              <div className="mode-info-card normal" style={{ borderImage: `url(${frameGold}) 6 stretch`, borderWidth: '6px', borderStyle: 'solid' }}>
+              <div className="mode-info-card normal">
                 <span className="mode-name">Normal</span>
                 <span className="mode-stats">7 bombs · 2 prizes</span>
                 <span className="mode-desc">Balanced risk. Standard payouts.</span>
               </div>
-              <div className="mode-info-card hardcore" style={{ borderImage: `url(${frameRed}) 6 stretch`, borderWidth: '6px', borderStyle: 'solid' }}>
+              <div className="mode-info-card hardcore">
                 <span className="mode-name">Hardcore</span>
                 <span className="mode-stats">10 bombs · 1 prize</span>
                 <span className="mode-desc">One prize, maximum bombs. Highest reward.</span>

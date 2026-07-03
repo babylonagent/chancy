@@ -354,34 +354,38 @@ input { outline: none; }
   border-bottom: 2px solid var(--accent-dark); padding-bottom: 8px;
 }
 
-/* How it works steps */
-.how-steps { display: flex; flex-direction: column; gap: 12px; }
+/* How it works steps — horizontal row of pixel-art cards per mockup */
+.how-steps { display: flex; flex-direction: row; gap: 10px; }
 .how-step {
-  display: flex; gap: 14px; padding: 18px 20px;
-  border-radius: var(--radius); background: var(--bg-card); border: 2px solid var(--border);
+  flex: 1; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px;
+  padding: 20px 14px;
+  border-radius: 0; background: var(--bg-card); border: 2px solid var(--border);
 }
 .step-num {
-  width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+  width: 32px; height: 32px; border-radius: 0; flex-shrink: 0;
   background: var(--accent); border: 2px solid var(--accent-dark);
   display: flex; align-items: center; justify-content: center;
   font-family: 'Press Start 2P', monospace; font-weight: 400; font-size: 12px; color: #1a1000;
 }
-.step-body { display: flex; flex-direction: column; gap: 4px; }
-.step-body strong { font-family: 'Press Start 2P', monospace; font-size: 10px; font-weight: 400; }
-.step-body p { color: var(--text-dim); font-size: 12px; line-height: 1.7; }
+.step-body { display: flex; flex-direction: column; gap: 4px; align-items: center; }
+.step-body strong { font-family: 'Press Start 2P', monospace; font-size: 9px; font-weight: 400; }
+.step-body p { color: var(--text-dim); font-size: 12px; line-height: 1.6; }
 
-/* Mode preview cards — pixel art frames applied via inline border-image in JSX */
+/* Mode preview cards — pixel art cards per mockup */
 .modes-preview { display: flex; flex-direction: column; gap: 10px; }
 .mode-info-card {
-  display: flex; flex-direction: column; gap: 4px;
+  display: flex; flex-direction: column; gap: 6px;
   padding: 16px 20px; border-radius: 0;
-  background: var(--bg-card); border: 6px solid var(--border);
+  background: var(--bg-card); border: 2px solid var(--border);
   image-rendering: pixelated;
 }
-.mode-info-card.easy { }
-.mode-info-card.normal { }
-.mode-info-card.hardcore { }
+.mode-info-card.easy { border-color: var(--green-dark); }
+.mode-info-card.normal { border-color: var(--accent-dark); }
+.mode-info-card.hardcore { border-color: var(--red-dark); }
 .mode-info-card .mode-name { font-family: 'Press Start 2P', monospace; font-weight: 400; font-size: 11px; }
+.mode-info-card.easy .mode-name { color: var(--green); }
+.mode-info-card.normal .mode-name { color: var(--accent); }
+.mode-info-card.hardcore .mode-name { color: var(--red); }
 .mode-info-card .mode-stats { color: var(--accent); font-family: 'Press Start 2P', monospace; font-weight: 400; font-size: 9px; }
 .mode-info-card .mode-desc { color: var(--text-dim); font-size: 11px; }
 
