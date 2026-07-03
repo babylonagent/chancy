@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState, useRef } from 'react';
 import sfx from './sound';
 import FloatingSprites from './FloatingSprites';
 import chancyLogo from './assets/chancy-logo.svg';
-import baseLogo from './assets/tech/base.svg';
+import baseLogo from './assets/tech/base-basemark.svg';
 import farcasterLogo from './assets/tech/farcaster.png';
 import x402Logo from './assets/tech/x402.svg';
 import pythLogo from './assets/tech/pyth.svg';
@@ -619,7 +619,7 @@ export default function App({ wallet, farcaster }) {
   //  RENDER
   // ═══════════════════════════════════════════════════════════════════════════
   return (
-    <div className="app" style={{ '--frame-gold': `url(${frameGold})`, '--frame-dark': `url(${frameDark})`, '--frame-green': `url(${frameGreen})`, '--frame-red': `url(${frameRed})`, '--btn-gold-up': `url(${btnGoldRaised})`, '--btn-gold-down': `url(${btnGoldPressed})`, '--btn-dark-up': `url(${btnDarkRaised})`, '--btn-dark-down': `url(${btnDarkPressed})`, '--btn-green-up': `url(${btnGreenRaised})`, '--btn-green-down': `url(${btnGreenPressed})`, '--btn-red-up': `url(${btnRedRaised})`, '--btn-red-down': `url(${btnRedPressed})` }}>
+    <div className={`app ${view === 'splash' ? 'landing-mode' : ''}`} style={{ '--frame-gold': `url(${frameGold})`, '--frame-dark': `url(${frameDark})`, '--frame-green': `url(${frameGreen})`, '--frame-red': `url(${frameRed})`, '--btn-gold-up': `url(${btnGoldRaised})`, '--btn-gold-down': `url(${btnGoldPressed})`, '--btn-dark-up': `url(${btnDarkRaised})`, '--btn-dark-down': `url(${btnDarkPressed})`, '--btn-green-up': `url(${btnGreenRaised})`, '--btn-green-down': `url(${btnGreenPressed})`, '--btn-red-up': `url(${btnRedRaised})`, '--btn-red-down': `url(${btnRedPressed})` }}>
       <FloatingSprites />
       {view !== 'splash' && (
         <header className="header">
@@ -766,9 +766,9 @@ export default function App({ wallet, farcaster }) {
           {/* Footer */}
           <div className="landing-footer">
             <div className="tech-logos">
-              <a href="https://base.org" target="_blank" rel="noopener"><img src={baseLogo} alt="Base" title="Base L2" /></a>
               <a href="https://farcaster.xyz" target="_blank" rel="noopener"><img src={farcasterLogo} alt="Farcaster" title="Farcaster Mini App" /></a>
               <a href="https://x402.org" target="_blank" rel="noopener" className="x402-logo">x402</a>
+              <a href="https://base.org" target="_blank" rel="noopener"><img src={baseLogo} alt="Base" title="Base L2" /></a>
               <a href="https://pyth.network" target="_blank" rel="noopener"><img src={pythLogo} alt="Pyth Entropy" title="Pyth Entropy randomness" /></a>
               <a href="https://www.circle.com/en/usdc" target="_blank" rel="noopener"><img src={usdcLogo} alt="USDC" title="USDC payments" /></a>
             </div>

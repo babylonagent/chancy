@@ -86,6 +86,7 @@ input { outline: none; }
 
 /* ═══ LAYOUT ═══ */
 .app { width: 100%; max-width: 480px; margin: 0 auto; padding: 0 16px 120px; position: relative; z-index: 1; }
+.app.landing-mode { padding-bottom: 32px; }
 
 /* ═══ HEADER ═══ */
 .header {
@@ -332,7 +333,7 @@ input { outline: none; }
 .busy-overlay { opacity: 0.6; pointer-events: none; }
 
 /* ═══ LANDING PAGE ═══ */
-.landing-page { display: flex; flex-direction: column; gap: 40px; padding: 32px 0 40px; }
+.landing-page { display: flex; flex-direction: column; gap: 40px; padding: 32px 0 0; }
 .landing-hero { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 20px; }
 .landing-hero .hero-logo {
   width: 88px; height: 88px;
@@ -354,12 +355,18 @@ input { outline: none; }
   border-bottom: 2px solid var(--accent-dark); padding-bottom: 8px;
 }
 
-/* How it works steps — 3 cards in a row, centered text per mockup */
+/* How it works steps — 3 cards in a row, beveled */
 .how-steps { display: flex; flex-direction: row; gap: 8px; }
 .how-step {
   flex: 1; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px;
   padding: 20px 12px;
   border-radius: 0; background: var(--bg-card); border: 2px solid var(--border);
+  /* Retro bevel/extrude effect */
+  box-shadow:
+    inset 2px 2px 0 rgba(255,255,255,0.06),
+    inset -3px -3px 0 rgba(0,0,0,0.5),
+    3px 3px 0 #06060a,
+    6px 6px 0 rgba(0,0,0,0.6);
 }
 .step-num {
   width: 28px; height: 28px; border-radius: 0; flex-shrink: 0;
@@ -371,7 +378,7 @@ input { outline: none; }
 .step-body strong { font-family: 'Press Start 2P', monospace; font-size: 8px; font-weight: 400; }
 .step-body p { color: var(--text-dim); font-size: 11px; line-height: 1.5; }
 
-/* Mode preview cards — left accent stripe per mockup */
+/* Mode preview cards — horizontal row, beveled, left accent stripe */
 .modes-preview { display: flex; flex-direction: row; gap: 8px; }
 .mode-info-card {
   flex: 1; display: flex; flex-direction: column; gap: 4px;
@@ -381,6 +388,12 @@ input { outline: none; }
   border-left: 4px solid var(--border);
   image-rendering: pixelated;
   position: relative;
+  /* Retro bevel/extrude effect */
+  box-shadow:
+    inset 2px 2px 0 rgba(255,255,255,0.06),
+    inset -3px -3px 0 rgba(0,0,0,0.5),
+    3px 3px 0 #06060a,
+    6px 6px 0 rgba(0,0,0,0.6);
 }
 .mode-info-card.easy { border-left-color: var(--green); }
 .mode-info-card.normal { border-left-color: var(--accent); }
@@ -392,13 +405,19 @@ input { outline: none; }
 .mode-info-card .mode-stats { color: var(--accent); font-family: 'Press Start 2P', monospace; font-weight: 400; font-size: 9px; }
 .mode-info-card .mode-desc { color: var(--text-dim); font-size: 11px; }
 
-/* Trust + Agent feature cards — 3 in a row, icon left + text right */
+/* Trust + Agent feature cards — 3 in a row, icon left + text right, beveled */
 .trust-row { display: flex; flex-direction: row; gap: 8px; }
 .trust-item {
   flex: 1; display: flex; align-items: flex-start; gap: 10px;
   padding: 12px 12px;
   border-radius: 0; background: var(--bg-card); border: 2px solid var(--border);
   font-size: 11px; color: var(--text-dim); line-height: 1.4;
+  /* Retro bevel/extrude effect */
+  box-shadow:
+    inset 2px 2px 0 rgba(255,255,255,0.06),
+    inset -3px -3px 0 rgba(0,0,0,0.5),
+    3px 3px 0 #06060a,
+    6px 6px 0 rgba(0,0,0,0.6);
 }
 .trust-icon { width: 24px; height: 24px; flex-shrink: 0; image-rendering: pixelated; }
 
@@ -406,6 +425,7 @@ input { outline: none; }
 .landing-footer {
   display: flex; flex-direction: column; align-items: center; gap: 10px;
   padding-top: 16px; border-top: 2px dashed var(--border);
+  padding-bottom: 24px;
 }
 .tech-logos { display: flex; align-items: center; justify-content: center; gap: 20px; flex-wrap: wrap; }
 .tech-logos a { display: inline-flex; align-items: center; justify-content: center; line-height: 0; }
