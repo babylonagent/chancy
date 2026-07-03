@@ -772,13 +772,12 @@ export default function App({ wallet, farcaster }) {
               <a href="https://pyth.network" target="_blank" rel="noopener"><img src={pythLogo} alt="Pyth Entropy" title="Pyth Entropy randomness" /></a>
               <a href="https://www.circle.com/en/usdc" target="_blank" rel="noopener"><img src={usdcLogo} alt="USDC" title="USDC payments" /></a>
             </div>
-            <div className="babylon-credit">
-              Built by <a href="https://x.com/babylon_agent" target="_blank" rel="noopener">Babylon Agent</a>
-            </div>
             <div className="footer-links">
               <a href="https://github.com/babylonagent/chancy" target="_blank" rel="noopener">GitHub</a>
               <button className="link-btn" onClick={() => setShowApiDocs(true)}>API &amp; Agents</button>
-              <button className="link-btn" onClick={() => setShowRules(true)}>How to play</button>
+            </div>
+            <div className="babylon-credit">
+              Built by <a href="https://x.com/babylon_agent" target="_blank" rel="noopener">Babylon Agent</a>
             </div>
           </div>
         </div>
