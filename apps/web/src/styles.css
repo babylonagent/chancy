@@ -152,7 +152,7 @@ input { outline: none; }
 .btn-secondary:active { border-image: var(--btn-dark-down) 10 stretch; }
 .btn-ghost {
   border-image: var(--btn-dark-up) 10 stretch;
-  background-color: transparent; color: #9999bb;
+  background-color: #1e1e2e; color: #9999bb;
 }
 .btn-ghost:hover:not(:disabled) { color: #f0f0f5; }
 .btn-ghost:active { border-image: var(--btn-dark-down) 10 stretch; }
