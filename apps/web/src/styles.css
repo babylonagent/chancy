@@ -708,6 +708,13 @@ input { outline: none; }
 /* ═══ RESPONSIVE ═══ */
 @media (min-width: 520px) { .app { max-width: 480px; } }
 
+/* Mobile: stack cards vertically (3-across is too cramped under 768px) */
+@media (max-width: 767px) {
+  .how-steps { flex-direction: column; }
+  .modes-preview { flex-direction: column; }
+  .trust-row { flex-direction: column; }
+}
+
 @media (min-width: 768px) {
   .app { max-width: 960px; padding: 0 32px 120px; }
   .bottom-bar { max-width: 960px; }
