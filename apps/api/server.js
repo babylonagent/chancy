@@ -329,6 +329,19 @@ function createApp({
     console.error(JSON.stringify({ ok: false, x402: false, error: err.message }));
   }
 
+  // x402 resourceServer.initialize() runs async AFTER the try-catch above.
+  // If CDP credentials are missing/misconfigured, it throws an unhandled rejection
+  // that crashes the whole API. Catch it here so the core game service stays up.
+  process.on("unhandledRejection", (reason) => {
+    const msg = String(reason?.message || reason || "");
+    if (msg.includes("Facilitator") || msg.includes("x402") || msg.includes("supported payment kinds")) {
+      console.error(JSON.stringify({ ok: false, x402: false, error: "x402 async init failed (non-fatal): " + msg }));
+      return; // swallow — core game still works
+    }
+    console.error("Unhandled rejection:", reason);
+    process.exit(1);
+  });
+
   // ── Deposit Indexer — auto-credits raw USDC transfers to vault ──
   // Watches Transfer events, credits from address 95% net (5% fee stays in vault).
   // Replaces approve+deposit flow with single raw send.
