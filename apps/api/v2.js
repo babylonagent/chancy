@@ -10,13 +10,13 @@ const { MAX_CONCURRENT_SESSIONS } = require("./security");
 // Host creates session, funds prize pot. Player pays per-tile reveal.
 // Host earns player's spent on loss/quit/idle. Player earns prize pot shares.
 // ───────────────────────────────────────────────────────────────────────────
-const BOARD_SIZE = 64;
+const BOARD_SIZE = 36;
 const BOMBS_TO_GAME_OVER = 3;
 
 const modeConfig = {
-  Easy:     { bombs: 5,  prizes: 3, startBps: 150,  capBps: 15000 },
-  Normal:   { bombs: 7,  prizes: 2, startBps: 250,  capBps: 20000 },
-  Hardcore: { bombs: 10, prizes: 1, startBps: 350,  capBps: 25000 },
+  Easy:     { bombs: 3, prizes: 3, startBps: 150,  capBps: 15000 },
+  Normal:   { bombs: 4, prizes: 2, startBps: 250,  capBps: 20000 },
+  Hardcore: { bombs: 6, prizes: 1, startBps: 350,  capBps: 25000 },
 };
 
 // Business constants (6-decimal USDC)
@@ -43,7 +43,7 @@ function normalizeTile(tile) {
 }
 
 // Progressive per-tile reveal cost (from V1 contract formula).
-// Cost increases monotonically with revealIndex. Sum of all 64 costs ≤ cap.
+// Cost increases monotonically with revealIndex. Sum of all 36 costs ≤ cap.
 function revealCostAt(prizePot, mode, revealIndex) {
   const cfg = modeConfig[mode];
   if (!cfg) throw new Error("INVALID_MODE");

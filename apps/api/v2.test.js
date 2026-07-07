@@ -150,7 +150,7 @@ describe("P2P host/player game mechanics", () => {
   it("progressive reveal costs increase monotonically", async () => {
     const pot = BigInt(POT);
     let prev = 0n;
-    for (let i = 0; i < 64; i++) {
+    for (let i = 0; i < 36; i++) {
       const cost = revealCostAt(pot, "Easy", i);
       expect(cost).toBeGreaterThanOrEqual(prev);
       prev = cost;

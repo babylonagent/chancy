@@ -139,7 +139,7 @@ function createChancyX402({
   // req.x402Paid is set by a pre-middleware flag to indicate x402 mode.
 
   const addressSchema = z.string().regex(/^0x[0-9a-fA-F]{40}$/);
-  const BOARD_SIZE = 64;
+  const BOARD_SIZE = 36;
   const BOMBS_TO_GAME_OVER = 3;
   const ENTRANCE_FEE = 50_000n;
 

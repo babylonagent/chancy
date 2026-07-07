@@ -216,7 +216,7 @@ input { outline: none; }
 
 /* Tile board */
 .board {
-  display: grid; grid-template-columns: repeat(8, 1fr);
+  display: grid; grid-template-columns: repeat(6, 1fr);
   gap: 4px; padding: 12px; border-radius: var(--radius);
   background: var(--bg-card); border: 2px solid var(--border);
   aspect-ratio: 1;

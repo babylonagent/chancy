@@ -55,7 +55,7 @@ describe('Chancy V2 credit client', () => {
     render(<App />);
     expect(await screen.findByText(/Tap tiles\./i)).toBeInTheDocument();
     expect(screen.getByRole('dialog', { name: /find the prizes before your third bomb/i })).toBeInTheDocument();
-    expect(screen.queryByLabelText(/Chancy 8x8 board/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Chancy 6x6 board/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Contract 0x/i)).not.toBeInTheDocument();
   });
 
@@ -104,8 +104,8 @@ describe('Chancy V2 credit client', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /play normal — \$0\.05/i }));
 
-    expect(await screen.findByLabelText(/Chancy 8x8 board/i)).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: /^tile \d+$/i })).toHaveLength(64);
+    expect(await screen.findByLabelText(/Chancy 6x6 board/i)).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /^tile \d+$/i })).toHaveLength(36);
 
     window.ethereum.request.mockClear();
     fireEvent.click(screen.getByRole('button', { name: 'tile 7' }));

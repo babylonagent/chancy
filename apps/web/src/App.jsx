@@ -33,12 +33,12 @@ import btnRedPressed from './assets/pixel/btn-red-pressed.png';
 const API = import.meta.env?.VITE_CHANCY_API_URL || '';
 const USDC_DECIMALS = 1_000_000n;
 const BOMB_LIVES = 3;
-const TILES = Array.from({ length: 64 }, (_, i) => i + 1);
+const TILES = Array.from({ length: 36 }, (_, i) => i + 1);
 
 const MODES = {
-  Easy:     { bombs: 5,  prizes: 3, copy: '5 bombs · 3 prizes' },
-  Normal:   { bombs: 7,  prizes: 2, copy: '7 bombs · 2 prizes' },
-  Hardcore: { bombs: 10, prizes: 1, copy: '10 bombs · 1 prize' },
+  Easy:     { bombs: 3,  prizes: 3, copy: '3 bombs · 3 prizes' },
+  Normal:   { bombs: 4,  prizes: 2, copy: '4 bombs · 2 prizes' },
+  Hardcore: { bombs: 6,  prizes: 1, copy: '6 bombs · 1 prize' },
 };
 
 const POT_PRESETS = ['5', '10', '25', '50'];
@@ -984,7 +984,7 @@ export default function App({ wallet, farcaster }) {
           {isPlaying && (
             <div className="next-cost-hint">Next tile: <strong className="gold">{dollars(run.nextTileCost)}</strong></div>
           )}
-          <div className="board">
+          <div className="board" aria-label="Chancy 6x6 board" role="grid">
             {TILES.map((tile) => {
               const state = revealed[tile];
               return (
