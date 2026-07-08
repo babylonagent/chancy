@@ -44,6 +44,8 @@ describe("V3 Contract Unit Tests — Challenge, Timeout, Edge Cases", () => {
     await usdc.mint(player.address, maxSpend);
     await usdc.connect(host).approve(await settlement.getAddress(), prizePot);
     await usdc.connect(player).approve(await settlement.getAddress(), maxSpend);
+    await settlement.connect(host).deposit(prizePot);
+    await settlement.connect(player).deposit(maxSpend);
 
     let gameId;
     const tx = await settlement.connect(host).createGame(difficultyEnum, prizePot, hostCommitment);
@@ -97,6 +99,8 @@ describe("V3 Contract Unit Tests — Challenge, Timeout, Edge Cases", () => {
       await usdc.mint(player.address, maxSpend);
       await usdc.connect(host).approve(await settlement.getAddress(), prizePot);
       await usdc.connect(player).approve(await settlement.getAddress(), maxSpend);
+      await settlement.connect(host).deposit(prizePot);
+      await settlement.connect(player).deposit(maxSpend);
 
       const tx = await settlement.connect(host).createGame(0, prizePot, hostCommitment);
       const receipt = await tx.wait();
@@ -110,14 +114,14 @@ describe("V3 Contract Unit Tests — Challenge, Timeout, Edge Cases", () => {
       // Don't settle — advance time past 24h
       await time.increase(25 * 3600);
 
-      const hostBalBefore = await usdc.balanceOf(host.address);
-      const playerBalBefore = await usdc.balanceOf(player.address);
+      const hostBalBefore = await settlement.balances(host.address);
+      const playerBalBefore = await settlement.balances(player.address);
 
       // Anyone can trigger refund
       await settlement.connect(challenger).refundTimeout(gameId);
 
-      const hostBalAfter = await usdc.balanceOf(host.address);
-      const playerBalAfter = await usdc.balanceOf(player.address);
+      const hostBalAfter = await settlement.balances(host.address);
+      const playerBalAfter = await settlement.balances(player.address);
 
       // With 5% house fee on payouts, refunds are 95% of locked amounts
       const expectedHostRefund = prizePot * 95n / 100n;
@@ -136,6 +140,7 @@ describe("V3 Contract Unit Tests — Challenge, Timeout, Edge Cases", () => {
 
       await usdc.mint(host.address, prizePot);
       await usdc.connect(host).approve(await settlement.getAddress(), prizePot);
+      await settlement.connect(host).deposit(prizePot);
 
       const tx = await settlement.connect(host).createGame(0, prizePot, hostCommitment);
       const receipt = await tx.wait();
@@ -164,6 +169,8 @@ describe("V3 Contract Unit Tests — Challenge, Timeout, Edge Cases", () => {
       await usdc.mint(player.address, maxSpend);
       await usdc.connect(host).approve(await settlement.getAddress(), prizePot);
       await usdc.connect(player).approve(await settlement.getAddress(), maxSpend);
+      await settlement.connect(host).deposit(prizePot);
+      await settlement.connect(player).deposit(maxSpend);
 
       const tx = await settlement.connect(host).createGame(0, prizePot, hostCommitment);
       const receipt = await tx.wait();
@@ -187,6 +194,7 @@ describe("V3 Contract Unit Tests — Challenge, Timeout, Edge Cases", () => {
 
       await usdc.mint(host.address, prizePot);
       await usdc.connect(host).approve(await settlement.getAddress(), prizePot);
+      await settlement.connect(host).deposit(prizePot);
 
       const tx = await settlement.connect(host).createGame(0, prizePot, hostCommitment);
       const receipt = await tx.wait();
@@ -221,6 +229,7 @@ describe("V3 Contract Unit Tests — Challenge, Timeout, Edge Cases", () => {
 
       await usdc.mint(host.address, prizePot + maxSpend);
       await usdc.connect(host).approve(await settlement.getAddress(), prizePot + maxSpend);
+      await settlement.connect(host).deposit(prizePot + maxSpend);
 
       const tx = await settlement.connect(host).createGame(0, prizePot, hostCommitment);
       const receipt = await tx.wait();
@@ -251,6 +260,8 @@ describe("V3 Contract Unit Tests — Challenge, Timeout, Edge Cases", () => {
       await usdc.mint(player.address, maxSpend);
       await usdc.connect(host).approve(await settlement.getAddress(), prizePot);
       await usdc.connect(player).approve(await settlement.getAddress(), maxSpend);
+      await settlement.connect(host).deposit(prizePot);
+      await settlement.connect(player).deposit(maxSpend);
 
       const tx = await settlement.connect(host).createGame(0, prizePot, hostCommitment);
       const receipt = await tx.wait();
@@ -295,6 +306,8 @@ describe("V3 Contract Unit Tests — Challenge, Timeout, Edge Cases", () => {
       await usdc.mint(player.address, maxSpend);
       await usdc.connect(host).approve(await settlement.getAddress(), prizePot);
       await usdc.connect(player).approve(await settlement.getAddress(), maxSpend);
+      await settlement.connect(host).deposit(prizePot);
+      await settlement.connect(player).deposit(maxSpend);
 
       const tx = await settlement.connect(host).createGame(0, prizePot, hostCommitment);
       const receipt = await tx.wait();

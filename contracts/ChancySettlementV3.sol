@@ -84,6 +84,7 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
     // ── Storage ───────────────────────────────────────────────────────────────
     mapping(uint256 => Game) public games;
     mapping(uint256 => Settlement) public settlements;
+    mapping(address => uint256) public balances;  // on-chain USDC credit balance
     uint256 public nextGameId = 1;
 
     // ── Events ───────────────────────────────────────────────────────────────
@@ -97,6 +98,8 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
     event SettlerBondDeposited(uint256 amount);
     event SettlerBondSlashed(uint256 amount, address to);
     event HouseFeeCollected(uint256 gameId, uint256 feeAmount);
+    event Deposited(address indexed user, uint256 amount);
+    event Withdrawn(address indexed user, uint256 amount);
 
     // ── Modifiers ────────────────────────────────────────────────────────────
     modifier onlySettler() {
@@ -148,6 +151,40 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
         emit SettlerBondSlashed(amount, to);
     }
 
+    // ── Balance Management (on-chain credits) ──────────────────────────────────
+
+    /**
+     * @notice Deposit USDC into the contract to fund gameplay.
+     *         Requires prior approve on USDC token. One-time approval of desired amount.
+     *         After deposit, createGame/joinGame pull from balance — no per-game approvals.
+     */
+    function deposit(uint256 amount) external nonReentrant {
+        require(amount > 0, "INVALID_AMOUNT");
+        balances[msg.sender] += amount;
+        usdc.safeTransferFrom(msg.sender, address(this), amount);
+        emit Deposited(msg.sender, amount);
+    }
+
+    /**
+     * @notice Withdraw your USDC balance from the contract. 5% fee auto-sent to treasury.
+     */
+    function withdraw(uint256 amount) external nonReentrant {
+        require(amount > 0, "INVALID_AMOUNT");
+        require(balances[msg.sender] >= amount, "INSUFFICIENT_BALANCE");
+
+        balances[msg.sender] -= amount;
+
+        // 5% house fee auto-sent to treasury
+        uint256 fee = (amount * HOUSE_FEE_BPS) / BPS_DENOMINATOR;
+        uint256 net = amount - fee;
+        totalHouseFees += fee;
+
+        _payUSDC(treasury, fee);
+        _payUSDC(msg.sender, net);
+
+        emit Withdrawn(msg.sender, amount);
+    }
+
     // ── Game Lifecycle ──────────────────────────────────────────────────────
 
     /**
@@ -164,6 +201,9 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
         require(prizePot >= MIN_PRIZE_POT, "PRIZE_POT_TOO_LOW");
         require(prizePot <= MAX_PRIZE_POT, "PRIZE_POT_TOO_HIGH");
         require(hostCommitment != bytes32(0), "INVALID_COMMITMENT");
+        require(balances[msg.sender] >= prizePot, "INSUFFICIENT_BALANCE");
+
+        balances[msg.sender] -= prizePot;
 
         gameId = nextGameId++;
         games[gameId] = Game({
@@ -181,7 +221,7 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
             settledAt: 0
         });
 
-        usdc.safeTransferFrom(msg.sender, address(this), prizePot);
+        // Pot stays in contract escrow, will be paid out on settle/refund
         emit GameCreated(gameId, msg.sender, difficulty, prizePot, hostCommitment);
     }
 
@@ -201,12 +241,13 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
         require(msg.sender != game.host, "HOST_CANNOT_PLAY");
         require(playerCommitment != bytes32(0), "INVALID_COMMITMENT");
         require(maxSpend > 0, "INVALID_MAX_SPEND");
+        require(balances[msg.sender] >= maxSpend, "INSUFFICIENT_BALANCE");
 
         game.player = msg.sender;
         game.playerCommitment = playerCommitment;
         game.maxSpend = maxSpend;
 
-        usdc.safeTransferFrom(msg.sender, address(this), maxSpend);
+        balances[msg.sender] -= maxSpend;
         emit GameJoined(gameId, msg.sender, maxSpend, playerCommitment);
     }
 
@@ -299,9 +340,9 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
             settlerAddress: msg.sender
         });
 
-        // Transfer (5% house fee deducted)
-        _payUSDC(game.host, _applyFee(hostPayout));
-        _payUSDC(game.player, _applyFee(playerPayout));
+        // Credit payouts to on-chain balances (5% house fee deducted)
+        balances[game.host] += _applyFee(hostPayout);
+        balances[game.player] += _applyFee(playerPayout);
 
         emit GameSettled(gameId, outcome, hostPayout, playerPayout);
     }
@@ -438,9 +479,9 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
 
         game.status = GameStatus.Refunded;
 
-        _payUSDC(game.host, _applyFee(hostRefund));
+        balances[game.host] += _applyFee(hostRefund);
         if (game.player != address(0)) {
-            _payUSDC(game.player, _applyFee(playerRefund));
+            balances[game.player] += _applyFee(playerRefund);
         }
 
         emit GameRefunded(gameId, hostRefund, playerRefund);

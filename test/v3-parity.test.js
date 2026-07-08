@@ -155,6 +155,10 @@ describe("V3 Board Derivation Parity (JS vs Solidity)", () => {
       await usdc.connect(host).approve(await settlement.getAddress(), prizePot);
       await usdc.connect(player).approve(await settlement.getAddress(), maxSpend);
 
+      // Deposit into settlement contract (deposit-balance model)
+      await settlement.connect(host).deposit(prizePot);
+      await settlement.connect(player).deposit(maxSpend);
+
       // Create game (host)
       const difficultyEnum = 0; // Easy
       const tx1 = await settlement.connect(host).createGame(
@@ -225,6 +229,8 @@ describe("V3 Board Derivation Parity (JS vs Solidity)", () => {
       await usdc.mint(player.address, maxSpend);
       await usdc.connect(host).approve(await settlement.getAddress(), prizePot);
       await usdc.connect(player).approve(await settlement.getAddress(), maxSpend);
+      await settlement.connect(host).deposit(prizePot);
+      await settlement.connect(player).deposit(maxSpend);
 
       const gameId = 2n;
       await settlement.connect(host).createGame(0, prizePot, hostCommitment);

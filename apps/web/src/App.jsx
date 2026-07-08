@@ -30,12 +30,27 @@ import btnRedRaised from './assets/pixel/btn-red-raised.png';
 import btnRedPressed from './assets/pixel/btn-red-pressed.png';
 
 // ─── V3 CONTRACT CONFIG ─────────────────────────────────────────────────────
-const V3_SETTLEMENT = '0x25DF72a262910ccFf04a640dE960f31e1786a187';
+const V3_SETTLEMENT = '0x48aBca2960a18c1b43CB8Ba06b4B0192f941047f';
 const USDC_ADDRESS = '0x036CbD53842c5426634e7929541eC2318f3dCF7e'; // USDC on Base Sepolia
 const CHAIN_ID = 84532;
 
 // Minimal ABIs (subset of the on-chain ChancySettlementV3 + ERC20)
 const SETTLEMENT_ABI = [
+  {
+    name: 'deposit', type: 'function', stateMutability: 'nonpayable',
+    inputs: [{ name: 'amount', type: 'uint256' }],
+    outputs: [],
+  },
+  {
+    name: 'withdraw', type: 'function', stateMutability: 'nonpayable',
+    inputs: [{ name: 'amount', type: 'uint256' }],
+    outputs: [],
+  },
+  {
+    name: 'balances', type: 'function', stateMutability: 'view',
+    inputs: [{ name: 'user', type: 'address' }],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
   {
     name: 'createGame', type: 'function', stateMutability: 'nonpayable',
     inputs: [
@@ -336,15 +351,16 @@ function ApiDocsSheet({ onClose }) {
       <div className="modal api-docs-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-handle" />
         <h2>API &amp; Agents</h2>
-        <p className="modal-sub">Chancy V3 is fully on-chain. Players and hosts interact directly with the ChancySettlementV3 smart contract via USDC approvals — no off-chain credit ledger, no deposits, no withdrawals.</p>
+        <p className="modal-sub">Chancy V3 uses on-chain credits. Deposit USDC into the contract once, play unlimited games from your balance, withdraw anytime (5% fee to treasury).</p>
 
         <div className="api-section">
           <h3 className="api-h3">On-chain Flow</h3>
           <ol className="api-flow">
-            <li>Host approves USDC &rarr; calls <code>createGame(difficulty, prizePot, hostCommitment)</code></li>
-            <li>Player approves maxSpend USDC &rarr; calls <code>joinGame(gameId, playerCommitment, maxSpend)</code></li>
-            <li>Settler bot supplies Pyth randomness &rarr; activates the game off-chain</li>
-            <li>Player clicks tiles via the V3 engine; game settles on-chain on win/loss/quit</li>
+            <li>Approve USDC &rarr; <code>deposit(amount)</code> to fund your on-chain balance</li>
+            <li>Host calls <code>createGame(difficulty, prizePot, hostCommitment)</code> — pulls from balance</li>
+            <li>Player calls <code>joinGame(gameId, playerCommitment, maxSpend)</code> — pulls from balance</li>
+            <li>Player clicks tiles via V3 engine; game settles on-chain on win/loss/quit</li>
+            <li>Winnings credited to balance. <code>withdraw(amount)</code> anytime (5% fee)</li>
           </ol>
         </div>
 
@@ -362,7 +378,7 @@ function ApiDocsSheet({ onClose }) {
         <div className="api-section">
           <h3 className="api-h3">Contract Addresses (Base Sepolia)</h3>
           <div className="api-contracts">
-            <div className="api-contract"><span className="api-contract-label">Settlement V3</span><code>0x25DF72a262910ccFf04a640dE960f31e1786a187</code></div>
+            <div className="api-contract"><span className="api-contract-label">Settlement V3</span><code>0x48aBca2960a18c1b43CB8Ba06b4B0192f941047f</code></div>
             <div className="api-contract"><span className="api-contract-label">USDC</span><code>0x036CbD53842c5426634e7929541eC2318f3dCF7e</code></div>
             <div className="api-contract"><span className="api-contract-label">Treasury (5% fee)</span><code>0x51a17E6DaE3d0D04174734b906BB201Cc79a20ff</code></div>
           </div>
@@ -495,7 +511,7 @@ export default function App({ wallet, farcaster }) {
     }
   }, [isConnected, address]);
 
-  // ── On-chain USDC balance (V3: replaces V2 credit ledger) ──
+  // ── On-chain balance (V3: deposits into settlement contract) ──
   const refreshCredits = useCallback(async (a) => {
     const player = a || addr;
     if (!player) return '0';
@@ -503,11 +519,11 @@ export default function App({ wallet, farcaster }) {
       const ethers = await import('ethers');
       const provider = await getEthersProvider(wallet.walletProvider);
       if (!provider) return '0';
-      const usdc = new ethers.Contract(USDC_ADDRESS, ERC20_ABI, provider);
-      const bal = await usdc.balanceOf(player);
+      const settlement = new ethers.Contract(V3_SETTLEMENT, SETTLEMENT_ABI, provider);
+      const bal = await settlement.balances(player);
       const balStr = bal.toString();
       setBalance(balStr);
-      setWithdrawable(balStr); // V3: full balance is withdrawable (direct USDC, no locked credits)
+      setWithdrawable(balStr); // Full balance is withdrawable
       return balStr;
     } catch { return '0'; }
   }, [addr, wallet.walletProvider]);
@@ -661,28 +677,18 @@ export default function App({ wallet, farcaster }) {
       if (!browserProvider) throw new Error('Wallet not connected');
       const signer = await browserProvider.getSigner();
       const contract = new ethers.Contract(V3_SETTLEMENT, SETTLEMENT_ABI, signer);
-      const usdc = new ethers.Contract(USDC_ADDRESS, ERC20_ABI, signer);
 
       const difficultyEnum = MODE_TO_V3_DIFFICULTY[hostMode];
       if (difficultyEnum === undefined) throw new Error('Invalid difficulty');
 
-      // 1. Approve EXACT USDC amount (never unlimited — hard security rule)
-      const currentAllowance = await usdc.allowance(addr, V3_SETTLEMENT);
-      if (currentAllowance < BigInt(pot)) {
-        sfx.click();
-        setStatusMsg('Approving USDC…');
-        const approveTx = await usdc.approve(V3_SETTLEMENT, pot);
-        await approveTx.wait();
-      }
-
-      // 2. Generate host secret + commitment (keccak256(secret))
+      // 1. Generate host secret + commitment (keccak256(secret))
       const hostSecret = randomEntropy();
       const hostCommitment = ethers.keccak256(ethers.solidityPacked(['bytes32'], [hostSecret]));
 
       // Store host secret locally for settlement recovery
       try { localStorage.setItem(`chancy_v3_host_secret_${addr}`, hostSecret); } catch {}
 
-      // 3. createGame on-chain
+      // 2. createGame on-chain (pulls from your deposit balance)
       sfx.click();
       setStatusMsg('Creating game on-chain…');
       const tx = await contract.createGame(difficultyEnum, pot, hostCommitment);
@@ -745,37 +751,25 @@ export default function App({ wallet, farcaster }) {
     } finally { setBusy(false); }
   }
   // ── PLAYER: JOIN (V3 on-chain) ──
-  // V3: approve maxSpend USDC → generate player commitment → joinGame on-chain.
-  // The settler bot activates the game asynchronously; we poll /v3/sessions/:gameId/state
-  // until status becomes 'active', then enter the round view.
+  // V3: deposit already done — joinGame pulls from balance. No per-game approval.
   async function joinSession(sess) {
     setError('');
     const maxSpend = usdcUnits(joinMaxSpend);
     if (BigInt(maxSpend) <= 0n) { setError('Enter a max spend amount.'); return; }
-    if (BigInt(maxSpend) > BigInt(balance)) { setError('Not enough USDC in your wallet.'); return; }
-    setBusy(true); setStatusMsg('Approving USDC…');
+    if (BigInt(maxSpend) > BigInt(balance)) { setError('Not enough balance. Deposit more USDC.'); return; }
+    setBusy(true); setStatusMsg('Joining on-chain…');
     try {
       const ethers = await import('ethers');
       const browserProvider = await getEthersProvider(wallet.walletProvider);
       if (!browserProvider) throw new Error('Wallet not connected');
       const signer = await browserProvider.getSigner();
       const contract = new ethers.Contract(V3_SETTLEMENT, SETTLEMENT_ABI, signer);
-      const usdc = new ethers.Contract(USDC_ADDRESS, ERC20_ABI, signer);
 
-      // 1. Approve EXACT maxSpend (never unlimited)
-      const currentAllowance = await usdc.allowance(addr, V3_SETTLEMENT);
-      if (currentAllowance < BigInt(maxSpend)) {
-        sfx.click();
-        setStatusMsg('Approving USDC…');
-        const approveTx = await usdc.approve(V3_SETTLEMENT, maxSpend);
-        await approveTx.wait();
-      }
-
-      // 2. Generate player commitment (random bytes32 → keccak256)
+      // 1. Generate player commitment (random bytes32 → keccak256)
       const playerRandom = randomEntropy();
       const playerCommitment = ethers.keccak256(ethers.solidityPacked(['bytes32'], [playerRandom]));
 
-      // 3. joinGame on-chain
+      // 2. joinGame on-chain (pulls from your deposit balance)
       sfx.click();
       setStatusMsg('Joining on-chain…');
       const gameId = sess.gameId || sess.sessionId;
@@ -1058,19 +1052,19 @@ export default function App({ wallet, farcaster }) {
           {/* Agent-friendly */}
           <div className="landing-section">
             <h2 className="landing-h2">Agent-friendly</h2>
-            <p className="landing-sub">Built for humans and AI agents. On-chain settlement via smart contracts — trustless, verifiable, no middleman.</p>
+            <p className="landing-sub">Built for humans and AI agents. REST API for on-chain gameplay — any agent can host, join, and play programmatically.</p>
             <div className="trust-row">
               <div className="trust-item">
                 <img className="trust-icon" src={iconRobot} alt="" />
-                <span>On-chain gameplay — Approve USDC, play directly on the contract</span>
+                <span>REST API — Full game loop via /v3/ endpoints, agent-ready</span>
               </div>
               <div className="trust-item">
                 <img className="trust-icon" src={iconBolt} alt="" />
-                <span>Trustless settlement — Contract re-derives the board, no off-chain trust</span>
+                <span>On-chain escrow — Approve USDC, contract holds funds, trustless settlement</span>
               </div>
               <div className="trust-item">
                 <img className="trust-icon" src={iconPlug} alt="" />
-                <span>REST API — Full game loop via /v3/ endpoints</span>
+                <span>x402 compatible — Pay-per-action HTTP 402 protocol support</span>
               </div>
             </div>
           </div>
@@ -1079,6 +1073,7 @@ export default function App({ wallet, farcaster }) {
           <div className="landing-footer">
             <div className="tech-logos">
               <a href="https://farcaster.xyz" target="_blank" rel="noopener"><img src={farcasterLogo} alt="Farcaster" title="Farcaster Mini App" /></a>
+              <a href="https://x402.org" target="_blank" rel="noopener" className="x402-logo">x402</a>
               <a href="https://base.org" target="_blank" rel="noopener"><img src={baseLogo} alt="Base" title="Base L2" /></a>
               <a href="https://pyth.network" target="_blank" rel="noopener"><img src={pythLogo} alt="Pyth Entropy" title="Pyth Entropy randomness" /></a>
               <a href="https://www.circle.com/en/usdc" target="_blank" rel="noopener"><img src={usdcLogo} alt="USDC" title="USDC payments" /></a>
@@ -1106,7 +1101,8 @@ export default function App({ wallet, farcaster }) {
             </div>
             <div className="credit-actions-simple">
               <button className="btn btn-primary btn-sm" onClick={() => { setPreDepositBalance(balance); setView('deposit'); }}>+ Add USDC</button>
-              <button className="btn btn-ghost btn-sm" onClick={() => refreshCredits(addr)}>↻ Refresh</button>
+              <button className="btn btn-ghost btn-sm" disabled={busy || BigInt(balance) <= 0n} onClick={() => { setWithdrawAmt(''); setShowWithdraw(true); }}>Withdraw</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => refreshCredits(addr)}>↻</button>
             </div>
           </div>
 
@@ -1219,26 +1215,51 @@ export default function App({ wallet, farcaster }) {
             </div>
           </div>
 
+          {/* Deposit USDC into the contract (on-chain credits) */}
+          <div className="deposit-step">
+            <div className="deposit-step-num">2</div>
+            <div className="deposit-step-body">
+              <strong>Deposit USDC to play</strong>
+              <p>Approve and deposit USDC into the settlement contract. Your funds become on-chain credits you can play with — no per-game approvals needed.</p>
+              <div className="pot-input-group" style={{ marginBottom: 8 }}>
+                <span className="pot-prefix">$</span>
+                <input value={potAmt} onChange={(e) => setPotAmt(e.target.value)} placeholder="10" inputMode="decimal" />
+              </div>
+              <button className="btn btn-primary" disabled={busy} onClick={async () => {
+                setError(''); setBusy(true); setStatusMsg('Approving USDC…');
+                try {
+                  const ethers = await import('ethers');
+                  const p = await getEthersProvider(wallet.walletProvider);
+                  const signer = await p.getSigner();
+                  const usdc = new ethers.Contract(USDC_ADDRESS, ERC20_ABI, signer);
+                  const contract = new ethers.Contract(V3_SETTLEMENT, SETTLEMENT_ABI, signer);
+                  const amount = usdcUnits(potAmt);
+                  // Approve exact amount
+                  sfx.click();
+                  const allow = await usdc.allowance(addr, V3_SETTLEMENT);
+                  if (allow < BigInt(amount)) {
+                    const atx = await usdc.approve(V3_SETTLEMENT, amount);
+                    await atx.wait();
+                  }
+                  // Deposit
+                  setStatusMsg('Depositing on-chain…');
+                  const dtx = await contract.deposit(amount);
+                  await dtx.wait();
+                  sfx.win();
+                  setStatusMsg(`+${dollars(amount)} deposited!`);
+                  setPollingDeposit(false);
+                  refreshCredits(addr);
+                  setTimeout(() => { setView('lobby'); setStatusMsg(''); }, 1500);
+                } catch (e) { setError(e.message?.slice(0, 200) || 'Deposit failed'); setStatusMsg(''); }
+                finally { setBusy(false); }
+              }}>{busy ? 'Processing…' : `Deposit ${dollars(usdcUnits(potAmt))}`}</button>
+            </div>
+          </div>
+
           {/* Actions */}
           <div className="deposit-actions">
-            <button className="btn btn-secondary" onClick={() => { copyVaultAddress(); setPollingDeposit(true); }}>{copied ? '✓ Copied' : 'Copy my address'}</button>
+            <button className="btn btn-secondary" onClick={() => { copyVaultAddress(); }}>{copied ? '✓ Copied' : 'Copy wallet address'}</button>
           </div>
-
-          {pollingDeposit ? (
-            <div className="deposit-polling">
-              <div className="pulse-dot" />
-              <span>Waiting for USDC…</span>
-              <button className="btn btn-ghost btn-sm" onClick={() => setPollingDeposit(false)}>Cancel</button>
-            </div>
-          ) : statusMsg ? (
-            <div className="deposit-success">{statusMsg}</div>
-          ) : null}
-
-          <div className="deposit-balance">
-            <span className="label">Balance</span>
-            <span className="value gold">{dollars(balance)}</span>
-          </div>
-          <p className="fee-note">Base Sepolia testnet · No fees · Direct on-chain USDC</p>
         </div>
       )}
 
@@ -1298,6 +1319,42 @@ export default function App({ wallet, farcaster }) {
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Withdraw modal (on-chain) ── */}
+      {showWithdraw && (
+        <div className="modal-backdrop" onClick={() => setShowWithdraw(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-handle" />
+            <h2>Withdraw</h2>
+            <p className="modal-sub">Withdraw USDC from your on-chain balance. 5% fee auto-sent to treasury.</p>
+            <div className="pot-input-group" style={{ marginBottom: 8 }}>
+              <span className="pot-prefix">$</span>
+              <input value={withdrawAmt} onChange={(e) => setWithdrawAmt(e.target.value)} placeholder={dollars(withdrawable)} inputMode="decimal" />
+            </div>
+            <p className="hint-text">Available: {dollars(withdrawable)}</p>
+            <button className="btn btn-primary" disabled={busy} onClick={async () => {
+              setError(''); setBusy(true);
+              try {
+                const ethers = await import('ethers');
+                const p = await getEthersProvider(wallet.walletProvider);
+                const signer = await p.getSigner();
+                const contract = new ethers.Contract(V3_SETTLEMENT, SETTLEMENT_ABI, signer);
+                const amount = usdcUnits(withdrawAmt || withdrawable);
+                sfx.click();
+                const tx = await contract.withdraw(amount);
+                await tx.wait();
+                sfx.win();
+                setShowWithdraw(false);
+                refreshCredits(addr);
+                setStatusMsg(`Withdrew ${dollars(amount)} (5% fee applied)`);
+              } catch (e) { setError(e.message?.slice(0, 200) || 'Withdraw failed'); }
+              finally { setBusy(false); }
+            }}>{busy ? 'Processing…' : 'Withdraw'}</button>
+            <button className="btn btn-ghost" style={{ marginTop: 8 }} onClick={() => setShowWithdraw(false)}>Cancel</button>
+            {error && <p className="status-text" style={{ color: '#ff6b6b' }}>{error}</p>}
+          </div>
         </div>
       )}
 
