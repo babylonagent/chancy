@@ -19,8 +19,8 @@ import btnRedPressed from './assets/pixel/btn-red-pressed.png';
 import './styles.css';
 
 // ── V3 Contract Config ──────────────────────────────────────────────────────
-const V3_SETTLEMENT = '0x6F13FDf2C3F50dFfceB824292B86fe9ddf63748B';
-const USDC_ADDRESS = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
+const V3_SETTLEMENT = '0xD69E00b2B2B583E61e328Df210cC6E1E3E2e5574';
+const USDC_ADDRESS = '0x2AE3F15CAD486226Af839ae8FB4BbA08428283A2'; // MockUSDC on Base Sepolia
 const CHAIN_ID = 84532; // Base Sepolia
 const API_BASE = '/v3';
 

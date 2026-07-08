@@ -18,7 +18,7 @@ const fs = require("fs");
 
 // ── Config ──────────────────────────────────────────────────────────────────
 const SETTLEMENT_ADDRESS = process.env.CHANCY_V3_SETTLEMENT_ADDRESS;
-const USDC_ADDRESS = process.env.CHANCY_V3_USDC_ADDRESS || "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
+const USDC_ADDRESS = process.env.CHANCY_V3_USDC_ADDRESS || '0x2AE3F15CAD486226Af839ae8FB4BbA08428283A2';
 const RPC_URL = process.env.BASE_SEPOLIA_RPC_URL || "https://sepolia.base.org";
 const SETTLER_KEY = process.env.SANDBOX_WALLET_PRIVATE_KEY || process.env.SETTLER_PRIVATE_KEY;
 const ENGINE_URL = process.env.V3_ENGINE_URL || "http://127.0.0.1:8790";
