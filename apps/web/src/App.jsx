@@ -369,10 +369,14 @@ function ApiDocsSheet({ onClose }) {
         </div>
 
         <div className="api-section">
-          <h3 className="api-h3">Quick Start (Python)</h3>
-          <pre className="api-code-block">{`# Install: pip install eth-account web3 requests
-# Run: python3 chancy_x402_client.py --key 0xYOUR_KEY --list
-# Play: python3 chancy_x402_client.py --key 0xYOUR_KEY --play`}</pre>
+          <h3 className="api-h3">Quick Start</h3>
+          <pre className="api-code-block">{`# 1. Approve USDC for the settlement contract
+# 2. Call createGame() or joinGame() on-chain
+# 3. POST /v3/sessions/:gameId/click to reveal tiles
+# 4. Settler bot settles on-chain — 5% fee auto-sent to treasury
+
+# Full ABI: see Contract Addresses above
+# Chain: Base Sepolia (84532)`}</pre>
         </div>
 
         <button className="btn btn-primary" data-sfx-back onClick={onClose} style={{ marginTop: 16 }}>Close</button>
@@ -1054,19 +1058,19 @@ export default function App({ wallet, farcaster }) {
           {/* Agent-friendly */}
           <div className="landing-section">
             <h2 className="landing-h2">Agent-friendly</h2>
-            <p className="landing-sub">Built for humans and AI agents. Pay per action with x402 — no pre-funding needed.</p>
+            <p className="landing-sub">Built for humans and AI agents. On-chain settlement via smart contracts — trustless, verifiable, no middleman.</p>
             <div className="trust-row">
               <div className="trust-item">
                 <img className="trust-icon" src={iconRobot} alt="" />
-                <span>x402 pay-per-action — Agents pay USDC per tile, no deposit required</span>
+                <span>On-chain gameplay — Approve USDC, play directly on the contract</span>
               </div>
               <div className="trust-item">
                 <img className="trust-icon" src={iconBolt} alt="" />
-                <span>HTTP 402 protocol — Standard payment flow any agent can implement</span>
+                <span>Trustless settlement — Contract re-derives the board, no off-chain trust</span>
               </div>
               <div className="trust-item">
                 <img className="trust-icon" src={iconPlug} alt="" />
-                <span>REST API — Full game loop via /v2/x402/ endpoints</span>
+                <span>REST API — Full game loop via /v3/ endpoints</span>
               </div>
             </div>
           </div>
@@ -1075,7 +1079,6 @@ export default function App({ wallet, farcaster }) {
           <div className="landing-footer">
             <div className="tech-logos">
               <a href="https://farcaster.xyz" target="_blank" rel="noopener"><img src={farcasterLogo} alt="Farcaster" title="Farcaster Mini App" /></a>
-              <a href="https://x402.org" target="_blank" rel="noopener" className="x402-logo">x402</a>
               <a href="https://base.org" target="_blank" rel="noopener"><img src={baseLogo} alt="Base" title="Base L2" /></a>
               <a href="https://pyth.network" target="_blank" rel="noopener"><img src={pythLogo} alt="Pyth Entropy" title="Pyth Entropy randomness" /></a>
               <a href="https://www.circle.com/en/usdc" target="_blank" rel="noopener"><img src={usdcLogo} alt="USDC" title="USDC payments" /></a>
@@ -1094,12 +1097,6 @@ export default function App({ wallet, farcaster }) {
       {/* ═══ LOBBY ═══ */}
       {view === 'lobby' && isConnected && (
         <div className="lobby-view">
-          {withdrawSuccess && (
-            <div className="withdraw-success-banner" onClick={() => setWithdrawSuccess('')}>
-              <span className="withdraw-success-icon">✓</span>
-              <span>{withdrawSuccess}</span>
-            </div>
-          )}
           <div className="credit-card">
             <div className="credit-top">
               <div className="credit-big">
@@ -1203,28 +1200,12 @@ export default function App({ wallet, farcaster }) {
             <span className="section-title" style={{ margin: 0 }}>Add credits</span>
           </div>
 
-          {/* Step 1: Fund wallet (if empty) */}
+          {/* Get USDC into your wallet */}
           <div className="deposit-step">
             <div className="deposit-step-num">1</div>
             <div className="deposit-step-body">
               <strong>Get USDC into your wallet</strong>
-              <p>Send USDC (on Base) to your wallet address below — from an exchange, another wallet, or anywhere.</p>
-              <div className="your-address-card" onClick={() => {
-                try { navigator.clipboard.writeText(addr); } catch {}
-              }}>
-                <div className="vault-label">Your wallet</div>
-                <div className="vault-address">{addr ? `${addr.slice(0,10)}…${addr.slice(-8)}` : '—'}</div>
-                <div className="vault-copy-hint">Tap to copy</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Step 2: Get USDC on Base Sepolia (testnet) */}
-          <div className="deposit-step">
-            <div className="deposit-step-num">2</div>
-            <div className="deposit-step-body">
-              <strong>Get MockUSDC (testnet)</strong>
-              <p>This is on Base Sepolia testnet. Get MockUSDC from a faucet or mint it for testing. No fees — your USDC stays in your wallet.</p>
+              <p>Send USDC to your wallet address below. On Base Sepolia testnet, get testnet USDC from a faucet or mint it for testing.</p>
               {addr && (
                 <div className="qr-section">
                   <img className="qr-code" src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(addr)}`} alt="Wallet QR" />
@@ -1301,12 +1282,12 @@ export default function App({ wallet, farcaster }) {
               {run.status === 'won' ? (
                 <>
                   <span className="result-amount">{dollars(run.prizeEarned)}</span>
-                  <span className="result-sub">Credited to balance</span>
+                  <span className="result-sub">Sent to your wallet on-chain</span>
                 </>
               ) : (
-                <span className="result-sub">{dollars(run.spentTotal)} lost to host</span>
+                <span className="result-sub">{dollars(run.spentTotal)} spent</span>
               )}
-              <button className="btn btn-primary" style={{ marginTop: 8 }} onClick={quitRound}>Back to games →</button>
+              <button className="btn btn-primary" style={{ marginTop: 8 }} onClick={() => setView('lobby')}>Back to games →</button>
               {isFarcaster && farcaster.sdk?.actions?.composeCast && (
                 <button className="btn btn-ghost" style={{ marginTop: 8 }} onClick={() => {
                   const text = run.status === 'won'
@@ -1317,24 +1298,6 @@ export default function App({ wallet, farcaster }) {
               )}
             </div>
           )}
-        </div>
-      )}
-
-      {/* ── Withdraw modal ── */}
-      {showWithdraw && (
-        <div className="modal-backdrop" onClick={() => setShowWithdraw(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-handle" />
-            <h2>Withdraw</h2>
-            <p className="modal-sub">Send credits back to your wallet. 5% fee applies.</p>
-            <div className="pot-input-group" style={{ marginBottom: 8 }}>
-              <span className="pot-prefix">$</span>
-              <input value={withdrawAmt} onChange={(e) => setWithdrawAmt(e.target.value)} placeholder={formatUsdc(withdrawable)} inputMode="decimal" />
-            </div>
-            <p className="hint-text">Withdrawable: {dollars(withdrawable)}</p>
-            <button className="btn btn-primary" disabled={busy} onClick={requestWithdrawal}>{busy ? 'Processing…' : 'Withdraw'}</button>
-            <button className="btn btn-ghost" style={{ marginTop: 8 }} onClick={() => setShowWithdraw(false)}>Cancel</button>
-          </div>
         </div>
       )}
 
