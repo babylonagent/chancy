@@ -86,12 +86,18 @@ OFF-CHAIN (instant gameplay, ZERO money authority)
 ### 4.1 Constants
 
 ```solidity
-uint8 public constant BOARD_SIZE = 36;          // 6x6 grid
-uint8 public constant BOMBS_TO_GAME_OVER = 3;
-uint16 public constant BPS_DENOMINATOR = 10_000;
-uint256 public constant SETTLEMENT_WINDOW = 1 hours;
-uint256 public constant REFUND_TIMEOUT = 24 hours;
-uint256 public constant OPERATOR_BOND = 0.01 ether;  // slashable
+contract ChancySettlementV3 is Ownable, ReentrancyGuard {
+    using SafeERC20 for IERC20;
+
+    uint8 public constant BOARD_SIZE = 36;
+    uint8 public constant BOMBS_TO_GAME_OVER = 3;
+    uint16 public constant BPS_DENOMINATOR = 10_000;
+    uint256 public constant SETTLEMENT_WINDOW = 1 hours;
+    uint256 public constant REFUND_TIMEOUT = 24 hours;
+    uint256 public constant OPERATOR_BOND = 0.01 ether;  // slashable
+
+    IERC20 public immutable usdc;  // hardcoded USDC, no multi-asset
+    address public settler;  // platform settlement bot (zero money authority)
 ```
 
 ### 4.2 Data Structures
@@ -101,19 +107,18 @@ enum GameStatus { Created, Joined, Active, Settled, Challenged, Refunded }
 enum Difficulty { Easy, Normal, Hardcore }
 
 struct Game {
-    address host;
-    address player;
-    address asset;           // USDC address (or address(0) for ETH)
+    address host;            // any player who locked the pot
+    address player;           // the joined player
     Difficulty difficulty;
     uint256 prizePot;        // locked by host
-    uint256 maxSpend;         // locked by player (budget for reveals)
+    uint256 maxSpend;        // locked by player (budget for reveals)
     bytes32 hostCommitment;   // hash(hostSecret)
     bytes32 playerCommitment; // hash(playerRandom)
     bytes32 pythSequence;     // Pyth Entropy sequence number
     GameStatus status;
     uint64 createdAt;
     uint64 activatedAt;       // when board is ready (Pyth resolved)
-    uint64 settledAt;         // when settlement submitted
+    uint64 settledAt;        // when settlement submitted
 }
 ```
 
@@ -121,13 +126,13 @@ struct Game {
 
 #### createGame
 
-Host locks the prize pot and commits their secret.
+Host locks the prize pot and commits their secret. Any player can be a host.
 
 ```
-createGame(asset, difficulty, prizePot, hostCommitment)
-  → transfers prizePot from host to contract
+createGame(difficulty, prizePot, hostCommitment)
+  → transfers USDC(prizePot) from host to contract
   → stores Game with status=Created
-  → emits GameCreated(gameId, host, asset, difficulty, prizePot, hostCommitment)
+  → emits GameCreated(gameId, host, difficulty, prizePot, hostCommitment)
 ```
 
 #### joinGame
@@ -556,7 +561,7 @@ The settlement contract doesn't care HOW the player paid. It only cares:
 ```
                     ┌──────────────────┐
                     │  ChancyVault     │
-                    │  (USDC custody)   │
+                    │  (USDC custody)  │
                     └────────┬─────────┘
                              │
                      deposit/withdraw
@@ -572,6 +577,8 @@ The settlement contract doesn't care HOW the player paid. It only cares:
                     ┌────────┼────────┐
                     │        │        │
               settle │  challenge  │ refund
+          (settler   │  (player    │ (anyone
+           bot calls)│  disputes)  │  24h)
                     │        │        │
                ┌────▼───┐ ┌──▼───┐ ┌──▼───┐
                │ Host   │ │ Player│ │ Both │
@@ -580,6 +587,10 @@ The settlement contract doesn't care HOW the player paid. It only cares:
 
   ChancyRandomness (Pyth Entropy) feeds into ChancySettlementV3
   for the randomness used in board derivation.
+
+  Settler = platform bot. Zero money authority.
+  Contract re-derives board + replays clicks. Settler can't lie.
+  If settler doesn't call settleGame(), 24h timeout → refund.
 ```
 
 ---
@@ -735,21 +746,61 @@ Clicks remain free (off-chain). x402 click cost unchanged.
 
 ---
 
-## 16. Open Questions
+## 16. Resolved Design Decisions
 
-1. **Operator model:** Is the operator always the platform (Babylon), or do we
-   allow P2P hosts to settle games? If P2P, each host needs a bond.
+### Decision 1: P2P Hosting — Any Player Can Host (No Bond)
 
-2. **x402 batch settlement:** Should x402 click payments be batched into a
-   single settlement tx, or settled per-click? Batching is cheaper but the
-   player loses instant settlement guarantees.
+Chancy is P2P. Any player deposits USDC and creates a game = becomes a host.
+Other players join and click tiles. Host profits from player losses.
 
-3. **Multi-asset support:** V2 is USDC-only. V3 contract supports any ERC20
-   (and native ETH). Should we enable multi-asset from launch or keep USDC-only?
+**Three roles in V3:**
 
-4. **Session discovery:** V3 sessions live on-chain. Do we still need off-chain
-   session listing (faster indexing) or can the frontend read directly from
-   contract events?
+| Role | Who | What they do | Needs bond? |
+|------|-----|-------------|-------------|
+| Host | Any player | Locks pot in escrow, creates game | Pot IS the bond |
+| Player | Any other player | Locks max spend, clicks tiles | maxSpend locked |
+| Settler | Platform bot | Calls settleGame() after game ends | Operator bond (slashable) |
+
+**The settler is NOT a host.** The settler is a dumb bot with zero money
+authority. It submits the click sequence to the contract. The contract
+re-derives the board from on-chain inputs and replays every click. If the
+settler submits wrong data, the tx reverts. If the settler refuses, the 24h
+timeout kicks in and both parties get refunded.
+
+Host doesn't need a separate bond — the locked pot IS the skin in the game.
+If host colludes with a player to cheat, host loses their own pot. No
+incentive to cheat.
+
+### Decision 2: x402 Batch Settlement
+
+x402 payments accrue off-chain during gameplay. At settlement, the engine
+submits the full click sequence and total x402 spend. The contract verifies
+the total matches the click replay. One settlement tx covers the entire game.
+
+```
+Game: 15 clicks at $0.02 each = $0.30 total x402
+  → 15 x402 payments happen off-chain during gameplay (instant)
+  → 1 settleGame() tx on-chain submits click sequence
+  → contract verifies 15 clicks, checks $0.30 matches
+  → payout from contract escrow
+```
+
+3 on-chain txs per game total (create, join, settle). Cheapest option.
+Player experience: instant clicks, one settlement at the end.
+
+### Decision 3: USDC Only
+
+Contract hardcodes USDC address. No `asset` field, no allowlist mapping.
+Simpler, fewer attack vectors.
+
+### Decision 4: On-Chain Events for Session Listing
+
+Frontend reads `GameCreated` events directly from the contract via viem.
+No off-chain indexer or session cache needed. New games appear after 1 block
+(~2s on Base). Trustless — can't censor or fake sessions.
+
+The frontend uses `watchEvent` or `getLogs` to list open games. At Chancy's
+scale (hundreds of games, not millions) this is trivial.
 
 ---
 
