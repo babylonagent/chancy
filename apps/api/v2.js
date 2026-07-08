@@ -4,6 +4,7 @@ const path = require("path");
 const { z } = require("zod");
 const { persistSqliteStore } = require("./sqlite-store");
 const { MAX_CONCURRENT_SESSIONS } = require("./security");
+const { requireSignature } = require("./sig-auth");
 
 // ───────────────────────────────────────────────────────────────────────────
 // P2P HOST/PLAYER ECONOMICS — V1 design restored
@@ -262,7 +263,7 @@ function installV2Routes(app, {
   const persist = db ? () => persistSqliteStore(db, store) : () => persistStore(store, storePath);
 
   // ── DEPOSIT (unchanged) ───────────────────────────────────────────────────
-  app.post("/v2/credits/deposit", async (req, res) => {
+  app.post("/v2/credits/deposit", requireSignature({ role: "player" }), async (req, res) => {
     const parsed = z.object({ player: addressSchema, txHash: bytes32Schema }).safeParse(req.body || {});
     if (!parsed.success) return res.status(400).json({ error: "INVALID_REQUEST", details: parsed.error.flatten() });
     const { player, txHash } = parsed.data;
@@ -293,7 +294,7 @@ function installV2Routes(app, {
   });
 
   // ── WITHDRAWALS (unchanged) ───────────────────────────────────────────────
-  app.post("/v2/withdrawals/request", (req, res) => {
+  app.post("/v2/withdrawals/request", requireSignature({ role: "player" }), (req, res) => {
     const parsed = z.object({ player: addressSchema, amount: uintString, destination: addressSchema }).safeParse(req.body || {});
     if (!parsed.success) return res.status(400).json({ error: "INVALID_REQUEST", details: parsed.error.flatten() });
     const { player, amount, destination } = parsed.data;
@@ -327,6 +328,8 @@ function installV2Routes(app, {
   });
 
   app.post("/v2/withdrawals/:withdrawalId/mark-paid", (req, res) => {
+    if (!adminToken) return res.status(503).json({ error: "ADMIN_DISABLED" });
+    if ((req.headers?.authorization || "") !== `Bearer ${adminToken}`) return res.status(401).json({ error: "UNAUTHORIZED" });
     const paramParse = z.object({ withdrawalId: z.string().regex(/^wd_\d+$/) }).safeParse(req.params || {});
     const bodyParse = z.object({ txHash: bytes32Schema }).safeParse(req.body || {});
     if (!paramParse.success || !bodyParse.success) return res.status(400).json({ error: "INVALID_REQUEST" });
@@ -349,7 +352,7 @@ function installV2Routes(app, {
   // ══════════════════════════════════════════════════════════════════════════
 
   // HOST: Create a session — lock prize pot credits, pick difficulty.
-  app.post("/v2/sessions/create", (req, res) => {
+  app.post("/v2/sessions/create", requireSignature({ role: "host" }), (req, res) => {
     const parsed = z.object({
       host: addressSchema,
       mode: z.enum(["Easy", "Normal", "Hardcore"]),
@@ -446,7 +449,7 @@ function installV2Routes(app, {
   });
 
   // PLAYER: Join an open session — pay entrance fee, submit commitment.
-  app.post("/v2/sessions/:sessionId/join", (req, res) => {
+  app.post("/v2/sessions/:sessionId/join", requireSignature({ role: "player" }), (req, res) => {
     const paramParse = z.object({ sessionId: z.string().regex(/^\d+$/) }).safeParse(req.params || {});
     const bodyParse = z.object({
       player: addressSchema,
@@ -489,7 +492,7 @@ function installV2Routes(app, {
   });
 
   // PLAYER: Reveal entropy → triggers Pyth → board derived.
-  app.post("/v2/sessions/:sessionId/reveal", async (req, res) => {
+  app.post("/v2/sessions/:sessionId/reveal", requireSignature({ role: "player" }), async (req, res) => {
     const paramParse = z.object({ sessionId: z.string().regex(/^\d+$/) }).safeParse(req.params || {});
     const bodyParse = z.object({ player: addressSchema, entropy: bytes32Schema, salt: bytes32Schema }).safeParse(req.body || {});
     if (!paramParse.success || !bodyParse.success) return res.status(400).json({ error: "INVALID_REQUEST" });
@@ -541,7 +544,7 @@ function installV2Routes(app, {
   });
 
   // PLAYER: Click a tile — progressive cost debited, outcome resolved.
-  app.post("/v2/sessions/:sessionId/click", (req, res) => {
+  app.post("/v2/sessions/:sessionId/click", requireSignature({ role: "player" }), (req, res) => {
     const paramParse = z.object({ sessionId: z.string().regex(/^\d+$/) }).safeParse(req.params || {});
     const bodyParse = z.object({ player: addressSchema, tile: z.number().int() }).safeParse(req.body || {});
     if (!paramParse.success || !bodyParse.success) return res.status(400).json({ error: "INVALID_REQUEST" });
@@ -636,7 +639,7 @@ function installV2Routes(app, {
   });
 
   // PLAYER: Quit — host gets spent, session reopens.
-  app.post("/v2/sessions/:sessionId/quit", (req, res) => {
+  app.post("/v2/sessions/:sessionId/quit", requireSignature({ role: "player" }), (req, res) => {
     const paramParse = z.object({ sessionId: z.string().regex(/^\d+$/) }).safeParse(req.params || {});
     const bodyParse = z.object({ player: addressSchema }).safeParse(req.body || {});
     if (!paramParse.success || !bodyParse.success) return res.status(400).json({ error: "INVALID_REQUEST" });
@@ -680,7 +683,7 @@ function installV2Routes(app, {
   });
 
   // HOST: Close session — reclaim unspent prize pot. Only when open (no active player).
-  app.post("/v2/sessions/:sessionId/close", (req, res) => {
+  app.post("/v2/sessions/:sessionId/close", requireSignature({ role: "host" }), (req, res) => {
     const paramParse = z.object({ sessionId: z.string().regex(/^\d+$/) }).safeParse(req.params || {});
     const bodyParse = z.object({ host: addressSchema }).safeParse(req.body || {});
     if (!paramParse.success || !bodyParse.success) return res.status(400).json({ error: "INVALID_REQUEST" });

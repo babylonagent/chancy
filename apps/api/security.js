@@ -89,6 +89,9 @@ function stakeCap(req, res, next) {
 
 // ─── CORS Restriction ───────────────────────────────────────────────────────
 
+// Headers the frontend needs for signature auth
+const CORS_ALLOW_HEADERS = "Content-Type, Authorization, x-chancy-signer, x-chancy-signature, x-chancy-nonce, x-chancy-timestamp";
+
 function corsRestriction(allowedOrigins) {
   const origins = new Set(
     (Array.isArray(allowedOrigins) ? allowedOrigins : [allowedOrigins])
@@ -101,14 +104,14 @@ function corsRestriction(allowedOrigins) {
     if (origins.size > 0 && origin && origins.has(origin)) {
       res.setHeader("Access-Control-Allow-Origin", origin);
       res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-      res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+      res.setHeader("Access-Control-Allow-Headers", CORS_ALLOW_HEADERS);
       res.setHeader("Access-Control-Max-Age", "86400");
       if (req.method === "OPTIONS") return res.status(204).end();
     } else if (origins.size === 0) {
       // No origins configured — allow all (dev mode)
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-      res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+      res.setHeader("Access-Control-Allow-Headers", CORS_ALLOW_HEADERS);
       if (req.method === "OPTIONS") return res.status(204).end();
     }
     next();

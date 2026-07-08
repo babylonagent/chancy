@@ -43,6 +43,15 @@ const MODES = {
 
 const POT_PRESETS = ['5', '10', '25', '50'];
 
+// ─── WALLET SIGNING ─────────────────────────────────────────────────────────
+// Module-level reference set by App on mount — lets postJson auto-sign.
+let _walletProvider = null;
+let _signerAddr = '';
+function setWalletForSigning(provider, addr) {
+  _walletProvider = provider || null;
+  _signerAddr = addr || '';
+}
+
 // ─── ERROR MAPPING ──────────────────────────────────────────────────────────
 // Translate raw API error codes into player-friendly messages.
 function friendlyError(err) {
@@ -105,8 +114,25 @@ async function sha256Hex(entropy, salt) {
 }
 
 async function postJson(path, body) {
+  const headers = { 'Content-Type': 'application/json' };
+
+  // Auto-sign if we have a wallet provider
+  if (_walletProvider && _signerAddr) {
+    const nonce = crypto.randomUUID().replace(/-/g, '');
+    const timestamp = String(Math.floor(Date.now() / 1000));
+    const message = `chancy:${path}:${nonce}:${timestamp}`;
+    const signature = await _walletProvider.request({
+      method: 'personal_sign',
+      params: [message, _signerAddr],
+    });
+    headers['x-chancy-signer'] = _signerAddr;
+    headers['x-chancy-signature'] = signature;
+    headers['x-chancy-nonce'] = nonce;
+    headers['x-chancy-timestamp'] = timestamp;
+  }
+
   const res = await fetch(`${API}${path}`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers,
     body: JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
@@ -261,6 +287,11 @@ export default function App({ wallet, farcaster }) {
 
   const addr = address || '';
   const modeCfg = session ? MODES[session.mode] : MODES.Normal;
+
+  // ── Wallet signing setup ──
+  useEffect(() => {
+    setWalletForSigning(wallet.walletProvider || null, addr);
+  }, [wallet.walletProvider, addr]);
 
   // ── Theme management ──
   useEffect(() => {

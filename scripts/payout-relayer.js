@@ -77,10 +77,10 @@ async function fetchPending({ apiBase, adminToken }) {
   return Array.isArray(body.withdrawals) ? body.withdrawals : [];
 }
 
-async function markPaid({ apiBase, withdrawalId, txHash }) {
+async function markPaid({ apiBase, adminToken, withdrawalId, txHash }) {
   const res = await fetch(`${apiBase}/v2/withdrawals/${withdrawalId}/mark-paid`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", authorization: `Bearer ${adminToken}` },
     body: JSON.stringify({ txHash }),
   });
   if (res.status === 409) return { ok: true, alreadyPaid: true };
@@ -120,7 +120,7 @@ async function runPass(ctx) {
         skipped += 1;
         continue;
       }
-      const result = await markPaid({ apiBase: cfg.apiBase, withdrawalId: w.withdrawalId, txHash });
+      const result = await markPaid({ apiBase: cfg.apiBase, adminToken: cfg.adminToken, withdrawalId: w.withdrawalId, txHash });
       console.log(`[relayer] PAID ${w.withdrawalId}${result.alreadyPaid ? " (already)" : ""}`);
       paid += 1;
     } catch (err) {
