@@ -14,6 +14,7 @@
 
 const { ethers } = require("ethers");
 const path = require("path");
+const fs = require("fs");
 
 // ── Config ──────────────────────────────────────────────────────────────────
 const SETTLEMENT_ADDRESS = process.env.CHANCY_V3_SETTLEMENT_ADDRESS;
@@ -32,7 +33,11 @@ const settler = new ethers.Wallet(
   provider
 );
 
-const artifact = require("../artifacts/contracts/ChancySettlementV3.sol/ChancySettlementV3.json");
+const artifact = require(
+  fs.existsSync(path.join(__dirname, "artifacts", "contracts", "ChancySettlementV3.sol", "ChancySettlementV3.json"))
+    ? path.join(__dirname, "artifacts", "contracts", "ChancySettlementV3.sol", "ChancySettlementV3.json")
+    : path.join(__dirname, "..", "artifacts", "contracts", "ChancySettlementV3.sol", "ChancySettlementV3.json")
+);
 const contract = new ethers.Contract(SETTLEMENT_ADDRESS, artifact.abi, settler);
 
 // ── Outcome mapping ─────────────────────────────────────────────────────────
