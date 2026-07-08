@@ -4,14 +4,14 @@ import { WagmiProvider, useAccount, useDisconnect } from 'wagmi';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createAppKit, useAppKit, useAppKitAccount, useAppKitProvider } from '@reown/appkit/react';
 import { WagmiAdapter } from '@reown/appkit-adapter-wagmi';
-import { base } from 'viem/chains';
+import { baseSepolia } from 'viem/chains';
 
-import App from './App.jsx';
+import AppV3 from './AppV3.jsx';
 import './styles.css';
 
 // ─── REOWN APPKIT CONFIG ────────────────────────────────────────────────────
 const PROJECT_ID = 'b6af60317a6f1fc61c5ad130fc80b4d7';
-const networks = [base];
+const networks = [baseSepolia];
 
 const wagmiAdapter = new WagmiAdapter({
   networks,
@@ -217,7 +217,7 @@ function Root() {
   if (fc.isMiniApp) {
     return (
       <FarcasterWalletWrapper fc={fc}>
-        {(wallet) => <App wallet={wallet} {...farcasterProps} />}
+        {(wallet) => <AppV3 wallet={wallet} {...farcasterProps} />}
       </FarcasterWalletWrapper>
     );
   }
@@ -226,7 +226,7 @@ function Root() {
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
         <ReownWalletWrapper>
-          {(wallet) => <App wallet={wallet} {...farcasterProps} />}
+          {(wallet) => <AppV3 wallet={wallet} {...farcasterProps} />}
         </ReownWalletWrapper>
       </QueryClientProvider>
     </WagmiProvider>
