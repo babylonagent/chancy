@@ -243,7 +243,7 @@ export default function AppV3({ wallet }) {
       const hostSecret = randomBytes32();
       const hostCommitment = ethers.keccak256(ethers.solidityPacked(['bytes32'], [hostSecret]));
 
-      // Store host secret in localStorage for later settlement
+      // Store host secret in localStorage for settlement recovery
       localStorage.setItem(`chancy_v3_host_secret_${account}`, hostSecret);
 
       // 3. Create game on-chain
@@ -265,6 +265,14 @@ export default function AppV3({ wallet }) {
       }
 
       if (gameId) {
+        // 4. Send host secret to engine so settler bot can use it at activation
+        await postJson(`${API_BASE}/sessions/${gameId}/host-secret`, {
+          hostSecret,
+          host: account,
+          difficulty: createDifficulty,
+          prizePot: potAmount.toString(),
+        });
+
         setActiveGameId(gameId);
         setView('waiting');
         sfx.success();

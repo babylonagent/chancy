@@ -58,12 +58,42 @@ async function runSettlerLoop() {
   const balance = await provider.getBalance(settler.address);
   console.log("[settler] Balance:", ethers.formatEther(balance), "ETH");
 
-  // Watch GameActivated events
+  // Watch GameActivated events — when fired, tell the engine to create a session
   const filter = contract.filters.GameActivated();
   contract.on(filter, async (gameId, pythRandomNumber, event) => {
     console.log(`[settler] GameActivated: gameId=${gameId}, pyth=${pythRandomNumber}`);
-    // The engine should already have the session (activated via API call)
-    // We just log this for monitoring
+
+    try {
+      // Read game data from the contract
+      const game = await contract.getGame(gameId);
+      const gameData = {
+        host: game.host,
+        player: game.player,
+        difficulty: Number(game.difficulty),
+        prizePot: game.prizePot.toString(),
+        maxSpend: game.maxSpend.toString(),
+        pythRandom: pythRandomNumber,
+      };
+
+      console.log(`[settler] Activating engine session for game ${gameId}...`);
+
+      // Tell the engine to create the session
+      // The engine will retrieve the hostSecret from pendingSecrets
+      const resp = await fetch(`${ENGINE_URL}/v3/sessions/${gameId}/activate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(gameData),
+      });
+
+      if (resp.ok) {
+        console.log(`[settler] Engine session activated for game ${gameId}`);
+      } else {
+        const err = await resp.text();
+        console.error(`[settler] Engine activation failed for game ${gameId}: ${err}`);
+      }
+    } catch (err) {
+      console.error(`[settler] GameActivated handler error:`, err.message);
+    }
   });
 
   // Poll for finished sessions every 5 seconds
@@ -83,19 +113,12 @@ async function runSettlerLoop() {
 }
 
 async function checkAndSettle() {
-  // Get all sessions from engine
-  const resp = await fetch(`${ENGINE_URL}/v3/sessions`);
+  // Get finished sessions from engine
+  const resp = await fetch(`${ENGINE_URL}/v3/sessions/finished`);
   if (!resp.ok) return;
   const { sessions } = await resp.json();
 
   for (const s of sessions) {
-    // Check if this session is finished and needs settlement
-    const stateResp = await fetch(`${ENGINE_URL}/v3/sessions/${s.gameId}/state`);
-    if (!stateResp.ok) continue;
-    const state = await stateResp.json();
-
-    if (state.status !== "finished") continue;
-
     // Check if already settled on-chain
     const game = await contract.getGame(s.gameId);
     if (Number(game.status) !== 1) continue; // Only settle Active games (status=1)
@@ -123,6 +146,9 @@ async function checkAndSettle() {
       console.log(`[settler] settleGame tx sent: ${tx.hash}`);
       const receipt = await tx.wait();
       console.log(`[settler] Game ${s.gameId} settled in block ${receipt.blockNumber}`);
+
+      // Notify engine to clean up (optional — session stays in memory but won't be re-settled
+      // because on-chain status will be != 1)
     } catch (err) {
       console.error(`[settler] settleGame failed for game ${s.gameId}:`, err.message?.slice(0, 200));
     }

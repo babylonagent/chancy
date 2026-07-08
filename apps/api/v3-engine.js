@@ -23,6 +23,13 @@ const { deriveBoardV3, computeBoardSeed, computeHostCommitment, revealCostAt, mo
 // The settler bot can re-derive the board from on-chain data.
 const sessions = new Map();
 
+// ── Pending Secrets ─────────────────────────────────────────────────────────
+// Host secrets stored at creation time, retrieved at activation time.
+// Keyed by gameId (as number). The host frontend POSTs the secret here
+// right after createGame() succeeds. The settler bot retrieves it when
+// GameActivated fires and supplies the pythRandom.
+const pendingSecrets = new Map();
+
 // ── Constants ────────────────────────────────────────────────────────────────
 const BOARD_SIZE = 36;
 const BOMBS_TO_GAME_OVER = 3;
@@ -191,31 +198,84 @@ function getSettlementData(gameId) {
 function installV3Routes(app) {
   const router = express.Router();
 
-  // Activate session (called by settler bot after on-chain activateGame)
-  router.post("/v3/sessions/:gameId/activate", (req, res) => {
+  // Store host secret (called by host's frontend after createGame tx succeeds)
+  router.post("/v3/sessions/:gameId/host-secret", (req, res) => {
     const { gameId } = req.params;
-    const { host, player, difficulty, prizePot, maxSpend, hostSecret, pythRandom } = req.body;
+    const { hostSecret, host, difficulty, prizePot, maxSpend, player } = req.body;
 
-    if (!host || !player || difficulty === undefined || !hostSecret || !pythRandom) {
-      return res.status(400).json({ error: "MISSING_FIELDS" });
+    if (!hostSecret) {
+      return res.status(400).json({ error: "MISSING_HOST_SECRET" });
     }
 
-    if (sessions.has(gameId)) {
+    const id = Number(gameId);
+    pendingSecrets.set(id, {
+      hostSecret,
+      host: host || null,
+      difficulty: difficulty !== undefined ? Number(difficulty) : null,
+      prizePot: prizePot || null,
+      maxSpend: maxSpend || null,
+      player: player || null,
+      storedAt: Date.now(),
+    });
+
+    console.log(`[v3-engine] Host secret stored for game ${id}`);
+    res.json({ ok: true, gameId: id });
+  });
+
+  // Activate session (called by settler bot after on-chain activateGame)
+  // The settler bot supplies pythRandom + on-chain game data.
+  // The hostSecret is retrieved from pendingSecrets (stored by host's frontend).
+  router.post("/v3/sessions/:gameId/activate", (req, res) => {
+    const { gameId } = req.params;
+    const id = Number(gameId);
+    const { host, player, difficulty, prizePot, maxSpend, hostSecret, pythRandom } = req.body;
+
+    if (!pythRandom) {
+      return res.status(400).json({ error: "MISSING_PYTH_RANDOM" });
+    }
+
+    if (sessions.has(id)) {
       return res.status(409).json({ error: "SESSION_ALREADY_ACTIVE" });
+    }
+
+    // Try to get hostSecret from request body first, then from pendingSecrets
+    let secret = hostSecret;
+    let gameData = { host, player, difficulty, prizePot, maxSpend };
+
+    if (!secret && pendingSecrets.has(id)) {
+      const pending = pendingSecrets.get(id);
+      secret = pending.hostSecret;
+      // Fill in missing fields from stored pending data
+      if (!gameData.host) gameData.host = pending.host;
+      if (!gameData.player) gameData.player = pending.player;
+      if (gameData.difficulty === undefined) gameData.difficulty = pending.difficulty;
+      if (!gameData.prizePot) gameData.prizePot = pending.prizePot;
+      if (!gameData.maxSpend) gameData.maxSpend = pending.maxSpend;
+    }
+
+    if (!secret) {
+      return res.status(400).json({ error: "HOST_SECRET_NOT_FOUND — host frontend must POST /host-secret first" });
+    }
+    if (!gameData.host || !gameData.player || gameData.difficulty === undefined || !gameData.prizePot || !gameData.maxSpend) {
+      return res.status(400).json({ error: "MISSING_GAME_DATA" });
     }
 
     try {
       const session = createSession(
-        Number(gameId),
-        host,
-        player,
-        Number(difficulty),
-        BigInt(prizePot),
-        BigInt(maxSpend),
-        hostSecret,
+        id,
+        gameData.host,
+        gameData.player,
+        Number(gameData.difficulty),
+        BigInt(gameData.prizePot),
+        BigInt(gameData.maxSpend),
+        secret,
         pythRandom
       );
-      res.json({ ok: true, gameId: Number(gameId) });
+
+      // Clean up pending secret
+      pendingSecrets.delete(id);
+
+      res.json({ ok: true, gameId: id });
     } catch (err) {
       res.status(400).json({ error: err.message });
     }
@@ -291,6 +351,21 @@ function installV3Routes(app) {
     res.json({ sessions: list });
   });
 
+  // List finished sessions (for settler bot to poll)
+  router.get("/v3/sessions/finished", (req, res) => {
+    const list = [];
+    for (const [id, s] of sessions) {
+      if (s.status === "finished") {
+        list.push({
+          gameId: s.gameId,
+          outcome: s.outcome,
+          spent: s.spent.toString(),
+        });
+      }
+    }
+    res.json({ sessions: list });
+  });
+
   app.use(router);
   console.log("[v3-engine] Routes installed at /v3/*");
 }
@@ -303,4 +378,5 @@ module.exports = {
   getSessionState,
   getSettlementData,
   sessions,
+  pendingSecrets,
 };
