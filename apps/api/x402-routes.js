@@ -28,6 +28,7 @@ const { paymentMiddleware, x402ResourceServer } = require("@x402/express");
 const { ExactEvmScheme } = require("@x402/evm/exact/server");
 const { HTTPFacilitatorClient } = require("@x402/core/server");
 const { z } = require("zod");
+const { requireSignature } = require("./sig-auth");
 
 const BASE_MAINNET = "eip155:8453";
 const BASE_SEPOLIA = "eip155:84532";
@@ -228,7 +229,7 @@ function createChancyX402({
     // ── Paid x402 endpoints (payment collected by middleware) ──
 
     // HOST: Create session — prize pot paid via x402
-    app.post("/v2/x402/sessions/create", (req, res) => {
+    app.post("/v2/x402/sessions/create", requireSignature({ role: "host" }), (req, res) => {
       const parsed = z.object({
         host: addressSchema,
         mode: z.enum(["Easy", "Normal", "Hardcore"]),
@@ -241,8 +242,9 @@ function createChancyX402({
       if (pot < MIN_PRIZE_POT) return res.status(400).json({ error: "PRIZE_POT_TOO_LOW", min: MIN_PRIZE_POT.toString() });
       if (pot > MAX_PRIZE_POT) return res.status(400).json({ error: "PRIZE_POT_TOO_HIGH", max: MAX_PRIZE_POT.toString() });
 
-      // x402 mode: don't check host's credit balance — they paid via x402
-      // Just track the prize pot as session data
+      // x402 mode: host paid the prize pot via x402 payment (real USDC to hot wallet).
+      // Do NOT mint internal credits — the pot is tracked as virtual session data only.
+      // Internal credits are reserved for player prize winnings (withdrawable).
       cleanupStaleSessions(store, persist);
 
       const hostOpenCount = [...store.sessions.values()].filter(
@@ -252,9 +254,9 @@ function createChancyX402({
         return res.status(429).json({ error: "TOO_MANY_OPEN_SESSIONS", max: MAX_CONCURRENT_SESSIONS });
       }
 
+      // x402 mode: entrance fee paid via x402 (real USDC). Do NOT mint host credits.
+      // The session pot is virtual. Only player prize winnings create withdrawable credits.
       const sessionId = String(store.nextSessionId++);
-      // In x402 mode, credit host the prize pot (they paid via x402, so credit it back as spendable)
-      setBalance(store, host, getBalance(store, host) + pot);
 
       const session = {
         sessionId, host, mode,
@@ -300,7 +302,7 @@ function createChancyX402({
     });
 
     // PLAYER: Join session — entrance fee paid via x402
-    app.post("/v2/x402/sessions/:sessionId/join", (req, res) => {
+    app.post("/v2/x402/sessions/:sessionId/join", requireSignature({ role: "player" }), (req, res) => {
       const paramParse = z.object({ sessionId: z.string().regex(/^\d+$/) }).safeParse(req.params || {});
       const bodyParse = z.object({
         player: addressSchema,
@@ -318,9 +320,7 @@ function createChancyX402({
 
       const player = bodyParse.data.player;
 
-      // x402 mode: entrance fee paid via x402, credit it to host's balance
-      setBalance(store, session.host, getBalance(store, session.host) + ENTRANCE_FEE);
-
+      // x402 mode: entrance fee paid via x402 — no host credit minting
       session.activePlayer = player;
       session.commitment = bodyParse.data.commitment;
       session.commitExpiresAt = Date.now() + 120_000; // 2 min reveal timeout
@@ -343,7 +343,7 @@ function createChancyX402({
     });
 
     // PLAYER: Reveal entropy (free — no payment needed, just triggers Pyth)
-    app.post("/v2/x402/sessions/:sessionId/reveal", async (req, res) => {
+    app.post("/v2/x402/sessions/:sessionId/reveal", requireSignature({ role: "player" }), async (req, res) => {
       const paramParse = z.object({ sessionId: z.string().regex(/^\d+$/) }).safeParse(req.params || {});
       const bodyParse = z.object({
         player: addressSchema,
@@ -364,9 +364,7 @@ function createChancyX402({
       try {
         entropyResult = await requestEntropy(bodyParse.data.entropy);
       } catch (error) {
-        // Refund entrance fee, reopen
-        setBalance(store, session.activePlayer, getBalance(store, session.activePlayer) + ENTRANCE_FEE);
-        setBalance(store, session.host, getBalance(store, session.host) - ENTRANCE_FEE);
+        // Pyth failed — no internal balance swap needed in x402 mode (entrance was x402)
         session.entropyError = error.message || "ENTROPY_REQUEST_FAILED";
         session.runStatus = "failed";
         resetRun(session);
@@ -412,7 +410,7 @@ function createChancyX402({
     });
 
     // PLAYER: Click tile — tile cost paid via x402
-    app.post("/v2/x402/sessions/:sessionId/click", (req, res) => {
+    app.post("/v2/x402/sessions/:sessionId/click", requireSignature({ role: "player" }), (req, res) => {
       const paramParse = z.object({ sessionId: z.string().regex(/^\d+$/) }).safeParse(req.params || {});
       const bodyParse = z.object({
         player: addressSchema,
@@ -463,13 +461,14 @@ function createChancyX402({
         outcome = "prize";
         session.prizesFound += 1;
         const prize = prizePerTile(session.prizePot, session.mode);
-        // Prize credited to player's internal balance (withdrawable later)
-        setBalance(store, session.activePlayer, getBalance(store, session.activePlayer) + prize);
+        // All-or-nothing: prize is PENDING until all prizes found.
+        // Do NOT credit to player balance yet — prevents inflation.
         session.prizeEarned = (BigInt(session.prizeEarned) + prize).toString();
         prizeCredited = prize.toString();
 
         if (session.prizesFound >= modeConfig[session.mode].prizes) {
-          // All prizes found — player wins
+          // SWEEP — all prizes found: player wins the full pending pot
+          setBalance(store, session.activePlayer, getBalance(store, session.activePlayer) + BigInt(session.prizeEarned));
           recordRunEnd(session, BigInt(session.spentAmount));
           session.runStatus = "won";
           const result = {
@@ -502,7 +501,7 @@ function createChancyX402({
     });
 
     // PLAYER: Quit (free — just ends the run)
-    app.post("/v2/x402/sessions/:sessionId/quit", (req, res) => {
+    app.post("/v2/x402/sessions/:sessionId/quit", requireSignature({ role: "player" }), (req, res) => {
       const paramParse = z.object({ sessionId: z.string().regex(/^\d+$/) }).safeParse(req.params || {});
       const bodyParse = z.object({ player: addressSchema }).safeParse(req.body || {});
       if (!paramParse.success || !bodyParse.success) return res.status(400).json({ error: "INVALID_REQUEST" });
@@ -512,11 +511,10 @@ function createChancyX402({
       if (bodyParse.data.player.toLowerCase() !== session.activePlayer?.toLowerCase()) return res.status(403).json({ error: "NOT_ACTIVE_PLAYER" });
 
       if (session.runStatus === "committed") {
-        // Never revealed — refund entrance fee
-        setBalance(store, session.activePlayer, getBalance(store, session.activePlayer) + ENTRANCE_FEE);
-        setBalance(store, session.host, getBalance(store, session.host) - ENTRANCE_FEE);
+        // Never revealed — entrance was paid via x402 (non-refundable in x402 mode)
+        // Just mark cancelled and reopen. No internal balance swap needed.
         session.runStatus = "cancelled";
-        const resp = { sessionId: session.sessionId, status: "cancelled", refunded: ENTRANCE_FEE.toString(), spentTotal: "0", prizeEarned: "0", payment: "x402" };
+        const resp = { sessionId: session.sessionId, status: "cancelled", refunded: "0 (x402)", spentTotal: "0", prizeEarned: "0", payment: "x402" };
         resetRun(session);
         persist();
         return res.json(resp);

@@ -260,30 +260,66 @@ function installV2Routes(app, {
   requestEntropy = defaultRequestEntropy,
   adminToken = "",
 } = {}) {
-  const persist = db ? () => persistSqliteStore(db, store) : () => persistStore(store, storePath);
+  const persistRaw = db ? () => persistSqliteStore(db, store) : () => persistStore(store, storePath);
+  // Wrap persist: if it throws, log loudly but don't crash the in-flight request.
+  // The caller already mutated in-memory state — returning an error now would be
+  // misleading. Next persist() call will retry the full store write.
+  const persist = () => {
+    try {
+      persistRaw();
+    } catch (err) {
+      console.error("[v2] persist failed — in-memory state may diverge from disk:", err.message);
+    }
+  };
 
-  // ── DEPOSIT (unchanged) ───────────────────────────────────────────────────
+  // ── DEPOSIT ────────────────────────────────────────────────────────────────
+  // In-flight deposit tracking prevents concurrent same-txHash double-credit.
+  const inFlightDeposits = new Set();
+
   app.post("/v2/credits/deposit", requireSignature({ role: "player" }), async (req, res) => {
     const parsed = z.object({ player: addressSchema, txHash: bytes32Schema }).safeParse(req.body || {});
     if (!parsed.success) return res.status(400).json({ error: "INVALID_REQUEST", details: parsed.error.flatten() });
     const { player, txHash } = parsed.data;
     const txKey = txHash.toLowerCase();
+
+    // Check 1: already credited (idempotent return)
     const existing = store.deposits.get(txKey);
-    if (existing) return res.json({ player, balance: getBalance(store, player).toString(), asset: "USD_CREDIT", credited: existing.creditedAmount, txHash: txKey, idempotent: true });
-    let verified;
-    try { verified = await verifyDeposit({ txHash, player }); }
-    catch (error) {
-      const code = error.message || "DEPOSIT_VERIFICATION_FAILED";
-      const status = code === "DEPOSIT_NOT_FOUND" ? 404 : code === "DEPOSIT_PLAYER_MISMATCH" ? 403 : 422;
-      return res.status(status).json({ error: code });
+    if (existing) {
+      return res.json({ player, balance: getBalance(store, player).toString(), asset: "USD_CREDIT", credited: existing.creditedAmount, txHash: txKey, idempotent: true });
     }
-    if (verified.player.toLowerCase() !== player.toLowerCase()) return res.status(403).json({ error: "DEPOSIT_PLAYER_MISMATCH" });
-    const credited = BigInt(verified.creditedAmount);
-    const next = getBalance(store, player) + credited;
-    setBalance(store, player, next);
-    store.deposits.set(txKey, { player: player.toLowerCase(), grossAmount: String(verified.grossAmount), creditedAmount: credited.toString(), feeAmount: String(verified.feeAmount), at: new Date().toISOString() });
-    persist();
-    return res.json({ player, balance: next.toString(), asset: "USD_CREDIT", credited: credited.toString(), txHash: txKey, idempotent: false });
+
+    // Check 2: another request for same txHash is in-flight
+    if (inFlightDeposits.has(txKey)) {
+      return res.status(409).json({ error: "DEPOSIT_IN_PROGRESS", message: "This deposit is already being processed" });
+    }
+
+    // Reserve before any await — prevents race window
+    inFlightDeposits.add(txKey);
+    try {
+      let verified;
+      try { verified = await verifyDeposit({ txHash, player }); }
+      catch (error) {
+        const code = error.message || "DEPOSIT_VERIFICATION_FAILED";
+        const status = code === "DEPOSIT_NOT_FOUND" ? 404 : code === "DEPOSIT_PLAYER_MISMATCH" ? 403 : 422;
+        return res.status(status).json({ error: code });
+      }
+
+      // Re-check after await: indexer may have credited while we were waiting
+      const afterVerify = store.deposits.get(txKey);
+      if (afterVerify) {
+        return res.json({ player, balance: getBalance(store, player).toString(), asset: "USD_CREDIT", credited: afterVerify.creditedAmount, txHash: txKey, idempotent: true });
+      }
+
+      if (verified.player.toLowerCase() !== player.toLowerCase()) return res.status(403).json({ error: "DEPOSIT_PLAYER_MISMATCH" });
+      const credited = BigInt(verified.creditedAmount);
+      const next = getBalance(store, player) + credited;
+      setBalance(store, player, next);
+      store.deposits.set(txKey, { player: player.toLowerCase(), grossAmount: String(verified.grossAmount), creditedAmount: credited.toString(), feeAmount: String(verified.feeAmount), at: new Date().toISOString() });
+      persist();
+      return res.json({ player, balance: next.toString(), asset: "USD_CREDIT", credited: credited.toString(), txHash: txKey, idempotent: false });
+    } finally {
+      inFlightDeposits.delete(txKey);
+    }
   });
 
   // ── CREDITS (unchanged) ───────────────────────────────────────────────────
@@ -304,7 +340,7 @@ function installV2Routes(app, {
     const withdrawalId = `wd_${store.nextWithdrawalId++}`;
     const feeAmount = requested * WITHDRAWAL_FEE_BPS / BPS_DENOMINATOR;
     const payoutAmount = requested - feeAmount;
-    const withdrawal = { withdrawalId, player, amount: requested.toString(), payoutAmount: payoutAmount.toString(), feeAmount: feeAmount.toString(), destination, status: "pending", createdAt: new Date().toISOString() };
+    const withdrawal = { withdrawalId, player, amount: requested.toString(), payoutAmount: payoutAmount.toString(), feeAmount: feeAmount.toString(), destination, status: "pending", txHash: null, createdAt: new Date().toISOString() };
     store.withdrawals.set(withdrawalId, withdrawal);
     persist();
     return res.json(withdrawal);
@@ -325,6 +361,23 @@ function installV2Routes(app, {
     const wanted = statusParse.data.status;
     const withdrawals = [...store.withdrawals.values()].filter((w) => !wanted || w.status === wanted);
     return res.json({ count: withdrawals.length, withdrawals });
+  });
+
+  // Relayer calls this AFTER sending the on-chain tx but BEFORE waiting for receipt.
+  // Records the txHash on the withdrawal so a crash between send and mark-paid
+  // can be recovered on the next relayer pass (instead of double-paying).
+  app.post("/v2/withdrawals/:withdrawalId/pending-tx", (req, res) => {
+    if (!adminToken) return res.status(503).json({ error: "ADMIN_DISABLED" });
+    if ((req.headers?.authorization || "") !== `Bearer ${adminToken}`) return res.status(401).json({ error: "UNAUTHORIZED" });
+    const paramParse = z.object({ withdrawalId: z.string().regex(/^wd_\d+$/) }).safeParse(req.params || {});
+    const bodyParse = z.object({ txHash: bytes32Schema }).safeParse(req.body || {});
+    if (!paramParse.success || !bodyParse.success) return res.status(400).json({ error: "INVALID_REQUEST" });
+    const withdrawal = store.withdrawals.get(paramParse.data.withdrawalId);
+    if (!withdrawal) return res.status(404).json({ error: "WITHDRAWAL_NOT_FOUND" });
+    if (withdrawal.status !== "pending") return res.status(409).json({ error: "WITHDRAWAL_NOT_PENDING", status: withdrawal.status });
+    withdrawal.txHash = bodyParse.data.txHash;
+    persist();
+    return res.json({ ok: true, withdrawalId: withdrawal.withdrawalId, txHash: withdrawal.txHash });
   });
 
   app.post("/v2/withdrawals/:withdrawalId/mark-paid", (req, res) => {

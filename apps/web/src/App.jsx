@@ -52,6 +52,22 @@ function setWalletForSigning(provider, addr) {
   _signerAddr = addr || '';
 }
 
+// Canonical JSON stringify — stable key order for body hashing.
+// MUST be byte-identical to the server's canonicalStringify in sig-auth.js.
+function canonicalStringify(value) {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return '[' + value.map(canonicalStringify).join(',') + ']';
+  const keys = Object.keys(value).sort();
+  return '{' + keys.map((k) => `${JSON.stringify(k)}:${canonicalStringify(value[k])}`).join(',') + '}';
+}
+
+// SHA-256 hex hash of canonical JSON body (browser crypto.subtle).
+async function computeBodyHash(body) {
+  const bytes = new TextEncoder().encode(canonicalStringify(body || {}));
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 // ─── ERROR MAPPING ──────────────────────────────────────────────────────────
 // Translate raw API error codes into player-friendly messages.
 function friendlyError(err) {
@@ -120,7 +136,8 @@ async function postJson(path, body) {
   if (_walletProvider && _signerAddr) {
     const nonce = crypto.randomUUID().replace(/-/g, '');
     const timestamp = String(Math.floor(Date.now() / 1000));
-    const message = `chancy:${path}:${nonce}:${timestamp}`;
+    const bHash = await computeBodyHash(body || {});
+    const message = `chancy:${path}:${bHash}:${nonce}:${timestamp}`;
     const signature = await _walletProvider.request({
       method: 'personal_sign',
       params: [message, _signerAddr],
@@ -129,6 +146,7 @@ async function postJson(path, body) {
     headers['x-chancy-signature'] = signature;
     headers['x-chancy-nonce'] = nonce;
     headers['x-chancy-timestamp'] = timestamp;
+    headers['x-chancy-body-hash'] = bHash;
   }
 
   const res = await fetch(`${API}${path}`, {

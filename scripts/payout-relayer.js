@@ -77,6 +77,15 @@ async function fetchPending({ apiBase, adminToken }) {
   return Array.isArray(body.withdrawals) ? body.withdrawals : [];
 }
 
+async function recordPendingTx({ apiBase, adminToken, withdrawalId, txHash }) {
+  const res = await fetch(`${apiBase}/v2/withdrawals/${withdrawalId}/pending-tx`, {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${adminToken}` },
+    body: JSON.stringify({ txHash }),
+  });
+  if (!res.ok) console.warn(`[relayer] pending-tx record failed for ${withdrawalId}: ${res.status}`);
+}
+
 async function markPaid({ apiBase, adminToken, withdrawalId, txHash }) {
   const res = await fetch(`${apiBase}/v2/withdrawals/${withdrawalId}/mark-paid`, {
     method: "POST",
@@ -98,9 +107,29 @@ async function runPass(ctx) {
   console.log(`[relayer] ${pending.length} pending withdrawal(s)`);
   let paid = 0;
   let skipped = 0;
+
   for (const w of pending) {
     const amount = BigInt(w.payoutAmount);
     try {
+      // ── CRASH PROTECTION: check for existing txHash from previous pass ──
+      // If the process crashed after sending on-chain but before mark-paid,
+      // the withdrawal still has status "pending" but now carries a txHash.
+      // Verify it on-chain instead of sending a duplicate payment.
+      if (w.txHash) {
+        try {
+          const receipt = await publicClient.getTransactionReceipt({ hash: w.txHash });
+          if (receipt && receipt.status === "success") {
+            const result = await markPaid({ apiBase: cfg.apiBase, adminToken: cfg.adminToken, withdrawalId: w.withdrawalId, txHash: w.txHash });
+            console.log(`[relayer] RECOVERED ${w.withdrawalId} via existing tx ${w.txHash}`);
+            paid += 1;
+            continue;
+          }
+          console.warn(`[relayer] previous tx ${w.txHash} not successful for ${w.withdrawalId}, re-sending`);
+        } catch {
+          // Tx not found — might have been dropped. Safe to re-send.
+        }
+      }
+
       const balance = await usdc.read.balanceOf([account.address]);
       if (balance < amount) {
         console.warn(`[relayer] SKIP ${w.withdrawalId}: hot wallet USDC ${balance} < payout ${amount}`);
@@ -114,6 +143,8 @@ async function runPass(ctx) {
         args: [w.destination, amount],
       });
       console.log(`[relayer] sent ${amount} USDC -> ${w.destination} tx=${txHash} (${w.withdrawalId})`);
+      // Record txHash BEFORE waiting for receipt — crash recovery
+      await recordPendingTx({ apiBase: cfg.apiBase, adminToken: cfg.adminToken, withdrawalId: w.withdrawalId, txHash });
       const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash, confirmations: 1 });
       if (receipt.status !== "success") {
         console.error(`[relayer] tx reverted ${txHash} (${w.withdrawalId}) — leaving pending`);
@@ -168,4 +199,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { runPass, fetchPending, markPaid, buildConfig };
+module.exports = { runPass, fetchPending, markPaid, recordPendingTx, buildConfig };

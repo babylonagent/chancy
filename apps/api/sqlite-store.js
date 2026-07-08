@@ -306,8 +306,11 @@ function persistSqliteStore(db, store) {
     commit();
   } catch (err) {
     try { rollback(); } catch {}
-    // Non-fatal: in-memory state is already correct. Log but don't crash the request.
-    console.error("[sqlite] persist failed (non-fatal):", err.message);
+    // FATAL: in-memory state has diverged from durable state.
+    // Continuing would mean accepting withdrawals/deposits that won't survive a restart.
+    // Log and throw so the caller knows the write failed.
+    console.error("[sqlite] persist FAILED:", err.message);
+    throw err;
   }
 }
 

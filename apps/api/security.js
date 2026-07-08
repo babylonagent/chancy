@@ -90,7 +90,7 @@ function stakeCap(req, res, next) {
 // ─── CORS Restriction ───────────────────────────────────────────────────────
 
 // Headers the frontend needs for signature auth
-const CORS_ALLOW_HEADERS = "Content-Type, Authorization, x-chancy-signer, x-chancy-signature, x-chancy-nonce, x-chancy-timestamp";
+const CORS_ALLOW_HEADERS = "Content-Type, Authorization, x-chancy-signer, x-chancy-signature, x-chancy-nonce, x-chancy-timestamp, x-chancy-body-hash";
 
 function corsRestriction(allowedOrigins) {
   const origins = new Set(
