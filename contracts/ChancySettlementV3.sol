@@ -42,9 +42,12 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
     uint256 public constant REFUND_TIMEOUT = 24 hours;
     uint256 public constant MIN_PRIZE_POT = 5_000_000;   // $5 USDC (6 decimals)
     uint256 public constant MAX_PRIZE_POT = 1_000_000_000; // $1,000 USDC
+    uint16 public constant HOUSE_FEE_BPS = 500;           // 5% house fee on settlement payouts
+    uint256 public totalHouseFees;                        // lifetime fees collected
 
     IERC20 public immutable usdc;
     address public settler;
+    address public treasury;                              // house fee recipient
     uint256 public settlerBond;
     bool public settlerBondDeposited;
 
@@ -93,6 +96,7 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
     event SettlerUpdated(address indexed oldSettler, address indexed newSettler);
     event SettlerBondDeposited(uint256 amount);
     event SettlerBondSlashed(uint256 amount, address to);
+    event HouseFeeCollected(uint256 gameId, uint256 feeAmount);
 
     // ── Modifiers ────────────────────────────────────────────────────────────
     modifier onlySettler() {
@@ -101,11 +105,13 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
     }
 
     // ── Constructor ──────────────────────────────────────────────────────────
-    constructor(address usdcAddress, address initialSettler) Ownable(msg.sender) {
+    constructor(address usdcAddress, address initialSettler, address treasuryAddress) Ownable(msg.sender) {
         require(usdcAddress != address(0), "INVALID_USDC");
         require(initialSettler != address(0), "INVALID_SETTLER");
+        require(treasuryAddress != address(0), "INVALID_TREASURY");
         usdc = IERC20(usdcAddress);
         settler = initialSettler;
+        treasury = treasuryAddress;
         emit SettlerUpdated(address(0), initialSettler);
     }
 
@@ -115,6 +121,17 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
         address prev = settler;
         settler = newSettler;
         emit SettlerUpdated(prev, newSettler);
+    }
+
+    function setTreasury(address newTreasury) external onlyOwner {
+        require(newTreasury != address(0), "INVALID_TREASURY");
+        treasury = newTreasury;
+    }
+
+    function withdrawHouseFees() external onlyOwner {
+        uint256 amount = totalHouseFees;
+        totalHouseFees = 0;
+        _payUSDC(treasury, amount);
     }
 
     function depositSettlerBond() external payable onlyOwner {
@@ -282,9 +299,9 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
             settlerAddress: msg.sender
         });
 
-        // Transfer
-        _payUSDC(game.host, hostPayout);
-        _payUSDC(game.player, playerPayout);
+        // Transfer (5% house fee deducted)
+        _payUSDC(game.host, _applyFee(hostPayout));
+        _payUSDC(game.player, _applyFee(playerPayout));
 
         emit GameSettled(gameId, outcome, hostPayout, playerPayout);
     }
@@ -421,9 +438,9 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
 
         game.status = GameStatus.Refunded;
 
-        _payUSDC(game.host, hostRefund);
+        _payUSDC(game.host, _applyFee(hostRefund));
         if (game.player != address(0)) {
-            _payUSDC(game.player, playerRefund);
+            _payUSDC(game.player, _applyFee(playerRefund));
         }
 
         emit GameRefunded(gameId, hostRefund, playerRefund);
@@ -539,12 +556,21 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
             hostPayout = prizePot + spent;
             playerPayout = unspent;        // player gets unspent budget back
         } else {
-            // Quit — host gets spent, player gets pot back? No.
-            // Quit means player chose to stop. Host gets spent + pot (all-or-nothing).
+            // Quit — host gets spent + pot (all-or-nothing).
             // Player only gets unspent budget back.
             hostPayout = prizePot + spent;
             playerPayout = unspent;
         }
+    }
+
+    /// @notice Applies 5% house fee to a payout, sends fee directly to treasury.
+    ///         Returns the net amount to pay the recipient.
+    function _applyFee(uint256 amount) internal returns (uint256 net) {
+        if (amount == 0) return 0;
+        uint256 fee = (amount * HOUSE_FEE_BPS) / BPS_DENOMINATOR;
+        totalHouseFees += fee;
+        _payUSDC(treasury, fee);
+        return amount - fee;
     }
 
     // ── Reveal Cost ──────────────────────────────────────────────────────────

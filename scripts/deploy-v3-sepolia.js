@@ -34,8 +34,8 @@ async function main() {
   // Load compiled artifact
   const artifact = require("../artifacts/contracts/ChancySettlementV3.sol/ChancySettlementV3.json");
   const factory = new ethers.ContractFactory(artifact.abi, artifact.bytecode, deployer);
-  console.log("\nDeploying ChancySettlementV3...");
-  const settlement = await factory.deploy(USDC_SEPOLIA, deployer.address);
+  console.log("Deploying ChancySettlementV3...");
+  const settlement = await factory.deploy(USDC_SEPOLIA, deployer.address, deployer.address);
   await settlement.waitForDeployment();
   const addr = await settlement.getAddress();
   console.log("ChancySettlementV3 deployed to:", addr);

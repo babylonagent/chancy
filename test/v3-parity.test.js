@@ -29,7 +29,7 @@ describe("V3 Board Derivation Parity (JS vs Solidity)", () => {
     usdc = await MockUSDC.deploy();
 
     const Settlement = await ethers.getContractFactory("ChancySettlementV3");
-    settlement = await Settlement.deploy(await usdc.getAddress(), settler.address);
+    settlement = await Settlement.deploy(await usdc.getAddress(), settler.address, owner.address);
   });
 
   // ── Helper: full game flow to verify board (JS derives board, contract replays it)

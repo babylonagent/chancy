@@ -6,7 +6,7 @@ import { createAppKit, useAppKit, useAppKitAccount, useAppKitProvider } from '@r
 import { WagmiAdapter } from '@reown/appkit-adapter-wagmi';
 import { baseSepolia } from 'viem/chains';
 
-import AppV3 from './AppV3.jsx';
+import App from './App.jsx';
 import './styles.css';
 
 // ─── REOWN APPKIT CONFIG ────────────────────────────────────────────────────
@@ -217,7 +217,7 @@ function Root() {
   if (fc.isMiniApp) {
     return (
       <FarcasterWalletWrapper fc={fc}>
-        {(wallet) => <AppV3 wallet={wallet} {...farcasterProps} />}
+        {(wallet) => <App wallet={wallet} {...farcasterProps} />}
       </FarcasterWalletWrapper>
     );
   }
@@ -226,7 +226,7 @@ function Root() {
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
         <ReownWalletWrapper>
-          {(wallet) => <AppV3 wallet={wallet} {...farcasterProps} />}
+          {(wallet) => <App wallet={wallet} {...farcasterProps} />}
         </ReownWalletWrapper>
       </QueryClientProvider>
     </WagmiProvider>

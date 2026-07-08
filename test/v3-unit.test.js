@@ -29,7 +29,7 @@ describe("V3 Contract Unit Tests — Challenge, Timeout, Edge Cases", () => {
     usdc = await MockUSDC.deploy();
 
     const Settlement = await ethers.getContractFactory("ChancySettlementV3");
-    settlement = await Settlement.deploy(await usdc.getAddress(), settler.address);
+    settlement = await Settlement.deploy(await usdc.getAddress(), settler.address, owner.address);
   });
 
   // ── Helper: full game flow ─────────────────────────────────────────────────
@@ -119,8 +119,11 @@ describe("V3 Contract Unit Tests — Challenge, Timeout, Edge Cases", () => {
       const hostBalAfter = await usdc.balanceOf(host.address);
       const playerBalAfter = await usdc.balanceOf(player.address);
 
-      expect(hostBalAfter - hostBalBefore).to.equal(prizePot);
-      expect(playerBalAfter - playerBalBefore).to.equal(maxSpend);
+      // With 5% house fee on payouts, refunds are 95% of locked amounts
+      const expectedHostRefund = prizePot * 95n / 100n;
+      const expectedPlayerRefund = maxSpend * 95n / 100n;
+      expect(hostBalAfter - hostBalBefore).to.equal(expectedHostRefund);
+      expect(playerBalAfter - playerBalBefore).to.equal(expectedPlayerRefund);
 
       const game = await settlement.getGame(gameId);
       expect(Number(game.status)).to.equal(4); // Refunded = 4
