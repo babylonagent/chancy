@@ -518,16 +518,19 @@ export default function App({ wallet, farcaster }) {
     if (!player) return '0';
     try {
       const ethers = await import('ethers');
-      const provider = await getEthersProvider(wallet.walletProvider);
-      if (!provider) return '0';
+      // Use plain RPC for reads — BrowserProvider requires wallet session and can fail silently
+      const provider = new ethers.JsonRpcProvider('https://sepolia.base.org');
       const settlement = new ethers.Contract(V3_SETTLEMENT, SETTLEMENT_ABI, provider);
       const bal = await settlement.balances(player);
       const balStr = bal.toString();
       setBalance(balStr);
-      setWithdrawable(balStr); // Full balance is withdrawable
+      setWithdrawable(balStr);
       return balStr;
-    } catch { return '0'; }
-  }, [addr, wallet.walletProvider]);
+    } catch (e) {
+      console.error('refreshCredits failed:', e?.message?.slice(0, 200));
+      return '0';
+    }
+  }, [addr]);
 
   // ── Load V3 sessions ──
   // V3: open games (waiting for player) come from on-chain GameCreated events,
