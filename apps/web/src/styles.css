@@ -99,8 +99,8 @@ input { outline: none; }
 .fc-pfp { width: 32px; height: 32px; border-radius: var(--radius-sm); border: 2px solid var(--border); object-fit: cover; image-rendering: pixelated; }
 .brand {
   display: flex; align-items: center; gap: 10px;
-  font-family: 'Press Start 2P', monospace; font-size: 12px; line-height: 1.6; font-weight: 400; color: var(--accent);
-  text-shadow: 2px 2px 0 var(--accent-dark);
+  font-family: 'Press Start 2P', monospace; font-size: 14px; line-height: 1.6; font-weight: 600; color: var(--accent);
+  text-shadow: none;
 }
 .brand img { width: 40px; height: 40px; image-rendering: pixelated; }
 .disconnect-btn {
@@ -136,24 +136,24 @@ input { outline: none; }
 
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  padding: 0 24px; font-family: 'Press Start 2P', monospace; font-size: 11px; font-weight: 400; line-height: 1.8;
+  padding: 0 24px; font-family: 'Press Start 2P', monospace; font-size: 13px; font-weight: 400; line-height: 1.8;
   white-space: nowrap; text-transform: uppercase;
   transition: transform 0.08s; width: 100%; position: relative;
   border-radius: 0; border: none;
   background-repeat: repeat-x;
-  background-size: auto 50px; height: 50px; box-sizing: border-box;
+  background-size: auto 75px; height: 75px; box-sizing: border-box;
   overflow: visible;
   image-rendering: pixelated;
 }
 
 /* Idle states use ::before (left cap) + ::after (right cap) + background (body) */
 .btn::before, .btn::after {
-  content: ''; position: absolute; top: 0; height: 50px; width: 18px;
-  background-size: 100% 50px;
+  content: ''; position: absolute; top: 0; height: 75px; width: 27px;
+  background-size: 100% 75px;
   image-rendering: pixelated; pointer-events: none;
 }
-.btn::before { left: -18px; }
-.btn::after { right: -18px; }
+.btn::before { left: -27px; }
+.btn::after { right: -27px; }
 
 /* ── ORANGE (primary) — 3-slice ── */
 .btn-primary {
@@ -186,7 +186,7 @@ input { outline: none; }
 .btn-secondary:active::before, .btn-ghost:active::before { background-image: var(--teal-left-pressed); }
 .btn-secondary:active::after, .btn-ghost:active::after { background-image: var(--teal-right-pressed); }
 
-.btn-sm { font-size: 9px; padding: 0 16px; width: auto; }
+.btn-sm { font-size: 11px; padding: 0 20px; width: auto; }
 
 /* ═══ 9-SLICE TEXTFIELD — panel borders ═══ */
 /* border-image draws the 9-slice edges/corners, background uses center tile only */
@@ -547,9 +547,8 @@ input { outline: none; }
 .credit-side .label { font-size: 12px; color: var(--text-faint); font-weight: 600; text-transform: uppercase; }
 .credit-side .small { font-size: 18px; }
 .credit-side .value.green { color: var(--green); }
-.credit-actions-simple { display: flex; flex-direction: row; gap: 8px; flex-wrap: wrap; }
-.credit-actions-simple .btn { width: auto; flex: 1; min-width: 0; }
-.credit-actions-simple .btn-ghost { flex: 0 0 auto; min-width: 44px; }
+.credit-actions-simple { display: flex; flex-direction: row; gap: 8px; }
+.credit-actions-simple .btn { width: auto; flex: 1 1 0; min-width: 0; overflow: hidden; }
 
 .empty-state {
   display: flex; flex-direction: column; align-items: center; gap: 12px;

@@ -1149,7 +1149,7 @@ export default function App({ wallet, farcaster }) {
             </div>
             <div className="credit-actions-simple">
               <button className="btn btn-primary btn-sm" onClick={() => { setPreDepositBalance(balance); setView('deposit'); }}>+ Add USDC</button>
-              <button className="btn btn-ghost btn-sm" disabled={busy || BigInt(balance) <= 0n} onClick={() => { setWithdrawAmt(''); setShowWithdraw(true); }}>Withdraw</button>
+              <button className="btn btn-secondary btn-sm" disabled={busy || BigInt(balance) <= 0n} onClick={() => { setWithdrawAmt(''); setShowWithdraw(true); }}>Withdraw</button>
             </div>
             <p className="hint-text">Send USDC to the contract — balance updates in 3-5 seconds</p>
           </div>
@@ -1193,7 +1193,7 @@ export default function App({ wallet, farcaster }) {
           )}
 
           <div className="bottom-bar">
-            <button className="btn btn-secondary" onClick={() => setView('host')}>+ Host a game</button>
+            <button className="btn btn-primary" style={{ width: 'auto', alignSelf: 'center', padding: '0 32px' }} onClick={() => setView('host')}>+ Host a game</button>
           </div>
           {statusMsg && <p className="status-text">{statusMsg}</p>}
         </div>
