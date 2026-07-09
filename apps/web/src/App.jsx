@@ -1206,21 +1206,21 @@ export default function App({ wallet, farcaster }) {
             <button className="back-btn" data-sfx-back onClick={() => setView('lobby')}>← Back</button>
             <span className="section-title" style={{ margin: 0 }}>Host a game</span>
           </div>
-          <div className="host-balance">
+          <div className="host-balance pixel-frame">
             <span>You have</span>
             <span className="value gold">{dollars(balance)}</span>
           </div>
           <div className="section-title">Difficulty</div>
           <div className="mode-selector">
             {Object.entries(MODES).map(([name, cfg]) => (
-              <button key={name} className={`mode-tab ${hostMode === name ? 'selected' : ''}`} onClick={() => setHostMode(name)}>
+              <button key={name} className={`mode-tab pixel-frame ${hostMode === name ? 'selected' : ''}`} onClick={() => setHostMode(name)}>
                 <span className="tab-name">{name}</span>
                 <span className="tab-sub">{cfg.copy}</span>
               </button>
             ))}
           </div>
           <div className="section-title">Prize pot</div>
-          <div className="pot-input-group">
+          <div className="pot-input-group pixel-frame">
             <span className="pot-prefix">$</span>
             <input value={potAmt} onChange={(e) => setPotAmt(e.target.value)} placeholder="10" inputMode="decimal" />
           </div>

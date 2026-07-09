@@ -138,7 +138,7 @@ input { outline: none; }
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   padding: 0 24px; font-family: 'Press Start 2P', monospace; font-size: 13px; font-weight: 400; line-height: 1.8;
   white-space: nowrap; text-transform: uppercase;
-  transition: transform 0.08s; width: 100%; position: relative;
+  transition: transform 0.08s; width: auto; min-width: 60%; max-width: 90%; align-self: center; position: relative;
   border-radius: 0; border: none;
   background-repeat: repeat-x;
   background-size: auto 75px; height: 75px; box-sizing: border-box;
@@ -158,12 +158,12 @@ input { outline: none; }
 /* ── ORANGE (primary) — 3-slice ── */
 .btn-primary {
   background-image: var(--orange-body);
-  background-color: #c89000; color: #1a1000;
-  text-shadow: 1px 1px 0 rgba(255,220,100,0.4);
+  background-color: transparent; color: #1a1000;
+  text-shadow: none;
 }
 .btn-primary::before { background-image: var(--orange-left); }
 .btn-primary::after { background-image: var(--orange-right); }
-.btn-primary:hover:not(:disabled) { filter: brightness(1.12); }
+.btn-primary:hover:not(:disabled) { filter: none; }
 .btn-primary:active {
   background-image: var(--orange-body-pressed);
   transform: translateY(2px);
@@ -174,11 +174,12 @@ input { outline: none; }
 /* ── TEAL (secondary/ghost) — 3-slice ── */
 .btn-secondary, .btn-ghost {
   background-image: var(--teal-body);
-  background-color: #1a4a4a; color: #c0e0e0;
+  background-color: transparent; color: #c0e0e0;
 }
 .btn-secondary::before, .btn-ghost::before { background-image: var(--teal-left); }
 .btn-secondary::after, .btn-ghost::after { background-image: var(--teal-right); }
-.btn-secondary:hover:not(:disabled), .btn-ghost:hover:not(:disabled) { filter: brightness(1.2); }
+.btn-secondary:hover:not(:disabled), .btn-ghost:hover:not(:disabled) { filter: none; }
+.btn-ghost:hover:not(:disabled) { color: #c0e0e0; }
 .btn-secondary:active, .btn-ghost:active {
   background-image: var(--teal-body-pressed);
   transform: translateY(2px);
@@ -547,8 +548,8 @@ input { outline: none; }
 .credit-side .label { font-size: 12px; color: var(--text-faint); font-weight: 600; text-transform: uppercase; }
 .credit-side .small { font-size: 18px; }
 .credit-side .value.green { color: var(--green); }
-.credit-actions-simple { display: flex; flex-direction: row; gap: 8px; }
-.credit-actions-simple .btn { width: auto; flex: 1 1 0; min-width: 0; overflow: hidden; }
+.credit-actions-simple { display: flex; flex-direction: row; gap: 12px; }
+.credit-actions-simple .btn { width: auto; flex: 1 1 0; min-width: 0; }
 
 .empty-state {
   display: flex; flex-direction: column; align-items: center; gap: 12px;
@@ -598,28 +599,28 @@ input { outline: none; }
 .host-balance {
   display: flex; justify-content: space-between; align-items: center;
   padding: 16px 20px; border-radius: var(--radius);
-  background: var(--bg-card); border: 2px solid var(--border);
 }
+.host-balance:not(.pixel-frame) { background: var(--bg-card); border: 2px solid var(--border); }
 .host-balance .value { font-family: 'Press Start 2P', monospace; font-size: 14px; font-weight: 400; }
 .host-balance .value.gold { color: var(--accent); }
 
 .mode-selector { display: flex; gap: 8px; }
 .mode-tab {
   flex: 1; padding: 14px 8px; border-radius: var(--radius);
-  background: var(--bg-card); border: 2px solid var(--border);
   display: flex; flex-direction: column; align-items: center; gap: 4px;
   transition: all 0.1s;
 }
+.mode-tab:not(.pixel-frame) { background: var(--bg-card); border: 2px solid var(--border); }
 .mode-tab .tab-name { font-family: 'Press Start 2P', monospace; font-weight: 400; font-size: 10px; }
 .mode-tab .tab-sub { font-size: 10px; color: var(--text-faint); }
-.mode-tab.selected { border-color: var(--accent); background: var(--accent-dim); }
+.mode-tab.selected:not(.pixel-frame) { border-color: var(--accent); background: var(--accent-dim); }
 
 .pot-input-group {
   display: flex; align-items: center;
   border-radius: var(--radius-sm); overflow: hidden;
-  background: var(--bg-input); border: 2px solid var(--border);
 }
-.pot-input-group:focus-within { border-color: var(--accent); }
+.pot-input-group:not(.pixel-frame) { background: var(--bg-input); border: 2px solid var(--border); }
+.pot-input-group:focus-within:not(.pixel-frame) { border-color: var(--accent); }
 .pot-prefix { padding: 14px 0 14px 16px; font-family: 'Press Start 2P', monospace; font-size: 13px; font-weight: 400; color: var(--text-dim); }
 .pot-input-group input {
   flex: 1; padding: 14px 16px 14px 4px;
