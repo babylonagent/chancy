@@ -154,6 +154,7 @@ input { outline: none; }
   image-rendering: pixelated;
   image-rendering: -webkit-optimize-contrast;
   user-select: none; -webkit-user-select: none;
+  isolation: isolate;
 }
 /* Text content above caps */
 .btn > * { position: relative; z-index: 1; }
@@ -220,6 +221,7 @@ input { outline: none; }
   image-rendering: -webkit-optimize-contrast;
   user-select: none; -webkit-user-select: none;
   transition: transform 0.08s;
+  isolation: isolate;
 }
 .misc-btn > * { position: relative; z-index: 1; }
 .misc-btn::before, .misc-btn::after {
