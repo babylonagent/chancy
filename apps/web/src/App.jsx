@@ -1041,7 +1041,7 @@ export default function App({ wallet, farcaster }) {
               </div>
               <div className="trust-item">
                 <img className="trust-icon" src={iconLock} alt="" />
-                <span>Onchain settlement — approve USDC, play on-chain</span>
+                <span>Onchain settlement — send USDC, play on-chain</span>
               </div>
               <div className="trust-item">
                 <img className="trust-icon" src={iconScroll} alt="" />
@@ -1103,8 +1103,8 @@ export default function App({ wallet, farcaster }) {
             <div className="credit-actions-simple">
               <button className="btn btn-primary btn-sm" onClick={() => { setPreDepositBalance(balance); setView('deposit'); }}>+ Add USDC</button>
               <button className="btn btn-ghost btn-sm" disabled={busy || BigInt(balance) <= 0n} onClick={() => { setWithdrawAmt(''); setShowWithdraw(true); }}>Withdraw</button>
-              <button className="btn btn-ghost btn-sm" onClick={() => refreshCredits(addr)}>↻</button>
             </div>
+            <p className="hint-text">Send USDC to the contract — balance updates in 3-5 seconds</p>
           </div>
 
           <div className="lobby-section-header">

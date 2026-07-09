@@ -501,7 +501,9 @@ input { outline: none; }
 .credit-side .label { font-size: 12px; color: var(--text-faint); font-weight: 600; text-transform: uppercase; }
 .credit-side .small { font-size: 18px; }
 .credit-side .value.green { color: var(--green); }
-.credit-actions-simple { display: flex; flex-direction: column; gap: 10px; }
+.credit-actions-simple { display: flex; flex-direction: row; gap: 8px; flex-wrap: wrap; }
+.credit-actions-simple .btn { width: auto; flex: 1; min-width: 0; }
+.credit-actions-simple .btn-ghost { flex: 0 0 auto; min-width: 44px; }
 
 .empty-state {
   display: flex; flex-direction: column; align-items: center; gap: 12px;
@@ -578,7 +580,7 @@ input { outline: none; }
   background: transparent; border: none; color: var(--text);
   font-family: 'Press Start 2P', monospace; font-size: 13px; font-weight: 400;
 }
-.hint-text { color: var(--text-faint); font-size: 14px; margin-top: -8px; }
+.hint-text { color: var(--text-faint); font-size: 13px; margin-top: -4px; line-height: 1.3; }
 
 .pot-presets { display: flex; gap: 8px; flex-wrap: wrap; margin-top: -8px; }
 .preset-chip {
@@ -601,9 +603,10 @@ input { outline: none; }
   display: flex; align-items: center; justify-content: center;
   font-weight: 700; font-size: 16px;
 }
-.deposit-step-body { display: flex; flex-direction: column; gap: 8px; flex: 1; }
+.deposit-step-body { display: flex; flex-direction: column; gap: 8px; flex: 1; align-items: center; text-align: center; }
 .deposit-step-body strong { font-size: 16px; }
-.deposit-step-body p { color: var(--text-dim); font-size: 14px; line-height: 1.4; }
+.deposit-step-body p { color: var(--text-dim); font-size: 14px; line-height: 1.4; text-align: center; }
+.deposit-step-body .vault-address-card { width: 100%; max-width: 360px; }
 
 .your-address-card {
   padding: 14px 16px; border-radius: var(--radius-sm);
@@ -706,6 +709,7 @@ input { outline: none; }
 [data-theme="light"] .qr-code { background: #fff; }
 
 /* ═══ RESPONSIVE ═══ */
+/* Desktop: keep app phone-width — game feel, not web dashboard */
 @media (min-width: 520px) { .app { max-width: 480px; } }
 
 /* Mobile: stack cards vertically (3-across is too cramped under 768px) */
@@ -715,9 +719,8 @@ input { outline: none; }
   .trust-row { flex-direction: column; }
 }
 
+/* Desktop landing page can be wider for marketing sections, but app stays narrow */
 @media (min-width: 768px) {
-  .app { max-width: 960px; padding: 0 32px 120px; }
-  .bottom-bar { max-width: 960px; }
   .landing-page { gap: 56px; padding: 48px 0 56px; }
   .landing-hero { gap: 28px; }
   .landing-hero .hero-logo { width: 112px; height: 112px; }
@@ -740,8 +743,8 @@ input { outline: none; }
 }
 
 @media (min-width: 1100px) {
-  .app { max-width: 1080px; }
-  .bottom-bar { max-width: 1080px; }
+  .app { max-width: 480px; }
+  .bottom-bar { max-width: 480px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
