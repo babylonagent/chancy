@@ -154,9 +154,22 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
     // ── Balance Management (on-chain credits) ──────────────────────────────────
 
     /**
-     * @notice Deposit USDC into the contract to fund gameplay.
-     *         Requires prior approve on USDC token. One-time approval of desired amount.
-     *         After deposit, createGame/joinGame pull from balance — no per-game approvals.
+     * @notice Indexer-only: credit a user's balance from a raw USDC transfer.
+     *         Called when the indexer detects a USDC Transfer event to this contract.
+     *         The USDC is already in the contract (raw transfer), we just credit the balance.
+     * @param user The address that sent the USDC
+     * @param amount The amount of USDC sent
+     */
+    function adminCredit(address user, uint256 amount) external onlySettler {
+        require(user != address(0), "INVALID_USER");
+        require(amount > 0, "INVALID_AMOUNT");
+        balances[user] += amount;
+        emit Deposited(user, amount);
+    }
+
+    /**
+     * @notice Deposit USDC into the contract via approve (alternative to raw send).
+     *         For agents or users who prefer the approve flow.
      */
     function deposit(uint256 amount) external nonReentrant {
         require(amount > 0, "INVALID_AMOUNT");

@@ -30,7 +30,7 @@ import btnRedRaised from './assets/pixel/btn-red-raised.png';
 import btnRedPressed from './assets/pixel/btn-red-pressed.png';
 
 // ─── V3 CONTRACT CONFIG ─────────────────────────────────────────────────────
-const V3_SETTLEMENT = '0x48aBca2960a18c1b43CB8Ba06b4B0192f941047f';
+const V3_SETTLEMENT = '0x46ae2f3f80d9021066a126a94b4700B17f3cB218';
 const USDC_ADDRESS = '0x036CbD53842c5426634e7929541eC2318f3dCF7e'; // USDC on Base Sepolia
 const CHAIN_ID = 84532;
 
@@ -351,16 +351,17 @@ function ApiDocsSheet({ onClose }) {
       <div className="modal api-docs-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-handle" />
         <h2>API &amp; Agents</h2>
-        <p className="modal-sub">Chancy V3 uses on-chain credits. Deposit USDC into the contract once, play unlimited games from your balance, withdraw anytime (5% fee to treasury).</p>
+        <p className="modal-sub">Send USDC to the contract — no approvals needed. The indexer credits your on-chain balance automatically. Play unlimited games, withdraw anytime (5% fee to treasury).</p>
 
         <div className="api-section">
           <h3 className="api-h3">On-chain Flow</h3>
           <ol className="api-flow">
-            <li>Approve USDC &rarr; <code>deposit(amount)</code> to fund your on-chain balance</li>
+            <li>Send USDC to contract address (raw transfer, no signing)</li>
+            <li>Indexer detects transfer &rarr; calls <code>adminCredit(user, amount)</code> on-chain</li>
             <li>Host calls <code>createGame(difficulty, prizePot, hostCommitment)</code> — pulls from balance</li>
             <li>Player calls <code>joinGame(gameId, playerCommitment, maxSpend)</code> — pulls from balance</li>
-            <li>Player clicks tiles via V3 engine; game settles on-chain on win/loss/quit</li>
-            <li>Winnings credited to balance. <code>withdraw(amount)</code> anytime (5% fee)</li>
+            <li>Game settles on-chain on win/loss/quit &rarr; winnings credited to balance</li>
+            <li><code>withdraw(amount)</code> anytime — 5% fee auto-sent to treasury</li>
           </ol>
         </div>
 
@@ -378,7 +379,7 @@ function ApiDocsSheet({ onClose }) {
         <div className="api-section">
           <h3 className="api-h3">Contract Addresses (Base Sepolia)</h3>
           <div className="api-contracts">
-            <div className="api-contract"><span className="api-contract-label">Settlement V3</span><code>0x48aBca2960a18c1b43CB8Ba06b4B0192f941047f</code></div>
+            <div className="api-contract"><span className="api-contract-label">Settlement V3</span><code>0x46ae2f3f80d9021066a126a94b4700B17f3cB218</code></div>
             <div className="api-contract"><span className="api-contract-label">USDC</span><code>0x036CbD53842c5426634e7929541eC2318f3dCF7e</code></div>
             <div className="api-contract"><span className="api-contract-label">Treasury (5% fee)</span><code>0x51a17E6DaE3d0D04174734b906BB201Cc79a20ff</code></div>
           </div>
@@ -1188,78 +1189,52 @@ export default function App({ wallet, farcaster }) {
         </div>
       )}
 
-      {/* ═══ DEPOSIT (V3: hidden — USDC is direct on-chain, no vault deposit needed) ═══ */}
+      {/* ═══ DEPOSIT (raw send — indexer credits on-chain) ═══ */}
       {view === 'deposit' && isConnected && (
         <div className="deposit-view">
           <div className="lobby-section-header">
             <button className="back-btn" data-sfx-back onClick={() => { setPollingDeposit(false); setView('lobby'); }}>← Back</button>
-            <span className="section-title" style={{ margin: 0 }}>Add credits</span>
+            <span className="section-title" style={{ margin: 0 }}>Add USDC</span>
           </div>
 
-          {/* Get USDC into your wallet */}
+          {/* Contract address + QR */}
           <div className="deposit-step">
             <div className="deposit-step-num">1</div>
             <div className="deposit-step-body">
-              <strong>Get USDC into your wallet</strong>
-              <p>Send USDC to your wallet address below. On Base Sepolia testnet, get testnet USDC from a faucet or mint it for testing.</p>
-              {addr && (
+              <strong>Send USDC to play</strong>
+              <p>Send USDC from your wallet to the contract address below. No approvals, no signing — just a raw transfer. Your balance updates automatically in a few seconds.</p>
+              {V3_SETTLEMENT && (
                 <div className="qr-section">
-                  <img className="qr-code" src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(addr)}`} alt="Wallet QR" />
+                  <img className="qr-code" src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(V3_SETTLEMENT)}`} alt="Contract QR" />
                 </div>
               )}
-              <div className="vault-address-card" onClick={copyVaultAddress}>
-                <div className="vault-label">Your wallet</div>
-                <div className="vault-address">{addr || '—'}</div>
+              <div className="vault-address-card" onClick={() => { navigator.clipboard.writeText(V3_SETTLEMENT).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }).catch(() => {}); }}>
+                <div className="vault-label">Contract address</div>
+                <div className="vault-address">{V3_SETTLEMENT}</div>
                 <div className="vault-copy-hint">{copied ? '✓ Copied' : 'Tap to copy'}</div>
               </div>
             </div>
           </div>
 
-          {/* Deposit USDC into the contract (on-chain credits) */}
-          <div className="deposit-step">
-            <div className="deposit-step-num">2</div>
-            <div className="deposit-step-body">
-              <strong>Deposit USDC to play</strong>
-              <p>Approve and deposit USDC into the settlement contract. Your funds become on-chain credits you can play with — no per-game approvals needed.</p>
-              <div className="pot-input-group" style={{ marginBottom: 8 }}>
-                <span className="pot-prefix">$</span>
-                <input value={potAmt} onChange={(e) => setPotAmt(e.target.value)} placeholder="10" inputMode="decimal" />
-              </div>
-              <button className="btn btn-primary" disabled={busy} onClick={async () => {
-                setError(''); setBusy(true); setStatusMsg('Approving USDC…');
-                try {
-                  const ethers = await import('ethers');
-                  const p = await getEthersProvider(wallet.walletProvider);
-                  const signer = await p.getSigner();
-                  const usdc = new ethers.Contract(USDC_ADDRESS, ERC20_ABI, signer);
-                  const contract = new ethers.Contract(V3_SETTLEMENT, SETTLEMENT_ABI, signer);
-                  const amount = usdcUnits(potAmt);
-                  // Approve exact amount
-                  sfx.click();
-                  const allow = await usdc.allowance(addr, V3_SETTLEMENT);
-                  if (allow < BigInt(amount)) {
-                    const atx = await usdc.approve(V3_SETTLEMENT, amount);
-                    await atx.wait();
-                  }
-                  // Deposit
-                  setStatusMsg('Depositing on-chain…');
-                  const dtx = await contract.deposit(amount);
-                  await dtx.wait();
-                  sfx.win();
-                  setStatusMsg(`+${dollars(amount)} deposited!`);
-                  setPollingDeposit(false);
-                  refreshCredits(addr);
-                  setTimeout(() => { setView('lobby'); setStatusMsg(''); }, 1500);
-                } catch (e) { setError(e.message?.slice(0, 200) || 'Deposit failed'); setStatusMsg(''); }
-                finally { setBusy(false); }
-              }}>{busy ? 'Processing…' : `Deposit ${dollars(usdcUnits(potAmt))}`}</button>
+          {pollingDeposit ? (
+            <div className="deposit-polling">
+              <div className="pulse-dot" />
+              <span>Waiting for your deposit…</span>
+              <button className="btn btn-ghost btn-sm" onClick={() => setPollingDeposit(false)}>Cancel</button>
             </div>
-          </div>
+          ) : (
+            <button className="btn btn-primary" onClick={() => {
+              navigator.clipboard.writeText(V3_SETTLEMENT).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }).catch(() => {});
+              setPreDepositBalance(balance);
+              setPollingDeposit(true);
+            }}>I've sent USDC — check balance</button>
+          )}
 
-          {/* Actions */}
-          <div className="deposit-actions">
-            <button className="btn btn-secondary" onClick={() => { copyVaultAddress(); }}>{copied ? '✓ Copied' : 'Copy wallet address'}</button>
+          <div className="deposit-balance">
+            <span className="label">Balance</span>
+            <span className="value gold">{dollars(balance)}</span>
           </div>
+          <p className="fee-note">Base Sepolia testnet · No deposit fees · 5% on withdrawals</p>
         </div>
       )}
 
