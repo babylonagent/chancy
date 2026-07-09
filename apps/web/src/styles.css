@@ -141,7 +141,7 @@ input { outline: none; }
 */
 
 .btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
   padding: 0 27px; font-family: 'Press Start 2P', monospace; font-size: 13px; font-weight: 400; line-height: 1.8;
   white-space: nowrap; text-transform: uppercase;
   transition: transform 0.08s; width: auto; min-width: 60%; max-width: 90%; margin: 0 auto; position: relative;
@@ -152,10 +152,12 @@ input { outline: none; }
   background-clip: content-box;
   overflow: visible;
   image-rendering: pixelated;
+  image-rendering: -webkit-optimize-contrast;
   user-select: none; -webkit-user-select: none;
+  z-index: 1;
 }
-/* Ensure text sits above caps (z-index covers full container, not just body) */
-.btn { z-index: 2; isolation: isolate; }
+/* Text content must sit above caps */
+.btn > * { position: relative; z-index: 2; }
 
 /* Caps are INSIDE the button box (not negative offset) to prevent overlap */
 .btn::before, .btn::after {
@@ -215,10 +217,12 @@ input { outline: none; }
   background-clip: content-box;
   padding: 0 7px; overflow: visible;
   image-rendering: pixelated;
+  image-rendering: -webkit-optimize-contrast;
   user-select: none; -webkit-user-select: none;
   transition: transform 0.08s;
-  z-index: 2; isolation: isolate;
+  z-index: 1;
 }
+.misc-btn > * { position: relative; z-index: 2; }
 .misc-btn::before, .misc-btn::after {
   content: ''; position: absolute; top: 0; height: 25px; width: 7px;
   background-size: 100% 25px;
@@ -393,6 +397,7 @@ input { outline: none; }
   border-radius: 20px 20px 0 0;
   background: var(--bg-card); border: 2px solid var(--border); border-bottom: none;
   padding: 28px 20px calc(28px + env(safe-area-inset-bottom));
+  text-align: center;
   animation: sheetUp 0.3s cubic-bezier(0.32, 0.72, 0, 1);
 }
 @keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }

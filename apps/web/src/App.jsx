@@ -377,7 +377,7 @@ function RulesSheet({ onClose }) {
           <div className="rule-icon red">✺</div>
           <div className="rule-text"><strong>Dodge bombs</strong><span>Three bombs ends your run. Quit or bomb out and you lose everything. Sweep all prizes to win the pot.</span></div>
         </div>
-        <button className="btn btn-primary" data-sfx-back onClick={onClose} style={{ marginTop: 16, margin: '16px auto 0' }}>Got it</button>
+        <button className="btn btn-primary" data-sfx-back onClick={onClose} style={{ marginTop: 16, margin: '16px auto 0', display: 'flex' }}>Got it</button>
       </div>
     </div>
   );
