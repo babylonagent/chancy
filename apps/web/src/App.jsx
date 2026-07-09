@@ -161,11 +161,13 @@ function v3RevealCostAt(prizePot, mode, revealIndex) {
 let _ethersProvider = null;
 let _ethersProviderFor = null;
 async function getEthersProvider(walletProvider) {
-  if (!walletProvider) return null;
-  if (_ethersProvider && _ethersProviderFor === walletProvider) return _ethersProvider;
+  // Prefer the wallet provider from Reown/Farcaster; fall back to window.ethereum (MetaMask)
+  const provider = walletProvider || (typeof window !== 'undefined' ? window.ethereum : null);
+  if (!provider) return null;
+  if (_ethersProvider && _ethersProviderFor === provider) return _ethersProvider;
   const { BrowserProvider } = await import('ethers');
-  _ethersProvider = new BrowserProvider(walletProvider);
-  _ethersProviderFor = walletProvider;
+  _ethersProvider = new BrowserProvider(provider);
+  _ethersProviderFor = provider;
   return _ethersProvider;
 }
 
@@ -454,9 +456,13 @@ export default function App({ wallet, farcaster }) {
   const addr = address || '';
   const modeCfg = session ? MODES[session.mode] : MODES.Normal;
 
-  // ── Wallet signing setup ──
+  // ── Wallet signing setup — clear cache on disconnect ──
   useEffect(() => {
     setWalletForSigning(wallet.walletProvider || null, addr);
+    if (!wallet.walletProvider) {
+      _ethersProvider = null;
+      _ethersProviderFor = null;
+    }
   }, [wallet.walletProvider, addr]);
 
   // ── Theme management ──
@@ -681,7 +687,11 @@ export default function App({ wallet, farcaster }) {
     try {
       const ethers = await import('ethers');
       const browserProvider = await getEthersProvider(wallet.walletProvider);
-      if (!browserProvider) throw new Error('Wallet not connected');
+      if (!browserProvider) {
+        _ethersProvider = null;
+        _ethersProviderFor = null;
+        throw new Error('Wallet not connected. Try reconnecting.');
+      }
       const signer = await browserProvider.getSigner();
       const contract = new ethers.Contract(V3_SETTLEMENT, SETTLEMENT_ABI, signer);
 
@@ -768,7 +778,11 @@ export default function App({ wallet, farcaster }) {
     try {
       const ethers = await import('ethers');
       const browserProvider = await getEthersProvider(wallet.walletProvider);
-      if (!browserProvider) throw new Error('Wallet not connected');
+      if (!browserProvider) {
+        _ethersProvider = null;
+        _ethersProviderFor = null;
+        throw new Error('Wallet not connected. Try reconnecting.');
+      }
       const signer = await browserProvider.getSigner();
       const contract = new ethers.Contract(V3_SETTLEMENT, SETTLEMENT_ABI, signer);
 
