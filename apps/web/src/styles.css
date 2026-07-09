@@ -592,21 +592,14 @@ input { outline: none; }
 
 /* ═══ DEPOSIT ═══ */
 .deposit-view { display: flex; flex-direction: column; gap: 16px; padding: 12px 0 80px; }
-.deposit-step {
-  display: flex; gap: 14px; padding: 18px 20px;
+.deposit-card {
+  display: flex; flex-direction: column; gap: 12px; padding: 24px 20px;
   border-radius: var(--radius); background: var(--bg-card); border: 2px solid var(--border);
+  align-items: center; text-align: center;
 }
-.deposit-step-num {
-  width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
-  background: var(--accent-dim); color: var(--accent);
-  border: 2px solid var(--accent-dark);
-  display: flex; align-items: center; justify-content: center;
-  font-weight: 700; font-size: 16px;
-}
-.deposit-step-body { display: flex; flex-direction: column; gap: 8px; flex: 1; align-items: center; text-align: center; }
-.deposit-step-body strong { font-size: 16px; }
-.deposit-step-body p { color: var(--text-dim); font-size: 14px; line-height: 1.4; text-align: center; }
-.deposit-step-body .vault-address-card { width: 100%; max-width: 360px; }
+.deposit-card strong { font-size: 16px; }
+.deposit-card p { color: var(--text-dim); font-size: 14px; line-height: 1.4; text-align: center; }
+.deposit-card .vault-address-card { width: 100%; max-width: 360px; }
 
 .your-address-card {
   padding: 14px 16px; border-radius: var(--radius-sm);
@@ -630,13 +623,12 @@ input { outline: none; }
 .vault-address-card .vault-copy-hint { font-size: 14px; color: var(--green); }
 .deposit-actions { display: flex; flex-direction: column; gap: 10px; }
 .deposit-polling {
-  display: flex; align-items: center; justify-content: center; gap: 10px;
-  padding: 14px; border-radius: var(--radius-sm);
-  background: var(--bg-card); border: 2px solid var(--border);
+  display: flex; align-items: center; gap: 10px; justify-content: center;
+  padding: 12px 16px;
 }
-.pulse-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent-glow); animation: pulse-glow 1.2s ease-in-out infinite; }
+.pulse-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent-glow); animation: pulse-glow 1.2s ease-in-out infinite; flex-shrink: 0; }
 @keyframes pulse-glow { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(0.8); } }
-.deposit-polling span { font-size: 15px; color: var(--text-dim); }
+.deposit-polling span { font-size: 13px; color: var(--text-dim); text-align: center; line-height: 1.3; }
 .deposit-success { padding: 14px 16px; border-radius: var(--radius-sm); background: var(--green-dim); border: 2px solid var(--green); color: var(--green); font-weight: 700; text-align: center; }
 .deposit-balance {
   display: flex; justify-content: space-between; align-items: center;

@@ -646,17 +646,20 @@ export default function App({ wallet, farcaster }) {
     }
   }
 
+  // ── Auto-poll balance while on deposit page ──
   useEffect(() => {
-    if (!pollingDeposit || !addr) return;
+    if (view !== 'deposit' || !addr) return;
+    setPreDepositBalance(balance);
     const interval = setInterval(async () => {
       const bal = await refreshCredits(addr);
-      if (BigInt(bal) > BigInt(preDepositBalance)) {
-        setPollingDeposit(false);
-        setStatusMsg(`+${dollars((BigInt(bal) - BigInt(preDepositBalance)).toString())} added`);
+      if (preDepositBalance && BigInt(bal) > BigInt(preDepositBalance)) {
+        sfx.win();
+        setStatusMsg(`+${dollars((BigInt(bal) - BigInt(preDepositBalance)).toString())} received!`);
+        setTimeout(() => { setView('lobby'); setStatusMsg(''); }, 2000);
       }
     }, 4000);
     return () => clearInterval(interval);
-  }, [pollingDeposit, addr, preDepositBalance, refreshCredits]);
+  }, [view, addr, refreshCredits]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── HOST: CREATE (V3 on-chain) ──
   async function hostCreateSession() {
@@ -1198,37 +1201,26 @@ export default function App({ wallet, farcaster }) {
           </div>
 
           {/* Contract address + QR */}
-          <div className="deposit-step">
-            <div className="deposit-step-num">1</div>
-            <div className="deposit-step-body">
-              <strong>Send USDC to play</strong>
-              <p>Send USDC from your wallet to the contract address below. No approvals, no signing — just a raw transfer. Your balance updates automatically in a few seconds.</p>
-              {V3_SETTLEMENT && (
-                <div className="qr-section">
-                  <img className="qr-code" src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(V3_SETTLEMENT)}`} alt="Contract QR" />
-                </div>
-              )}
-              <div className="vault-address-card" onClick={() => { navigator.clipboard.writeText(V3_SETTLEMENT).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }).catch(() => {}); }}>
-                <div className="vault-label">Contract address</div>
-                <div className="vault-address">{V3_SETTLEMENT}</div>
-                <div className="vault-copy-hint">{copied ? '✓ Copied' : 'Tap to copy'}</div>
+          <div className="deposit-card">
+            <strong>Send USDC to play</strong>
+            <p>Send USDC from your wallet to the contract address below. No approvals, no signing — just a raw transfer.</p>
+            {V3_SETTLEMENT && (
+              <div className="qr-section">
+                <img className="qr-code" src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(V3_SETTLEMENT)}`} alt="Contract QR" />
               </div>
+            )}
+            <div className="vault-address-card" onClick={() => { navigator.clipboard.writeText(V3_SETTLEMENT).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }).catch(() => {}); }}>
+              <div className="vault-label">Contract address</div>
+              <div className="vault-address">{V3_SETTLEMENT}</div>
+              <div className="vault-copy-hint">{copied ? '✓ Copied' : 'Tap to copy'}</div>
             </div>
           </div>
 
-          {pollingDeposit ? (
-            <div className="deposit-polling">
-              <div className="pulse-dot" />
-              <span>Waiting for your deposit…</span>
-              <button className="btn btn-ghost btn-sm" onClick={() => setPollingDeposit(false)}>Cancel</button>
-            </div>
-          ) : (
-            <button className="btn btn-primary" onClick={() => {
-              navigator.clipboard.writeText(V3_SETTLEMENT).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }).catch(() => {});
-              setPreDepositBalance(balance);
-              setPollingDeposit(true);
-            }}>I've sent USDC — check balance</button>
-          )}
+          {/* Auto-polling indicator — shows the system is watching for your deposit */}
+          <div className="deposit-polling">
+            <div className="pulse-dot" />
+            <span>Watching for your deposit — balance updates in 3-5 seconds</span>
+          </div>
 
           <div className="deposit-balance">
             <span className="label">Balance</span>
