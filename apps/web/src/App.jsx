@@ -54,6 +54,7 @@ import tfBottomleft from './assets/pixel/textfield/bottomleft.gif';
 import tfBottom from './assets/pixel/textfield/bottom.gif';
 import tfBottomright from './assets/pixel/textfield/bottomright.gif';
 import tf9slice from './assets/pixel/textfield/textfield-9slice.png';
+import tfCenterTile from './assets/pixel/textfield/center-tile.png';
 
 // ─── V3 CONTRACT CONFIG ─────────────────────────────────────────────────────
 const V3_SETTLEMENT = '0x46ae2f3f80d9021066a126a94b4700B17f3cB218';
@@ -976,7 +977,7 @@ export default function App({ wallet, farcaster }) {
   //  RENDER
   // ═══════════════════════════════════════════════════════════════════════════
   return (
-    <div className={`app ${view === 'splash' ? 'landing-mode' : ''}`} style={{ '--frame-gold': `url(${frameGold})`, '--frame-dark': `url(${frameDark})`, '--frame-green': `url(${frameGreen})`, '--frame-red': `url(${frameRed})`, '--btn-gold-up': `url(${btnGoldRaised})`, '--btn-gold-down': `url(${btnGoldPressed})`, '--btn-dark-up': `url(${btnDarkRaised})`, '--btn-dark-down': `url(${btnDarkPressed})`, '--btn-green-up': `url(${btnGreenRaised})`, '--btn-green-down': `url(${btnGreenPressed})`, '--btn-red-up': `url(${btnRedRaised})`, '--btn-red-down': `url(${btnRedPressed})`, '--orange-left': `url(${orangeBtnLeft})`, '--orange-left-pressed': `url(${orangeBtnLeftPressed})`, '--orange-body': `url(${orangeBtnBody})`, '--orange-body-pressed': `url(${orangeBtnBodyPressed})`, '--orange-right': `url(${orangeBtnRight})`, '--orange-right-pressed': `url(${orangeBtnRightPressed})`, '--teal-left': `url(${tealBtnLeft})`, '--teal-left-pressed': `url(${tealBtnLeftPressed})`, '--teal-body': `url(${tealBtnBody})`, '--teal-body-pressed': `url(${tealBtnBodyPressed})`, '--teal-right': `url(${tealBtnRight})`, '--teal-right-pressed': `url(${tealBtnRightPressed})`, '--tf-9slice': `url(${tf9slice})` }}>
+    <div className={`app ${view === 'splash' ? 'landing-mode' : ''}`} style={{ '--frame-gold': `url(${frameGold})`, '--frame-dark': `url(${frameDark})`, '--frame-green': `url(${frameGreen})`, '--frame-red': `url(${frameRed})`, '--btn-gold-up': `url(${btnGoldRaised})`, '--btn-gold-down': `url(${btnGoldPressed})`, '--btn-dark-up': `url(${btnDarkRaised})`, '--btn-dark-down': `url(${btnDarkPressed})`, '--btn-green-up': `url(${btnGreenRaised})`, '--btn-green-down': `url(${btnGreenPressed})`, '--btn-red-up': `url(${btnRedRaised})`, '--btn-red-down': `url(${btnRedPressed})`, '--orange-left': `url(${orangeBtnLeft})`, '--orange-left-pressed': `url(${orangeBtnLeftPressed})`, '--orange-body': `url(${orangeBtnBody})`, '--orange-body-pressed': `url(${orangeBtnBodyPressed})`, '--orange-right': `url(${orangeBtnRight})`, '--orange-right-pressed': `url(${orangeBtnRightPressed})`, '--teal-left': `url(${tealBtnLeft})`, '--teal-left-pressed': `url(${tealBtnLeftPressed})`, '--teal-body': `url(${tealBtnBody})`, '--teal-body-pressed': `url(${tealBtnBodyPressed})`, '--teal-right': `url(${tealBtnRight})`, '--teal-right-pressed': `url(${tealBtnRightPressed})`, '--tf-9slice': `url(${tf9slice})`, '--tf-center': `url(${tfCenterTile})` }}>
       <FloatingSprites />
       {view !== 'splash' && (
         <header className="header">
@@ -1167,7 +1168,7 @@ export default function App({ wallet, farcaster }) {
               {sessions.map((s) => {
                 const isMine = s.host.toLowerCase() === addr.toLowerCase();
                 return (
-                <div key={s.sessionId} className={`game-card mode-${s.mode.toLowerCase()} ${isMine ? 'my-game' : ''}`}>
+                <div key={s.sessionId} className={`game-card mode-${s.mode.toLowerCase()} ${isMine ? 'my-game' : ''} pixel-frame`}>
                   <div className="game-card-top">
                     <div className="game-card-badges">
                       <span className="game-mode-badge">{s.mode}</span>
@@ -1200,7 +1201,7 @@ export default function App({ wallet, farcaster }) {
 
       {/* ═══ HOST ═══ */}
       {view === 'host' && isConnected && (
-        <div className="host-view">
+        <div className="host-view pixel-frame">
           <div className="lobby-section-header">
             <button className="back-btn" data-sfx-back onClick={() => setView('lobby')}>← Back</button>
             <span className="section-title" style={{ margin: 0 }}>Host a game</span>
@@ -1252,7 +1253,7 @@ export default function App({ wallet, farcaster }) {
                 <img className="qr-code" src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(V3_SETTLEMENT)}`} alt="Contract QR" />
               </div>
             )}
-            <div className="vault-address-card" onClick={() => { navigator.clipboard.writeText(V3_SETTLEMENT).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }).catch(() => {}); }}>
+            <div className="vault-address-card pixel-frame" onClick={() => { navigator.clipboard.writeText(V3_SETTLEMENT).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }).catch(() => {}); }}>
               <div className="vault-label">Contract address</div>
               <div className="vault-address">{V3_SETTLEMENT}</div>
               <div className="vault-copy-hint">{copied ? '✓ Copied' : 'Tap to copy'}</div>
@@ -1265,7 +1266,7 @@ export default function App({ wallet, farcaster }) {
             <span>Watching for your deposit — balance updates in 3-5 seconds</span>
           </div>
 
-          <div className="deposit-balance">
+          <div className="deposit-balance pixel-frame">
             <span className="label">Balance</span>
             <span className="value gold">{dollars(balance)}</span>
           </div>
@@ -1275,7 +1276,7 @@ export default function App({ wallet, farcaster }) {
 
       {/* ═══ ROUND ═══ */}
       {view === 'round' && session && (
-        <div className="round-view">
+        <div className="round-view pixel-frame">
           <div className="round-header">
             <button className="back-btn" data-sfx-back onClick={quitRound} disabled={quitting}>
               {quitting ? 'Quitting…' : `← ${gameEnded ? 'Done' : 'Quit'}`}

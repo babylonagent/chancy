@@ -136,23 +136,24 @@ input { outline: none; }
 
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  padding: 0 18px; font-family: 'Press Start 2P', monospace; font-size: 11px; font-weight: 400; line-height: 1.8;
+  padding: 0 24px; font-family: 'Press Start 2P', monospace; font-size: 11px; font-weight: 400; line-height: 1.8;
   white-space: nowrap; text-transform: uppercase;
   transition: transform 0.08s; width: 100%; position: relative;
   border-radius: 0; border: none;
   background-repeat: repeat-x;
-  image-rendering: pixelated;
-  height: 25px; box-sizing: border-box;
+  background-size: auto 50px; height: 50px; box-sizing: border-box;
   overflow: visible;
+  image-rendering: pixelated;
 }
 
 /* Idle states use ::before (left cap) + ::after (right cap) + background (body) */
 .btn::before, .btn::after {
-  content: ''; position: absolute; top: 0; height: 25px; width: 9px;
+  content: ''; position: absolute; top: 0; height: 50px; width: 18px;
+  background-size: 100% 50px;
   image-rendering: pixelated; pointer-events: none;
 }
-.btn::before { left: -9px; }
-.btn::after { right: -9px; }
+.btn::before { left: -18px; }
+.btn::after { right: -18px; }
 
 /* ── ORANGE (primary) — 3-slice ── */
 .btn-primary {
@@ -185,19 +186,16 @@ input { outline: none; }
 .btn-secondary:active::before, .btn-ghost:active::before { background-image: var(--teal-left-pressed); }
 .btn-secondary:active::after, .btn-ghost:active::after { background-image: var(--teal-right-pressed); }
 
-.btn-sm { font-size: 9px; padding: 0 12px; width: auto; }
+.btn-sm { font-size: 9px; padding: 0 16px; width: auto; }
 
 /* ═══ 9-SLICE TEXTFIELD — panel borders ═══ */
-/* Uses a combined sprite sheet (105x81) with 14px corners/edges */
+/* border-image draws the 9-slice edges/corners, background uses center tile only */
 .pixel-frame {
   border: 14px solid transparent;
   border-image: var(--tf-9slice) 14 stretch;
-  background-image: var(--tf-9slice);
+  background-image: var(--tf-center);
   background-repeat: repeat;
   image-rendering: pixelated;
-  /* Fill area uses the center tile (from 14,14 to 91,66 in the sprite) */
-  background-position: -14px -14px;
-  background-size: calc(100% + 28px) calc(100% + 28px);
 }
 
 /* Legacy button vars kept for reversibility (unused by new buttons above) */
@@ -564,13 +562,14 @@ input { outline: none; }
 .game-list { display: flex; flex-direction: column; gap: 10px; }
 .game-card {
   padding: 16px; border-radius: 0;
-  background: var(--bg-card); border: 6px solid transparent;
-  border-image: var(--frame-dark) 6 stretch;
+  background: var(--bg-card);
   display: flex; flex-direction: column; gap: 12px;
 }
-.game-card.mode-easy { border-image: var(--frame-green, var(--frame-dark)) 6 stretch; }
-.game-card.mode-normal { border-image: var(--frame-gold, var(--frame-dark)) 6 stretch; }
-.game-card.mode-hardcore { border-image: var(--frame-red, var(--frame-dark)) 6 stretch; }
+/* Legacy frame borders — overridden by .pixel-frame class */
+.game-card:not(.pixel-frame) { border: 6px solid transparent; border-image: var(--frame-dark) 6 stretch; }
+.game-card.mode-easy:not(.pixel-frame) { border-image: var(--frame-green, var(--frame-dark)) 6 stretch; }
+.game-card.mode-normal:not(.pixel-frame) { border-image: var(--frame-gold, var(--frame-dark)) 6 stretch; }
+.game-card.mode-hardcore:not(.pixel-frame) { border-image: var(--frame-red, var(--frame-dark)) 6 stretch; }
 .game-card-top { display: flex; justify-content: space-between; align-items: center; }
 .game-mode-badge {
   padding: 4px 12px; border-radius: 999px;
@@ -662,9 +661,9 @@ input { outline: none; }
 .qr-code { width: 180px; height: 180px; border-radius: var(--radius); background: #fff; padding: 10px; }
 .vault-address-card {
   padding: 20px; border-radius: var(--radius);
-  background: var(--bg-card); border: 2px solid var(--border);
   display: flex; flex-direction: column; gap: 6px; text-align: center; cursor: pointer;
 }
+.vault-address-card:not(.pixel-frame) { background: var(--bg-card); border: 2px solid var(--border); }
 .vault-address-card:active { transform: scale(0.98); }
 .vault-address-card .vault-label { font-size: 13px; color: var(--text-faint); font-weight: 600; text-transform: uppercase; }
 .vault-address-card .vault-address { font-size: 15px; font-weight: 700; word-break: break-all; color: #fff; }
@@ -681,8 +680,8 @@ input { outline: none; }
 .deposit-balance {
   display: flex; justify-content: space-between; align-items: center;
   padding: 16px 20px; border-radius: var(--radius);
-  background: linear-gradient(135deg, var(--bg-card), var(--bg-elevated)); border: 2px solid var(--border);
 }
+.deposit-balance:not(.pixel-frame) { background: linear-gradient(135deg, var(--bg-card), var(--bg-elevated)); border: 2px solid var(--border); }
 .deposit-balance .label { font-size: 15px; color: var(--text-dim); }
 .deposit-balance .value { font-family: 'Press Start 2P', monospace; font-size: 15px; font-weight: 400; }
 .deposit-balance .value.gold { color: var(--accent); }
