@@ -65,6 +65,12 @@ import miscLeft from './assets/pixel/misc-left.png';
 import miscBody from './assets/pixel/misc-body.png';
 import miscRight from './assets/pixel/misc-right.png';
 
+// ─── ICON BUTTONS (sound, power, help) ──────────────────────────────────────
+import soundOnIcon from './assets/pixel/icons/sound-on.png';
+import soundOffIcon from './assets/pixel/icons/sound-off.png';
+import powerButtonIcon from './assets/pixel/icons/power-button.png';
+import helpButtonIcon from './assets/pixel/icons/help-button.png';
+
 // ─── V3 CONTRACT CONFIG ─────────────────────────────────────────────────────
 const V3_SETTLEMENT = '0x46ae2f3f80d9021066a126a94b4700B17f3cB218';
 const USDC_ADDRESS = '0x036CbD53842c5426634e7929541eC2318f3dCF7e'; // USDC on Base Sepolia
@@ -355,23 +361,23 @@ function RulesSheet({ onClose }) {
         <div className="modal-handle" />
         <h2>How to play</h2>
         <p className="modal-sub">Hosts fund prize pots. Players pay per tile. Find all prizes to win the pot.</p>
-        <div className="rule-item">
+        <div className="rule-item pixel-frame">
           <div className="rule-icon gold">$</div>
           <div className="rule-text"><strong>Add credits</strong><span>Send USDC to your deposit address. Credits appear in seconds.</span></div>
         </div>
-        <div className="rule-item">
+        <div className="rule-item pixel-frame">
           <div className="rule-icon blue">◉</div>
           <div className="rule-text"><strong>Host or join</strong><span>Hosts lock a pot. Players pay $0.05 to join and reveal tiles.</span></div>
         </div>
-        <div className="rule-item">
+        <div className="rule-item pixel-frame">
           <div className="rule-icon green">★</div>
           <div className="rule-text"><strong>Find all prizes</strong><span>Tiles cost more as you go. Collect every prize to sweep the pot.</span></div>
         </div>
-        <div className="rule-item">
+        <div className="rule-item pixel-frame">
           <div className="rule-icon red">✺</div>
           <div className="rule-text"><strong>Dodge bombs</strong><span>Three bombs ends your run. Quit or bomb out and you lose everything. Sweep all prizes to win the pot.</span></div>
         </div>
-        <button className="btn btn-primary" data-sfx-back onClick={onClose} style={{ marginTop: 16 }}>Got it</button>
+        <button className="btn btn-primary" data-sfx-back onClick={onClose} style={{ marginTop: 16, margin: '16px auto 0' }}>Got it</button>
       </div>
     </div>
   );
@@ -521,7 +527,7 @@ export default function App({ wallet, farcaster }) {
         sfx.back();
         return;
       }
-      if (e.target.closest('button, .balance-pill, .preset-chip, .mode-tab, .your-address-card, .vault-address-card, .tile, .help-fab')) {
+      if (e.target.closest('button, .balance-pill, .preset-chip, .mode-tab, .your-address-card, .vault-address-card, .tile, .help-btn')) {
         sfx.init();
         sfx.click();
       }
@@ -989,16 +995,15 @@ export default function App({ wallet, farcaster }) {
             {isFarcaster && farcaster.user?.pfpUrl && (
               <img className="fc-pfp" src={farcaster.user.pfpUrl} alt={farcaster.user.displayName || ''} title={farcaster.user.displayName || farcaster.user.username || ''} />
             )}
-            <button className="theme-toggle-btn" data-no-sfx onClick={toggleMute} title={muted ? 'Unmute sound' : 'Mute sound'} aria-label="Toggle sound">
-              {muted ? (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
-              ) : (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
-              )}
+            <button className="icon-btn sound-btn" data-no-sfx onClick={toggleMute} title={muted ? 'Unmute sound' : 'Mute sound'} aria-label="Toggle sound">
+              <img src={muted ? soundOffIcon : soundOnIcon} alt={muted ? 'Sound off' : 'Sound on'} />
             </button>
+            {view !== 'splash' && (
+              <button className="icon-btn help-btn" onClick={() => setShowRules(true)} aria-label="Help"><img src={helpButtonIcon} alt="Help" /></button>
+            )}
             {isConnected && !isPlaying && !isFarcaster && (
-              <button className="disconnect-btn" onClick={disconnect} title="Disconnect" aria-label="Disconnect wallet">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/></svg>
+              <button className="icon-btn power-btn" onClick={disconnect} title="Disconnect" aria-label="Disconnect wallet">
+                <img src={powerButtonIcon} alt="Power" />
               </button>
             )}
           </div>
@@ -1027,21 +1032,21 @@ export default function App({ wallet, farcaster }) {
           <div className="landing-section">
             <h2 className="landing-h2">How it works</h2>
             <div className="how-steps">
-              <div className="how-step">
+              <div className="how-step pixel-frame">
                 <div className="step-num">1</div>
                 <div className="step-body">
                   <strong>Host creates</strong>
                   <p>Lock a prize pot in USDC. Pick difficulty. Earn when players fail.</p>
                 </div>
               </div>
-              <div className="how-step">
+              <div className="how-step pixel-frame">
                 <div className="step-num">2</div>
                 <div className="step-body">
                   <strong>Player joins</strong>
                   <p>Pay a small entry. Reveal tiles one by one. Each tile costs more than the last.</p>
                 </div>
               </div>
-              <div className="how-step">
+              <div className="how-step pixel-frame">
                 <div className="step-num">3</div>
                 <div className="step-body">
                   <strong>Win or lose</strong>
@@ -1055,17 +1060,17 @@ export default function App({ wallet, farcaster }) {
           <div className="landing-section">
             <h2 className="landing-h2">Game modes</h2>
             <div className="modes-preview">
-              <div className="mode-info-card easy">
+              <div className="mode-info-card easy pixel-frame">
                 <span className="mode-name">Easy</span>
                 <span className="mode-stats">3 bombs · 3 prizes</span>
                 <span className="mode-desc">More prizes, fewer bombs. Higher chance to sweep.</span>
               </div>
-              <div className="mode-info-card normal">
+              <div className="mode-info-card normal pixel-frame">
                 <span className="mode-name">Normal</span>
                 <span className="mode-stats">4 bombs · 2 prizes</span>
                 <span className="mode-desc">Balanced risk. Standard payouts.</span>
               </div>
-              <div className="mode-info-card hardcore">
+              <div className="mode-info-card hardcore pixel-frame">
                 <span className="mode-name">Hardcore</span>
                 <span className="mode-stats">6 bombs · 1 prize</span>
                 <span className="mode-desc">One prize, maximum bombs. Highest reward.</span>
@@ -1076,15 +1081,15 @@ export default function App({ wallet, farcaster }) {
           {/* Trust signals */}
           <div className="landing-section">
             <div className="trust-row">
-              <div className="trust-item">
+              <div className="trust-item pixel-frame">
                 <img className="trust-icon" src={iconChain} alt="" />
                 <span>Onchain randomness via Pyth Entropy</span>
               </div>
-              <div className="trust-item">
+              <div className="trust-item pixel-frame">
                 <img className="trust-icon" src={iconLock} alt="" />
                 <span>Onchain settlement — send USDC, play on-chain</span>
               </div>
-              <div className="trust-item">
+              <div className="trust-item pixel-frame">
                 <img className="trust-icon" src={iconScroll} alt="" />
                 <span>Open source · verifiable contracts</span>
               </div>
@@ -1096,15 +1101,15 @@ export default function App({ wallet, farcaster }) {
             <h2 className="landing-h2">Agent-friendly</h2>
             <p className="landing-sub">Built for humans and AI agents. REST API for on-chain gameplay — any agent can host, join, and play programmatically.</p>
             <div className="trust-row">
-              <div className="trust-item">
+              <div className="trust-item pixel-frame">
                 <img className="trust-icon" src={iconRobot} alt="" />
                 <span>REST API — Full game loop via /v3/ endpoints, agent-ready</span>
               </div>
-              <div className="trust-item">
+              <div className="trust-item pixel-frame">
                 <img className="trust-icon" src={iconBolt} alt="" />
                 <span>On-chain escrow — Approve USDC, contract holds funds, trustless settlement</span>
               </div>
-              <div className="trust-item">
+              <div className="trust-item pixel-frame">
                 <img className="trust-icon" src={iconPlug} alt="" />
                 <span>x402 compatible — Pay-per-action HTTP 402 protocol support</span>
               </div>
@@ -1142,7 +1147,7 @@ export default function App({ wallet, farcaster }) {
               </div>
             </div>
             <div className="credit-actions-simple">
-              <button className="btn btn-primary btn-sm" onClick={() => { setPreDepositBalance(balance); setView('deposit'); }}>+ Add USDC</button>
+              <button className="btn btn-primary btn-sm" onClick={() => { setPreDepositBalance(balance); setView('deposit'); }}>Add USDC</button>
               <button className="btn btn-secondary btn-sm" disabled={busy || BigInt(balance) <= 0n} onClick={() => { setWithdrawAmt(''); setShowWithdraw(true); }}>Withdraw</button>
             </div>
             <p className="hint-text">Send USDC to the contract — balance updates in 3-5 seconds</p>
@@ -1150,7 +1155,6 @@ export default function App({ wallet, farcaster }) {
 
           <div className="lobby-section-header">
             <span className="section-title">Open games</span>
-            <button className="refresh-icon" onClick={refreshSessions} disabled={sessionsLoading}>{sessionsLoading ? '⋯' : '↻'}</button>
           </div>
 
           {sessions.length === 0 ? (
@@ -1187,7 +1191,7 @@ export default function App({ wallet, farcaster }) {
           )}
 
           <div className="bottom-bar">
-            <button className="btn btn-primary" style={{ width: 'auto', maxWidth: '70%', padding: '0 40px' }} onClick={() => setView('host')}>+ Host a game</button>
+            <button className="btn btn-primary" style={{ width: 'auto', maxWidth: '70%' }} onClick={() => setView('host')}>Host a game</button>
           </div>
           {statusMsg && <p className="status-text">{statusMsg}</p>}
         </div>
@@ -1363,8 +1367,6 @@ export default function App({ wallet, farcaster }) {
         </div>
       )}
 
-      {/* ── Help FAB ── */}
-      {view !== 'splash' && <button className="help-fab" onClick={() => setShowRules(true)}>?</button>}
       {showRules && <RulesSheet onClose={closeRules} />}
       {showApiDocs && <ApiDocsSheet onClose={() => setShowApiDocs(false)} />}
     </div>
