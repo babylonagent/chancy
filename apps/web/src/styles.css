@@ -126,37 +126,86 @@ input { outline: none; }
 .balance-pill.offline .dot { background: var(--red); box-shadow: 0 0 6px var(--red); }
 @keyframes blink { 50% { opacity: 0.3; } }
 
-/* ═══ BUTTONS — 9-slice pixel art sprites with raised/pressed states ═══ */
+/* ═══ BUTTONS — 3-slice pixel art (orange/teal) + legacy 9-slice fallback ═══ */
+/*
+  OLD BUTTONS (keep for reversibility): .btn-primary uses --btn-gold-up/down border-image,
+  .btn-ghost uses --btn-dark-up/down border-image.
+  NEW: .btn-primary uses orange 3-slice, .btn-ghost/.btn-secondary uses teal 3-slice.
+  To revert: remove the "NEW 3-SLICE" blocks, the old border-image rules below still work.
+*/
+
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  padding: 16px 24px; font-family: 'Press Start 2P', monospace; font-size: 11px; font-weight: 400; line-height: 1.8;
+  padding: 0 18px; font-family: 'Press Start 2P', monospace; font-size: 11px; font-weight: 400; line-height: 1.8;
   white-space: nowrap; text-transform: uppercase;
   transition: transform 0.08s; width: 100%; position: relative;
-  border-radius: 0; border: 10px solid transparent;
-  background-repeat: repeat;
+  border-radius: 0; border: none;
+  background-repeat: repeat-x;
   image-rendering: pixelated;
+  height: 25px; box-sizing: border-box;
+  overflow: visible;
 }
-.btn:active { transform: translateY(2px); }
+
+/* Idle states use ::before (left cap) + ::after (right cap) + background (body) */
+.btn::before, .btn::after {
+  content: ''; position: absolute; top: 0; height: 25px; width: 9px;
+  image-rendering: pixelated; pointer-events: none;
+}
+.btn::before { left: -9px; }
+.btn::after { right: -9px; }
+
+/* ── ORANGE (primary) — 3-slice ── */
 .btn-primary {
-  border-image: var(--btn-gold-up) 10 stretch;
+  background-image: var(--orange-body);
   background-color: #c89000; color: #1a1000;
   text-shadow: 1px 1px 0 rgba(255,220,100,0.4);
 }
+.btn-primary::before { background-image: var(--orange-left); }
+.btn-primary::after { background-image: var(--orange-right); }
 .btn-primary:hover:not(:disabled) { filter: brightness(1.12); }
-.btn-primary:active { border-image: var(--btn-gold-down) 10 stretch; }
-.btn-secondary {
-  border-image: var(--btn-dark-up) 10 stretch;
-  background-color: #1e1e2e; color: #f0f0f5;
+.btn-primary:active {
+  background-image: var(--orange-body-pressed);
+  transform: translateY(2px);
 }
-.btn-secondary:hover:not(:disabled) { filter: brightness(1.2); }
-.btn-secondary:active { border-image: var(--btn-dark-down) 10 stretch; }
-.btn-ghost {
-  border-image: var(--btn-dark-up) 10 stretch;
-  background-color: #1e1e2e; color: #9999bb;
+.btn-primary:active::before { background-image: var(--orange-left-pressed); }
+.btn-primary:active::after { background-image: var(--orange-right-pressed); }
+
+/* ── TEAL (secondary/ghost) — 3-slice ── */
+.btn-secondary, .btn-ghost {
+  background-image: var(--teal-body);
+  background-color: #1a4a4a; color: #c0e0e0;
 }
-.btn-ghost:hover:not(:disabled) { color: #f0f0f5; }
-.btn-ghost:active { border-image: var(--btn-dark-down) 10 stretch; }
-.btn-sm { font-size: 9px; padding: 12px 18px; width: auto; }
+.btn-secondary::before, .btn-ghost::before { background-image: var(--teal-left); }
+.btn-secondary::after, .btn-ghost::after { background-image: var(--teal-right); }
+.btn-secondary:hover:not(:disabled), .btn-ghost:hover:not(:disabled) { filter: brightness(1.2); }
+.btn-secondary:active, .btn-ghost:active {
+  background-image: var(--teal-body-pressed);
+  transform: translateY(2px);
+}
+.btn-secondary:active::before, .btn-ghost:active::before { background-image: var(--teal-left-pressed); }
+.btn-secondary:active::after, .btn-ghost:active::after { background-image: var(--teal-right-pressed); }
+
+.btn-sm { font-size: 9px; padding: 0 12px; width: auto; }
+
+/* ═══ 9-SLICE TEXTFIELD — panel borders ═══ */
+/* Uses a combined sprite sheet (105x81) with 14px corners/edges */
+.pixel-frame {
+  border: 14px solid transparent;
+  border-image: var(--tf-9slice) 14 stretch;
+  background-image: var(--tf-9slice);
+  background-repeat: repeat;
+  image-rendering: pixelated;
+  /* Fill area uses the center tile (from 14,14 to 91,66 in the sprite) */
+  background-position: -14px -14px;
+  background-size: calc(100% + 28px) calc(100% + 28px);
+}
+
+/* Legacy button vars kept for reversibility (unused by new buttons above) */
+/* .btn-primary { border-image: var(--btn-gold-up) 10 stretch; } */
+/* .btn-primary:active { border-image: var(--btn-gold-down) 10 stretch; } */
+/* .btn-secondary { border-image: var(--btn-dark-up) 10 stretch; } */
+/* .btn-ghost { border-image: var(--btn-dark-up) 10 stretch; } */
+
 
 /* ═══ SHARED ═══ */
 .section-title {
@@ -488,8 +537,7 @@ input { outline: none; }
 .lobby-view { display: flex; flex-direction: column; gap: 16px; padding: 16px 0 80px; }
 .credit-card {
   padding: 20px; border-radius: var(--radius);
-  background: linear-gradient(135deg, var(--bg-card), var(--bg-elevated));
-  border: 2px solid var(--border);
+  background: linear-gradient(135deg, var(--bg-card), var(--bg-card));
   display: flex; flex-direction: column; gap: 16px;
 }
 .credit-top { display: flex; justify-content: space-between; align-items: flex-end; }
@@ -508,7 +556,7 @@ input { outline: none; }
 .empty-state {
   display: flex; flex-direction: column; align-items: center; gap: 12px;
   padding: 40px 20px; border-radius: var(--radius);
-  background: var(--bg-card); border: 2px dashed var(--border); text-align: center;
+  text-align: center;
 }
 .empty-state p { color: var(--text-dim); font-size: 16px; }
 
@@ -594,7 +642,7 @@ input { outline: none; }
 .deposit-view { display: flex; flex-direction: column; gap: 16px; padding: 12px 0 80px; }
 .deposit-card {
   display: flex; flex-direction: column; gap: 12px; padding: 24px 20px;
-  border-radius: var(--radius); background: var(--bg-card); border: 2px solid var(--border);
+  border-radius: var(--radius);
   align-items: center; text-align: center;
 }
 .deposit-card strong { font-size: 16px; }

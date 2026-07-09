@@ -29,6 +29,32 @@ import btnGreenPressed from './assets/pixel/btn-green-pressed.png';
 import btnRedRaised from './assets/pixel/btn-red-raised.png';
 import btnRedPressed from './assets/pixel/btn-red-pressed.png';
 
+// ─── CUSTOM PIXEL BUTTONS (3-slice: left + body + right) ──────────────────────
+import orangeBtnLeft from './assets/pixel/buttons/OrangeButtonLeft.png';
+import orangeBtnLeftPressed from './assets/pixel/buttons/OrangeButtonLeftPressed.png';
+import orangeBtnBody from './assets/pixel/buttons/OrangeButtonBody.png';
+import orangeBtnBodyPressed from './assets/pixel/buttons/OrangeButtonBodyPressed.png';
+import orangeBtnRight from './assets/pixel/buttons/OrangeButtonRight.png';
+import orangeBtnRightPressed from './assets/pixel/buttons/OrangeButtonRightPressed.png';
+import tealBtnLeft from './assets/pixel/buttons/TealButtonLeft.png';
+import tealBtnLeftPressed from './assets/pixel/buttons/TealButtonLeftPressed.png';
+import tealBtnBody from './assets/pixel/buttons/TealButtonBody.png';
+import tealBtnBodyPressed from './assets/pixel/buttons/TealButtonBodyPressed.png';
+import tealBtnRight from './assets/pixel/buttons/TealButtonRight.png';
+import tealBtnRightPressed from './assets/pixel/buttons/TealButtonRightPressed.png';
+
+// ─── CUSTOM TEXTFIELD (9-slice) ───────────────────────────────────────────────
+import tfTopleft from './assets/pixel/textfield/topleft.gif';
+import tfTop from './assets/pixel/textfield/top.gif';
+import tfTopright from './assets/pixel/textfield/topright.gif';
+import tfLeft from './assets/pixel/textfield/left.gif';
+import tfCenter from './assets/pixel/textfield/center.png';
+import tfRight from './assets/pixel/textfield/right.gif';
+import tfBottomleft from './assets/pixel/textfield/bottomleft.gif';
+import tfBottom from './assets/pixel/textfield/bottom.gif';
+import tfBottomright from './assets/pixel/textfield/bottomright.gif';
+import tf9slice from './assets/pixel/textfield/textfield-9slice.png';
+
 // ─── V3 CONTRACT CONFIG ─────────────────────────────────────────────────────
 const V3_SETTLEMENT = '0x46ae2f3f80d9021066a126a94b4700B17f3cB218';
 const USDC_ADDRESS = '0x036CbD53842c5426634e7929541eC2318f3dCF7e'; // USDC on Base Sepolia
@@ -950,7 +976,7 @@ export default function App({ wallet, farcaster }) {
   //  RENDER
   // ═══════════════════════════════════════════════════════════════════════════
   return (
-    <div className={`app ${view === 'splash' ? 'landing-mode' : ''}`} style={{ '--frame-gold': `url(${frameGold})`, '--frame-dark': `url(${frameDark})`, '--frame-green': `url(${frameGreen})`, '--frame-red': `url(${frameRed})`, '--btn-gold-up': `url(${btnGoldRaised})`, '--btn-gold-down': `url(${btnGoldPressed})`, '--btn-dark-up': `url(${btnDarkRaised})`, '--btn-dark-down': `url(${btnDarkPressed})`, '--btn-green-up': `url(${btnGreenRaised})`, '--btn-green-down': `url(${btnGreenPressed})`, '--btn-red-up': `url(${btnRedRaised})`, '--btn-red-down': `url(${btnRedPressed})` }}>
+    <div className={`app ${view === 'splash' ? 'landing-mode' : ''}`} style={{ '--frame-gold': `url(${frameGold})`, '--frame-dark': `url(${frameDark})`, '--frame-green': `url(${frameGreen})`, '--frame-red': `url(${frameRed})`, '--btn-gold-up': `url(${btnGoldRaised})`, '--btn-gold-down': `url(${btnGoldPressed})`, '--btn-dark-up': `url(${btnDarkRaised})`, '--btn-dark-down': `url(${btnDarkPressed})`, '--btn-green-up': `url(${btnGreenRaised})`, '--btn-green-down': `url(${btnGreenPressed})`, '--btn-red-up': `url(${btnRedRaised})`, '--btn-red-down': `url(${btnRedPressed})`, '--orange-left': `url(${orangeBtnLeft})`, '--orange-left-pressed': `url(${orangeBtnLeftPressed})`, '--orange-body': `url(${orangeBtnBody})`, '--orange-body-pressed': `url(${orangeBtnBodyPressed})`, '--orange-right': `url(${orangeBtnRight})`, '--orange-right-pressed': `url(${orangeBtnRightPressed})`, '--teal-left': `url(${tealBtnLeft})`, '--teal-left-pressed': `url(${tealBtnLeftPressed})`, '--teal-body': `url(${tealBtnBody})`, '--teal-body-pressed': `url(${tealBtnBodyPressed})`, '--teal-right': `url(${tealBtnRight})`, '--teal-right-pressed': `url(${tealBtnRightPressed})`, '--tf-9slice': `url(${tf9slice})` }}>
       <FloatingSprites />
       {view !== 'splash' && (
         <header className="header">
@@ -1113,7 +1139,7 @@ export default function App({ wallet, farcaster }) {
       {/* ═══ LOBBY ═══ */}
       {view === 'lobby' && isConnected && (
         <div className="lobby-view">
-          <div className="credit-card">
+          <div className="credit-card pixel-frame">
             <div className="credit-top">
               <div className="credit-big">
                 <span className="label">USDC</span>
@@ -1133,7 +1159,7 @@ export default function App({ wallet, farcaster }) {
           </div>
 
           {sessions.length === 0 ? (
-            <div className="empty-state">
+            <div className="empty-state pixel-frame">
               <p>No open games yet.</p>
             </div>
           ) : (
@@ -1218,7 +1244,7 @@ export default function App({ wallet, farcaster }) {
           </div>
 
           {/* Contract address + QR */}
-          <div className="deposit-card">
+          <div className="deposit-card pixel-frame">
             <strong>Send USDC to play</strong>
             <p>Send USDC from your wallet to the contract address below. No approvals, no signing — just a raw transfer.</p>
             {V3_SETTLEMENT && (
