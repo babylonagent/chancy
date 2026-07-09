@@ -154,16 +154,16 @@ input { outline: none; }
   image-rendering: pixelated;
   image-rendering: -webkit-optimize-contrast;
   user-select: none; -webkit-user-select: none;
-  z-index: 1;
 }
-/* Text content must sit above caps */
-.btn > * { position: relative; z-index: 2; }
+/* Text content above caps */
+.btn > * { position: relative; z-index: 1; }
 
 /* Caps are INSIDE the button box (not negative offset) to prevent overlap */
+/* z-index: -1 so caps paint behind text nodes (which are unpositioned) */
 .btn::before, .btn::after {
   content: ''; position: absolute; top: 0; height: 75px; width: 27px;
   background-size: 100% 75px;
-  image-rendering: pixelated; pointer-events: none; z-index: 0;
+  image-rendering: pixelated; pointer-events: none; z-index: -1;
 }
 .btn::before { left: 0; }
 .btn::after { right: 0; }
@@ -220,13 +220,12 @@ input { outline: none; }
   image-rendering: -webkit-optimize-contrast;
   user-select: none; -webkit-user-select: none;
   transition: transform 0.08s;
-  z-index: 1;
 }
-.misc-btn > * { position: relative; z-index: 2; }
+.misc-btn > * { position: relative; z-index: 1; }
 .misc-btn::before, .misc-btn::after {
   content: ''; position: absolute; top: 0; height: 25px; width: 7px;
   background-size: 100% 25px;
-  image-rendering: pixelated; pointer-events: none; z-index: 1;
+  image-rendering: pixelated; pointer-events: none; z-index: -1;
 }
 .misc-btn::before { left: 0; background-image: var(--misc-left); }
 .misc-btn::after { right: 0; background-image: var(--misc-right); }
