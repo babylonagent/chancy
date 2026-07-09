@@ -56,6 +56,15 @@ import tfBottomright from './assets/pixel/textfield/bottomright.gif';
 import tf9slice from './assets/pixel/textfield/textfield-9slice.png';
 import tfCenterTile from './assets/pixel/textfield/center-tile.png';
 
+// ─── BLOCKS (game board tiles) ────────────────────────────────────────
+import blockImg from './assets/pixel/block.png';
+import blockPressedImg from './assets/pixel/block_pressed.png';
+
+// ─── MISC BUTTON (3-slice: presets + back) ─────────────────────────────
+import miscLeft from './assets/pixel/misc-left.png';
+import miscBody from './assets/pixel/misc-body.png';
+import miscRight from './assets/pixel/misc-right.png';
+
 // ─── V3 CONTRACT CONFIG ─────────────────────────────────────────────────────
 const V3_SETTLEMENT = '0x46ae2f3f80d9021066a126a94b4700B17f3cB218';
 const USDC_ADDRESS = '0x036CbD53842c5426634e7929541eC2318f3dCF7e'; // USDC on Base Sepolia
@@ -969,7 +978,7 @@ export default function App({ wallet, farcaster }) {
   //  RENDER
   // ═══════════════════════════════════════════════════════════════════════════
   return (
-    <div className={`app ${view === 'splash' ? 'landing-mode' : ''}`} style={{ '--frame-gold': `url(${frameGold})`, '--frame-dark': `url(${frameDark})`, '--frame-green': `url(${frameGreen})`, '--frame-red': `url(${frameRed})`, '--btn-gold-up': `url(${btnGoldRaised})`, '--btn-gold-down': `url(${btnGoldPressed})`, '--btn-dark-up': `url(${btnDarkRaised})`, '--btn-dark-down': `url(${btnDarkPressed})`, '--btn-green-up': `url(${btnGreenRaised})`, '--btn-green-down': `url(${btnGreenPressed})`, '--btn-red-up': `url(${btnRedRaised})`, '--btn-red-down': `url(${btnRedPressed})`, '--orange-left': `url(${orangeBtnLeft})`, '--orange-left-pressed': `url(${orangeBtnLeftPressed})`, '--orange-body': `url(${orangeBtnBody})`, '--orange-body-pressed': `url(${orangeBtnBodyPressed})`, '--orange-right': `url(${orangeBtnRight})`, '--orange-right-pressed': `url(${orangeBtnRightPressed})`, '--teal-left': `url(${tealBtnLeft})`, '--teal-left-pressed': `url(${tealBtnLeftPressed})`, '--teal-body': `url(${tealBtnBody})`, '--teal-body-pressed': `url(${tealBtnBodyPressed})`, '--teal-right': `url(${tealBtnRight})`, '--teal-right-pressed': `url(${tealBtnRightPressed})`, '--tf-9slice': `url(${tf9slice})`, '--tf-center': `url(${tfCenterTile})` }}>
+    <div className={`app ${view === 'splash' ? 'landing-mode' : ''}`} style={{ '--frame-gold': `url(${frameGold})`, '--frame-dark': `url(${frameDark})`, '--frame-green': `url(${frameGreen})`, '--frame-red': `url(${frameRed})`, '--btn-gold-up': `url(${btnGoldRaised})`, '--btn-gold-down': `url(${btnGoldPressed})`, '--btn-dark-up': `url(${btnDarkRaised})`, '--btn-dark-down': `url(${btnDarkPressed})`, '--btn-green-up': `url(${btnGreenRaised})`, '--btn-green-down': `url(${btnGreenPressed})`, '--btn-red-up': `url(${btnRedRaised})`, '--btn-red-down': `url(${btnRedPressed})`, '--orange-left': `url(${orangeBtnLeft})`, '--orange-left-pressed': `url(${orangeBtnLeftPressed})`, '--orange-body': `url(${orangeBtnBody})`, '--orange-body-pressed': `url(${orangeBtnBodyPressed})`, '--orange-right': `url(${orangeBtnRight})`, '--orange-right-pressed': `url(${orangeBtnRightPressed})`, '--teal-left': `url(${tealBtnLeft})`, '--teal-left-pressed': `url(${tealBtnLeftPressed})`, '--teal-body': `url(${tealBtnBody})`, '--teal-body-pressed': `url(${tealBtnBodyPressed})`, '--teal-right': `url(${tealBtnRight})`, '--teal-right-pressed': `url(${tealBtnRightPressed})`, '--tf-9slice': `url(${tf9slice})`, '--tf-center': `url(${tfCenterTile})`, '--block-img': `url(${blockImg})`, '--block-pressed': `url(${blockPressedImg})`, '--misc-left': `url(${miscLeft})`, '--misc-body': `url(${miscBody})`, '--misc-right': `url(${miscRight})` }}>
       <FloatingSprites />
       {view !== 'splash' && (
         <header className="header">
@@ -1188,7 +1197,7 @@ export default function App({ wallet, farcaster }) {
       {view === 'host' && isConnected && (
         <div className="host-view pixel-frame">
           <div className="lobby-section-header">
-            <button className="back-btn" data-sfx-back onClick={() => setView('lobby')}>← Back</button>
+            <button className="misc-btn back-btn" data-sfx-back onClick={() => setView('lobby')}>← Back</button>
             <span className="section-title" style={{ margin: 0 }}>Host a game</span>
           </div>
           <div className="host-balance pixel-frame">
@@ -1211,7 +1220,7 @@ export default function App({ wallet, farcaster }) {
           </div>
           <div className="pot-presets">
             {POT_PRESETS.map((p) => (
-              <button key={p} className={`preset-chip ${potAmt === p ? 'selected' : ''}`} onClick={() => setPotAmt(p)}>${p}</button>
+              <button key={p} className={`misc-btn preset-chip ${potAmt === p ? 'selected' : ''}`} onClick={() => setPotAmt(p)}>${p}</button>
             ))}
           </div>
           <button className="btn btn-primary" disabled={busy || BigInt(usdcUnits(potAmt)) > BigInt(balance)} onClick={hostCreateSession}>
@@ -1225,7 +1234,7 @@ export default function App({ wallet, farcaster }) {
       {view === 'deposit' && isConnected && (
         <div className="deposit-view">
           <div className="lobby-section-header">
-            <button className="back-btn" data-sfx-back onClick={() => { setPollingDeposit(false); setView('lobby'); }}>← Back</button>
+            <button className="misc-btn back-btn" data-sfx-back onClick={() => { setPollingDeposit(false); setView('lobby'); }}>← Back</button>
             <span className="section-title" style={{ margin: 0 }}>Add USDC</span>
           </div>
 
@@ -1263,7 +1272,7 @@ export default function App({ wallet, farcaster }) {
       {view === 'round' && session && (
         <div className="round-view pixel-frame">
           <div className="round-header">
-            <button className="back-btn" data-sfx-back onClick={quitRound} disabled={quitting}>
+            <button className="misc-btn back-btn" data-sfx-back onClick={quitRound} disabled={quitting}>
               {quitting ? 'Quitting…' : `← ${gameEnded ? 'Done' : 'Quit'}`}
             </button>
             <span className="mode-badge">{session.mode}</span>
