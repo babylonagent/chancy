@@ -492,15 +492,9 @@ export default function App({ wallet, farcaster }) {
     }
   }, [wallet.walletProvider, addr]);
 
-  // ── Theme management ──
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('chancy_theme', theme);
-  }, [theme]);
-
-  function toggleTheme() {
-    setTheme((t) => t === 'dark' ? 'light' : 'dark');
-  }
+  const [theme, setTheme] = useState('dark');
+  useEffect(() => { document.documentElement.setAttribute('data-theme', 'dark'); }, []);
+  const toggleTheme = () => {}; // removed — dark only
 
   function toggleMute() {
     sfx.init();
@@ -995,13 +989,6 @@ export default function App({ wallet, farcaster }) {
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
               )}
             </button>
-            <button className="theme-toggle-btn" data-no-sfx onClick={toggleTheme} title="Toggle theme" aria-label="Toggle theme">
-              {theme === 'dark' ? (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-              ) : (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-              )}
-            </button>
             {isConnected && !isPlaying && !isFarcaster && (
               <button className="disconnect-btn" onClick={disconnect} title="Disconnect" aria-label="Disconnect wallet">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/></svg>
@@ -1193,7 +1180,7 @@ export default function App({ wallet, farcaster }) {
           )}
 
           <div className="bottom-bar">
-            <button className="btn btn-primary" style={{ width: 'auto', alignSelf: 'center', padding: '0 32px' }} onClick={() => setView('host')}>+ Host a game</button>
+            <button className="btn btn-primary" style={{ width: 'auto', padding: '0 40px' }} onClick={() => setView('host')}>+ Host a game</button>
           </div>
           {statusMsg && <p className="status-text">{statusMsg}</p>}
         </div>
@@ -1371,15 +1358,6 @@ export default function App({ wallet, farcaster }) {
 
       {/* ── Help FAB ── */}
       {view !== 'splash' && <button className="help-fab" onClick={() => setShowRules(true)}>?</button>}
-      {view === 'splash' && (
-        <button className="theme-toggle-fab" data-no-sfx onClick={toggleTheme} title="Toggle theme" aria-label="Toggle theme">
-          {theme === 'dark' ? (
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-          ) : (
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-          )}
-        </button>
-      )}
       {showRules && <RulesSheet onClose={closeRules} />}
       {showApiDocs && <ApiDocsSheet onClose={() => setShowApiDocs(false)} />}
     </div>
