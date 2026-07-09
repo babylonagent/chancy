@@ -477,7 +477,6 @@ export default function App({ wallet, farcaster }) {
   const [statusMsg, setStatusMsg] = useState('');
   const [error, setError] = useState('');
   const [quitting, setQuitting] = useState(false);
-  const [theme, setTheme] = useState(getInitialTheme);
   const [muted, setMuted] = useState(true); // start muted
 
   const addr = address || '';
@@ -492,9 +491,8 @@ export default function App({ wallet, farcaster }) {
     }
   }, [wallet.walletProvider, addr]);
 
-  const [theme, setTheme] = useState('dark');
+  // ── Theme: dark only ──
   useEffect(() => { document.documentElement.setAttribute('data-theme', 'dark'); }, []);
-  const toggleTheme = () => {}; // removed — dark only
 
   function toggleMute() {
     sfx.init();
@@ -1180,7 +1178,7 @@ export default function App({ wallet, farcaster }) {
           )}
 
           <div className="bottom-bar">
-            <button className="btn btn-primary" style={{ width: 'auto', padding: '0 40px' }} onClick={() => setView('host')}>+ Host a game</button>
+            <button className="btn btn-primary" style={{ width: 'auto', maxWidth: '70%', padding: '0 40px' }} onClick={() => setView('host')}>+ Host a game</button>
           </div>
           {statusMsg && <p className="status-text">{statusMsg}</p>}
         </div>
