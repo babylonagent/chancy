@@ -482,6 +482,8 @@ export default function App({ wallet, farcaster }) {
   const [session, setSession] = useState(null);
   const [revealed, setRevealed] = useState({});
   const [run, setRun] = useState({ bombsHit: 0, prizesFound: 0, status: 'idle', spentTotal: '0', prizeEarned: '0', nextTileCost: '0' });
+  const [proof, setProof] = useState(null);
+  const [showProof, setShowProof] = useState(false);
 
   // Withdraw
   const [showWithdraw, setShowWithdraw] = useState(false);
@@ -895,6 +897,7 @@ export default function App({ wallet, farcaster }) {
       const nextCost = v3RevealCostAt(session.prizePot, session.mode, nextIdx).toString();
 
       if (result.gameOver) {
+        if (result.proof) setProof(result.proof);
         if (result.outcome === 'win') {
           setRun({ bombsHit: newBombs, prizesFound: newPrizes, status: 'won', spentTotal: newSpent, prizeEarned: session.prizePot, nextTileCost: '0' });
           setStatusMsg(`Won ${dollars(session.prizePot)}!`);
@@ -926,6 +929,7 @@ export default function App({ wallet, farcaster }) {
     try {
       if (run.status === 'active') {
         const final = await postJson(`/v3/sessions/${session.sessionId}/quit`, { player: addr });
+        if (final.proof) setProof(final.proof);
         // V3 quit returns { outcome: 'quit', spent }. Reveal full board by polling state.
         try {
           const state = await getJson(`/v3/sessions/${session.sessionId}/state`);
@@ -939,6 +943,8 @@ export default function App({ wallet, farcaster }) {
       }
       setSession(null);
       setRun({ bombsHit: 0, prizesFound: 0, status: 'idle', spentTotal: '0', prizeEarned: '0', nextTileCost: '0' });
+      setProof(null);
+      setShowProof(false);
       setView('lobby');
       setStatusMsg('');
       await refreshCredits(addr);
@@ -949,6 +955,8 @@ export default function App({ wallet, farcaster }) {
       await refreshSessions();
       setSession(null);
       setRun({ bombsHit: 0, prizesFound: 0, status: 'idle', spentTotal: '0', prizeEarned: '0', nextTileCost: '0' });
+      setProof(null);
+      setShowProof(false);
       setView('lobby');
       setError(friendlyError(err));
     } finally {
@@ -1318,6 +1326,32 @@ export default function App({ wallet, farcaster }) {
                 <span className="result-sub">{dollars(run.spentTotal)} spent</span>
               )}
               <button className="btn btn-primary" style={{ marginTop: 8 }} onClick={() => setView('lobby')}>Back to games →</button>
+              {proof && (
+                <button className="misc-btn" style={{ marginTop: 8, fontSize: 8 }} onClick={() => setShowProof(!showProof)}>
+                  {showProof ? 'Hide' : 'Show'} Provably Fair Proof
+                </button>
+              )}
+              {proof && showProof && (
+                <div className="pixel-frame proof-panel" style={{ marginTop: 8, padding: 10, textAlign: 'left', fontSize: 8, fontFamily: 'monospace', wordBreak: 'break-all', lineHeight: 1.6 }}>
+                  <div><strong>Pyth Random:</strong></div>
+                  <div style={{ opacity: 0.8 }}>{proof.pythRandom || proof.pythRandomNumber || '—'}</div>
+                  {proof.hostSecret && (
+                    <>
+                      <div style={{ marginTop: 4 }}><strong>Host Secret:</strong></div>
+                      <div style={{ opacity: 0.8 }}>{proof.hostSecret}</div>
+                    </>
+                  )}
+                  <div style={{ marginTop: 4 }}><strong>Board Seed:</strong></div>
+                  <div style={{ opacity: 0.8 }}>{proof.boardSeed || '—'}</div>
+                  <div style={{ marginTop: 4 }}><strong>Game ID:</strong> {proof.gameId || proof.sessionId}</div>
+                  <div><strong>Mode:</strong> {proof.difficulty || proof.mode}</div>
+                  <div style={{ marginTop: 4 }}><strong>Bombs:</strong> [{proof.board?.bombPositions?.join(', ') || proof.board?.bombPositions?.join(', ')}]</div>
+                  <div><strong>Prizes:</strong> [{proof.board?.prizePositions?.join(', ') || proof.board?.prizePositions?.join(', ')}]</div>
+                  <div style={{ marginTop: 6, opacity: 0.6 }}>
+                    Verify: re-derive board from seed via keccak256(encodePacked(seed, "BOMB"/"PRIZE", nonce)) % 64
+                  </div>
+                </div>
+              )}
               {isFarcaster && farcaster.sdk?.actions?.composeCast && (
                 <button className="btn btn-ghost" style={{ marginTop: 8 }} onClick={() => {
                   const text = run.status === 'won'

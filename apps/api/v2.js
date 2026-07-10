@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const { z } = require("zod");
+const { keccak256, encodePacked } = require("viem");
 const { persistSqliteStore } = require("./sqlite-store");
 const { MAX_CONCURRENT_SESSIONS } = require("./security");
 const { requireSignature } = require("./sig-auth");
@@ -65,22 +66,70 @@ function prizePerTile(prizePot, mode) {
 function deriveBoard({ entropy, sessionId, player, mode }) {
   const cfg = modeConfig[mode];
   if (!cfg) throw new Error("INVALID_MODE");
-  const taken = new Set();
-  let nonce = 0;
-  while (taken.size < cfg.bombs + cfg.prizes) {
-    const hash = crypto.createHash("sha256").update(`${entropy}:${sessionId}:${player.toLowerCase()}:${mode}:${nonce}`).digest();
-    const tile = (hash.readUInt32BE(0) % BOARD_SIZE) + 1;
-    taken.add(tile);
-    nonce += 1;
+
+  // keccak256 + abi.encodePacked — mirrors Solidity, verifiable onchain
+  const playerLower = player.toLowerCase();
+  let bombMask = 0n;
+  let placed = 0;
+  let nonce = 0n;
+
+  // Place bombs
+  while (placed < cfg.bombs) {
+    const hash = keccak256(encodePacked(
+      ["bytes32", "uint256", "address", "string", "string", "uint256"],
+      [entropy, BigInt(sessionId), playerLower, mode, "BOMB", nonce]
+    ));
+    const tile = BigInt(hash) % 64n;
+    const bit = 1n << tile;
+    if ((bombMask & bit) === 0n) {
+      bombMask |= bit;
+      placed++;
+    }
+    nonce++;
   }
-  const ordered = [...taken];
-  const bombPositions = ordered.slice(0, cfg.bombs).sort((a, b) => a - b);
-  const prizePositions = ordered.slice(cfg.bombs).sort((a, b) => a - b);
+
+  // Place prizes (skip tiles already occupied by bombs)
+  let prizeMask = 0n;
+  placed = 0;
+  nonce = 0n;
+  while (placed < cfg.prizes) {
+    const hash = keccak256(encodePacked(
+      ["bytes32", "uint256", "address", "string", "string", "uint256"],
+      [entropy, BigInt(sessionId), playerLower, mode, "PRIZE", nonce]
+    ));
+    const tile = BigInt(hash) % 64n;
+    const bit = 1n << tile;
+    if ((bombMask & bit) === 0n && (prizeMask & bit) === 0n) {
+      prizeMask |= bit;
+      placed++;
+    }
+    nonce++;
+  }
+
+  // Extract positions from bitmask
+  const bombPositions = [];
+  const prizePositions = [];
+  for (let i = 0; i < 64; i++) {
+    if ((bombMask & (1n << BigInt(i))) !== 0n) bombPositions.push(i);
+    if ((prizeMask & (1n << BigInt(i))) !== 0n) prizePositions.push(i);
+  }
+
   return { bombPositions, prizePositions };
 }
 
 function boardCommitHash({ entropy, sessionId, player, mode, board }) {
-  return sha256Hex(JSON.stringify({ entropy, sessionId, player: player.toLowerCase(), mode, board }));
+  // keccak256 of the board data — matches what a Solidity verifier would compute
+  return keccak256(encodePacked(
+    ["bytes32", "uint256", "address", "string", "uint64[]", "uint64[]"],
+    [
+      entropy,
+      BigInt(sessionId),
+      player.toLowerCase(),
+      mode,
+      board.bombPositions.map(Number),
+      board.prizePositions.map(Number),
+    ]
+  ));
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -636,12 +685,20 @@ function installV2Routes(app, {
         if (pendingPrizes > 0n) setBalance(store, session.host, getBalance(store, session.host) + pendingPrizes);
         recordRunEnd(session, spent + pendingPrizes);
         session.runStatus = "lost";
+        const proof = {
+          pythRandomNumber: session.pythRandomNumber,
+          entropySequenceNumber: session.entropySequenceNumber,
+          entropyTxHash: session.entropyTxHash,
+          board: session.board,
+          boardCommitHash: session.boardCommitHash,
+        };
         const result = {
           sessionId: session.sessionId, tile, outcome,
           bombsHit: session.bombsHit, prizesFound: session.prizesFound,
           status: "lost", runStatus: "lost",
           cost: cost.toString(), spentTotal: session.spentAmount,
           prizeEarned: session.prizeEarned,
+          ...proof,
         };
         session.clicked.set(tile, result);
         resetRun(session);
@@ -664,12 +721,20 @@ function installV2Routes(app, {
         if (spent > 0n) setBalance(store, session.host, getBalance(store, session.host) + spent);
         recordRunEnd(session, spent);
         session.runStatus = "won";
+        const proof = {
+          pythRandomNumber: session.pythRandomNumber,
+          entropySequenceNumber: session.entropySequenceNumber,
+          entropyTxHash: session.entropyTxHash,
+          board: session.board,
+          boardCommitHash: session.boardCommitHash,
+        };
         const result = {
           sessionId: session.sessionId, tile, outcome,
           bombsHit: session.bombsHit, prizesFound: session.prizesFound,
           status: "won", runStatus: "won",
           cost: cost.toString(), spentTotal: session.spentAmount,
           prizeEarned: session.prizeEarned, prizeCredited: prizeCredited,
+          ...proof,
         };
         session.clicked.set(tile, result);
         resetRun(session);
@@ -729,6 +794,7 @@ function installV2Routes(app, {
       boardCommitHash: session.boardCommitHash,
       pythRandomNumber: session.pythRandomNumber,
       entropySequenceNumber: session.entropySequenceNumber,
+      entropyTxHash: session.entropyTxHash,
     };
     resetRun(session);
     persist();

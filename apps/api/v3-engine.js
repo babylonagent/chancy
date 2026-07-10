@@ -99,6 +99,7 @@ function processClick(gameId, player, tileIndex) {
         spent: session.spent.toString(),
         gameOver: true,
         outcome: "loss",
+        proof: buildProof(session),
       };
     }
     return {
@@ -125,6 +126,7 @@ function processClick(gameId, player, tileIndex) {
         spent: session.spent.toString(),
         gameOver: true,
         outcome: "win",
+        proof: buildProof(session),
       };
     }
     return {
@@ -154,7 +156,25 @@ function quitSession(gameId, player) {
 
   session.status = "finished";
   session.outcome = "quit";
-  return { outcome: "quit", spent: session.spent.toString() };
+  return { outcome: "quit", spent: session.spent.toString(), proof: buildProof(session) };
+}
+
+// ── Provably Fair Proof ────────────────────────────────────────────────────
+// Returns all data a player needs to independently verify the board was fair.
+// The pythRandom is published onchain (readable via ChancyRandomness contract).
+// Anyone can re-derive the board from these inputs and check it matches.
+function buildProof(session) {
+  return {
+    boardSeed: session.boardSeed ? session.boardSeed : null,
+    pythRandom: session.pythRandom,
+    hostSecret: session.hostSecret,
+    gameId: session.gameId,
+    difficulty: session.difficulty,
+    board: {
+      bombPositions: session.board.bombPositions,
+      prizePositions: session.board.prizePositions,
+    },
+  };
 }
 
 function getSessionState(gameId) {
