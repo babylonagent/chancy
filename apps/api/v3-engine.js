@@ -49,6 +49,7 @@ function createSession(gameId, host, player, difficulty, prizePot, maxSpend, hos
     maxSpend: BigInt(maxSpend),
     hostSecret,
     pythRandom,
+    boardSeed,
     board,
     clicks: [],
     bombsHit: 0,
