@@ -83,7 +83,17 @@ function processClick(gameId, player, tileIndex) {
   session.clicks.push(tileIndex);
   session.clickedMask |= bit;
 
-  // Calculate cost
+  // ── Notifications helper ────────────────────────────────────────────────────
+function recordNotif(player, data) {
+  try {
+    const store = global._chancyNotifications;
+    if (store) store.recordNotification({ player, ...data });
+  } catch (e) {
+    console.error("[v3-engine] notif error:", e.message);
+  }
+}
+
+// Calculate cost
   const cost = revealCostAt(session.prizePot, session.difficulty, session.clicks.length - 1);
   session.spent += cost;
 
@@ -93,6 +103,21 @@ function processClick(gameId, player, tileIndex) {
     if (session.bombsHit >= BOMBS_TO_GAME_OVER) {
       session.status = "finished";
       session.outcome = "loss";
+      recordNotif(session.player, {
+        type: "game_lost",
+        title: "Game Over",
+        body: `Hit ${session.bombsHit} bomb${session.bombsHit > 1 ? "s" : ""} on ${session.difficulty} mode`,
+        amount: session.spent.toString(),
+        gameId: session.gameId,
+      });
+      // Notify host that player lost (host earned)
+      recordNotif(session.host, {
+        type: "pot_earned",
+        title: "Player lost on your board",
+        body: `Player spent ${session.spent.toString()} on game #${session.gameId}`,
+        amount: session.spent.toString(),
+        gameId: session.gameId,
+      });
       return {
         tile: tileIndex,
         type: "bomb",
@@ -119,6 +144,21 @@ function processClick(gameId, player, tileIndex) {
     if (session.prizesFound >= totalPrizes) {
       session.status = "finished";
       session.outcome = "win";
+      recordNotif(session.player, {
+        type: "game_won",
+        title: "You won!",
+        body: `Swept the pot on ${session.difficulty} mode`,
+        amount: session.prizePot.toString(),
+        gameId: session.gameId,
+      });
+      // Notify host that player won the pot (host lost)
+      recordNotif(session.host, {
+        type: "pot_loss",
+        title: "Player swept your pot",
+        body: `Player won ${session.prizePot.toString()} on game #${session.gameId}`,
+        amount: session.prizePot.toString(),
+        gameId: session.gameId,
+      });
       return {
         tile: tileIndex,
         type: "prize",
@@ -157,6 +197,20 @@ function quitSession(gameId, player) {
 
   session.status = "finished";
   session.outcome = "quit";
+  recordNotif(session.player, {
+    type: "game_quit",
+    title: "Quit game",
+    body: `Spent ${session.spent.toString()} on ${session.difficulty} mode before quitting`,
+    amount: session.spent.toString(),
+    gameId: session.gameId,
+  });
+  recordNotif(session.host, {
+    type: "pot_earned",
+    title: "Player quit your board",
+    body: `Player spent ${session.spent.toString()} on game #${session.gameId}`,
+    amount: session.spent.toString(),
+    gameId: session.gameId,
+  });
   return { outcome: "quit", spent: session.spent.toString(), proof: buildProof(session) };
 }
 

@@ -461,6 +461,11 @@ export default function App({ wallet, farcaster }) {
   const [balance, setBalance] = useState('0');
   const [withdrawable, setWithdrawable] = useState('0');
 
+  // Notifications
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [showNotifs, setShowNotifs] = useState(false);
+
   // Deposit
   const [vaultAddress, setVaultAddress] = useState('');
   const [copied, setCopied] = useState(false);
@@ -638,7 +643,13 @@ export default function App({ wallet, farcaster }) {
     if (view === 'lobby') refreshSessions();
   }, [view, refreshSessions]);
 
-  // ── Auto-poll sessions while in lobby (host sees player joins/finishes) ──
+  // ── Auto-poll balance on lobby + deposit (deposit shows instantly) ──
+  useEffect(() => {
+    if (!addr) return;
+    if (view !== 'lobby' && view !== 'deposit') return;
+    const interval = setInterval(() => refreshCredits(addr), 5000);
+    return () => clearInterval(interval);
+  }, [view, addr, refreshCredits]);
   useEffect(() => {
     if (view !== 'lobby') return;
     const interval = setInterval(() => refreshSessions(), 8000);
@@ -655,11 +666,42 @@ export default function App({ wallet, farcaster }) {
       const bal = await refreshCredits(addr);
       if (BigInt(bal) > BigInt(preDepositBalance)) {
         setPollingDeposit(false);
-        setStatusMsg(`+${dollars((BigInt(bal) - BigInt(preDepositBalance)).toString())} added`);
+        const gained = (BigInt(bal) - BigInt(preDepositBalance)).toString();
+        setStatusMsg(`+${dollars(gained)} added`);
+        // Record deposit notification
+        try { await postJson(`/v3/notifications/${addr}`, { type: 'deposit', title: 'Deposit confirmed', body: 'USDC deposited to your balance', amount: gained }); } catch {}
+        refreshNotifications();
       }
     }, 5000);
     return () => clearInterval(interval);
   }, [view, addr, preDepositBalance, refreshCredits]);
+
+  // ── Notifications: fetch + poll ──
+  const refreshNotifications = useCallback(async () => {
+    if (!addr) return;
+    try {
+      const [list, unread] = await Promise.all([
+        getJson(`/v3/notifications/${addr}`),
+        getJson(`/v3/notifications/${addr}/unread`),
+      ]);
+      setNotifications(list?.notifications || []);
+      setUnreadCount(unread?.count || 0);
+    } catch { /* engine may be down */ }
+  }, [addr]);
+
+  useEffect(() => {
+    if (!addr || view === 'splash') return;
+    refreshNotifications();
+    const interval = setInterval(refreshNotifications, 15000);
+    return () => clearInterval(interval);
+  }, [addr, view, refreshNotifications]);
+
+  async function markNotifsRead() {
+    if (!addr) return;
+    try { await postJson(`/v3/notifications/${addr}/read`, {}); } catch {}
+    setUnreadCount(0);
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+  }
 
   function closeRules() { localStorage.setItem('chancy_rules_seen', '1'); setShowRules(false); }
 
@@ -1008,6 +1050,23 @@ export default function App({ wallet, farcaster }) {
             </button>
             {view !== 'splash' && (
               <button className="icon-btn help-btn" onClick={() => setShowRules(true)} aria-label="Help"><img src={helpButtonIcon} alt="Help" /></button>
+            )}
+            {view !== 'splash' && isConnected && (
+              <button className="icon-btn notif-btn" onClick={() => { setShowNotifs(true); if (unreadCount > 0) markNotifsRead(); }} aria-label="Notifications" title="Notifications">
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--text-dim)' }}>
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                </svg>
+                {unreadCount > 0 && (
+                  <span style={{
+                    position: 'absolute', top: 2, right: 2,
+                    background: 'var(--red)', color: '#fff',
+                    fontSize: '10px', fontWeight: 700, minWidth: '16px', height: '16px',
+                    borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    padding: '0 4px', border: '1px solid var(--bg)',
+                  }}>{unreadCount > 9 ? '9+' : unreadCount}</span>
+                )}
+              </button>
             )}
             {isConnected && !isPlaying && !isFarcaster && (
               <button className="icon-btn power-btn" onClick={disconnect} title="Disconnect" aria-label="Disconnect wallet">
@@ -1403,6 +1462,63 @@ export default function App({ wallet, farcaster }) {
 
       {showRules && <RulesSheet onClose={closeRules} />}
       {showApiDocs && <ApiDocsSheet onClose={() => setShowApiDocs(false)} />}
+
+      {/* ═══ NOTIFICATIONS PANEL ═══ */}
+      {showNotifs && (
+        <div className="modal-backdrop" onClick={() => setShowNotifs(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-handle" />
+            <h2>Activity Log</h2>
+            <p className="modal-sub">Your important events and transactions</p>
+            {notifications.length === 0 ? (
+              <div className="empty-state" style={{ padding: '32px 20px' }}>
+                <p>No activity yet.<br/>Play a game to see events here.</p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', textAlign: 'left' }}>
+                {notifications.map(n => (
+                  <div key={n.id} className="pixel-frame" style={{ padding: '12px 14px', display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                    <div style={{
+                      width: '32px', height: '32px', borderRadius: '6px', flexShrink: 0,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px',
+                      background: n.type === 'game_won' ? 'var(--green-dim)' :
+                                   n.type === 'game_lost' || n.type === 'pot_loss' ? 'var(--red-dim)' :
+                                   n.type === 'deposit' ? 'var(--accent-dim)' :
+                                   n.type === 'withdrawal' ? 'rgba(100,160,255,0.12)' : 'var(--bg-elevated)',
+                      color: n.type === 'game_won' ? 'var(--green)' :
+                             n.type === 'game_lost' || n.type === 'pot_loss' ? 'var(--red)' :
+                             n.type === 'deposit' ? 'var(--accent)' :
+                             n.type === 'withdrawal' ? '#64a0ff' : 'var(--text-dim)',
+                    }}>
+                      {n.type === 'game_won' ? '🏆' :
+                       n.type === 'game_lost' ? '💥' :
+                       n.type === 'game_quit' ? '🏳' :
+                       n.type === 'deposit' ? '↓' :
+                       n.type === 'withdrawal' ? '↑' :
+                       n.type === 'pot_loss' ? '📉' :
+                       n.type === 'pot_earned' ? '📈' : '•'}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                        <strong style={{ fontSize: '14px' }}>{n.title}</strong>
+                        {!n.read && <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--accent)', flexShrink: 0 }} />}
+                      </div>
+                      {n.body && <p style={{ color: 'var(--text-dim)', fontSize: '13px', lineHeight: 1.4, marginTop: 2 }}>{n.body}</p>}
+                      <div style={{ display: 'flex', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+                        {n.amount && <span className="stat-chip" style={{ fontSize: 11 }}>{dollars(n.amount)}</span>}
+                        <span style={{ fontSize: '11px', color: 'var(--text-faint)' }}>
+                          {new Date(n.createdAt + 'Z').toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button className="btn btn-secondary" style={{ marginTop: 16 }} onClick={() => setShowNotifs(false)}>Close</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
