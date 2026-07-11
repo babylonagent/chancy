@@ -15,7 +15,6 @@ const path = require("path");
 const { securityHeaders } = require("./security");
 const { installV3Routes } = require("./v3-engine");
 const notifications = require("./notifications");
-
 const PORT = process.env.V3_API_PORT || 8790;
 const DB_PATH = process.env.CHANCY_V3_DB || path.join(__dirname, "data", "v3-chancy.db");
 
@@ -82,6 +81,78 @@ app.post("/v3/notifications/:player/read", (req, res) => {
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: "NOTIF_MARK_FAILED", message: e.message });
+  }
+});
+
+// ── Gasless Delegated Routes ────────────────────────────────────────────────
+// POST /v3/gasless/host — create game on behalf of host (no wallet popup)
+app.post("/v3/gasless/host", async (req, res) => {
+  try {
+    const { host, difficulty, prizePot, hostSecret } = req.body;
+    if (!host || difficulty === undefined || !prizePot || !hostSecret) {
+      return res.status(400).json({ error: "MISSING_PARAMS" });
+    }
+    const delegated = require("./v3-delegated");
+    const result = await delegated.createGameForHost(host, Number(difficulty), prizePot, hostSecret);
+
+    // Store host secret in engine for later activation
+    const { host: _h, difficulty: d, prizePot: p } = req.body;
+    const engineResp = await fetch(`http://127.0.0.1:${PORT}/v3/sessions/${result.gameId}/host-secret`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ hostSecret, host, difficulty: Number(difficulty), prizePot, maxSpend: "0" }),
+    });
+
+    res.json({ ok: true, gameId: result.gameId, txHash: result.txHash });
+  } catch (e) {
+    console.error("[gasless/host]", e.message);
+    res.status(500).json({ error: "GASLESS_HOST_FAILED", message: e.message });
+  }
+});
+
+// POST /v3/gasless/join — join game on behalf of player (no wallet popup)
+app.post("/v3/gasless/join", async (req, res) => {
+  try {
+    const { gameId, player, maxSpend, playerRandom } = req.body;
+    if (!gameId || !player || !maxSpend || !playerRandom) {
+      return res.status(400).json({ error: "MISSING_PARAMS" });
+    }
+    const delegated = require("./v3-delegated");
+    const result = await delegated.joinGameForPlayer(gameId, player, maxSpend, playerRandom);
+
+    // Tell the engine to activate the session
+    const gameData = await delegated.contract.getGame(Number(gameId));
+    const engineResp = await fetch(`http://127.0.0.1:${PORT}/v3/sessions/${gameId}/activate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        host: gameData.host,
+        player: gameData.player,
+        difficulty: Number(gameData.difficulty),
+        prizePot: gameData.prizePot.toString(),
+        maxSpend: gameData.maxSpend.toString(),
+        pythRandom: result.pythRandom,
+      }),
+    });
+
+    res.json({ ok: true, gameId, txHash: result.txHash, pythRandom: result.pythRandom });
+  } catch (e) {
+    console.error("[gasless/join]", e.message);
+    res.status(500).json({ error: "GASLESS_JOIN_FAILED", message: e.message });
+  }
+});
+
+// POST /v3/gasless/withdraw — withdraw on behalf of user
+app.post("/v3/gasless/withdraw", async (req, res) => {
+  try {
+    const { user, amount } = req.body;
+    if (!user || !amount) return res.status(400).json({ error: "MISSING_PARAMS" });
+    const delegated = require("./v3-delegated");
+    const result = await delegated.withdrawForUser(user, amount);
+    res.json({ ok: true, txHash: result.txHash });
+  } catch (e) {
+    console.error("[gasless/withdraw]", e.message);
+    res.status(500).json({ error: "GASLESS_WITHDRAW_FAILED", message: e.message });
   }
 });
 

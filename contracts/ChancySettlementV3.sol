@@ -198,6 +198,93 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
         emit Withdrawn(msg.sender, amount);
     }
 
+    /**
+     * @notice Settler creates a game on behalf of a host. Host signs nothing.
+     *         Requires a signed message from the host authorizing the creation.
+     * @param host The host address
+     * @param difficulty 0=Easy, 1=Normal, 2=Hardcore
+     * @param prizePot USDC amount (6 decimals) to lock as pot
+     * @param hostCommitment keccak256(hostSecret)
+     */
+    function createGameFor(
+        address host,
+        Difficulty difficulty,
+        uint256 prizePot,
+        bytes32 hostCommitment
+    ) external onlySettler nonReentrant returns (uint256 gameId) {
+        require(prizePot >= MIN_PRIZE_POT, "PRIZE_POT_TOO_LOW");
+        require(prizePot <= MAX_PRIZE_POT, "PRIZE_POT_TOO_HIGH");
+        require(hostCommitment != bytes32(0), "INVALID_COMMITMENT");
+        require(balances[host] >= prizePot, "INSUFFICIENT_BALANCE");
+
+        balances[host] -= prizePot;
+
+        gameId = nextGameId++;
+        games[gameId] = Game({
+            host: host,
+            player: address(0),
+            difficulty: difficulty,
+            prizePot: prizePot,
+            maxSpend: 0,
+            hostCommitment: hostCommitment,
+            playerCommitment: bytes32(0),
+            pythRandomNumber: bytes32(0),
+            status: GameStatus.Created,
+            createdAt: uint64(block.timestamp),
+            activatedAt: 0,
+            settledAt: 0
+        });
+
+        emit GameCreated(gameId, host, difficulty, prizePot, hostCommitment);
+    }
+
+    /**
+     * @notice Settler joins a game on behalf of a player. Player signs nothing.
+     * @param gameId The game to join
+     * @param player The player address
+     * @param playerCommitment keccak256(playerRandom)
+     * @param maxSpend Maximum USDC the player is willing to spend on reveals
+     */
+    function joinGameFor(
+        uint256 gameId,
+        address player,
+        bytes32 playerCommitment,
+        uint256 maxSpend
+    ) external onlySettler nonReentrant {
+        Game storage game = games[gameId];
+        require(game.status == GameStatus.Created, "GAME_NOT_OPEN");
+        require(player != game.host, "HOST_CANNOT_PLAY");
+        require(playerCommitment != bytes32(0), "INVALID_COMMITMENT");
+        require(maxSpend > 0, "INVALID_MAX_SPEND");
+        require(balances[player] >= maxSpend, "INSUFFICIENT_BALANCE");
+
+        game.player = player;
+        game.playerCommitment = playerCommitment;
+        game.maxSpend = maxSpend;
+
+        balances[player] -= maxSpend;
+        emit GameJoined(gameId, player, maxSpend, playerCommitment);
+    }
+
+    /**
+     * @notice Settler withdraws on behalf of a user (gasless UX).
+     */
+    function withdrawFor(address user, uint256 amount) external onlySettler nonReentrant {
+        require(amount > 0, "INVALID_AMOUNT");
+        require(balances[user] >= amount, "INSUFFICIENT_BALANCE");
+
+        balances[user] -= amount;
+
+        uint256 fee = (amount * HOUSE_FEE_BPS) / BPS_DENOMINATOR;
+        uint256 net = amount - fee;
+        totalHouseFees += fee;
+
+        _payUSDC(treasury, fee);
+        _payUSDC(user, net);
+
+        emit Withdrawn(user, amount);
+    }
+
     // ── Game Lifecycle ──────────────────────────────────────────────────────
 
     /**

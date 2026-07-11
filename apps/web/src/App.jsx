@@ -73,7 +73,7 @@ import helpButtonIcon from './assets/pixel/icons/help-button.png';
 import notifBellIcon from './assets/pixel/buttons/notif-bell.png';
 
 // ─── V3 CONTRACT CONFIG ─────────────────────────────────────────────────────
-const V3_SETTLEMENT = '0x92ce236ceb0c7a0981984a0f62f9e1122107391e';
+const V3_SETTLEMENT = '0x3b883A3fD200CfD91dE80F41Da6e87B91079eEe8';
 const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'; // USDC native on Base mainnet
 const CHAIN_ID = 8453;
 
@@ -424,7 +424,7 @@ function ApiDocsSheet({ onClose }) {
         <div className="api-section">
           <h3 className="api-h3">Contract Addresses (Base Mainnet)</h3>
           <div className="api-contracts">
-            <div className="api-contract"><span className="api-contract-label">Settlement V3</span><code>0x92ce236ceb0c7a0981984a0f62f9e1122107391e</code></div>
+            <div className="api-contract"><span className="api-contract-label">Settlement V3</span><code>0x3b883A3fD200CfD91dE80F41Da6e87B91079eEe8</code></div>
             <div className="api-contract"><span className="api-contract-label">USDC</span><code>0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913</code></div>
             <div className="api-contract"><span className="api-contract-label">Treasury (5% fee)</span><code>0x51a17E6DaE3d0D04174734b906BB201Cc79a20ff</code></div>
           </div>
@@ -754,10 +754,11 @@ export default function App({ wallet, farcaster }) {
     setError('');
     const pot = usdcUnits(potAmt);
     if (BigInt(pot) < 5_000_000n) { setError('Minimum pot is $5.'); return; }
-    if (BigInt(pot) > BigInt(balance)) { setError('Not enough USDC in your wallet.'); return; }
-    setBusy(true); setStatusMsg('Approving USDC…');
+    if (BigInt(pot) > BigInt(balance)) { setError('Not enough USDC in your balance.'); return; }
+    setBusy(true);
+    setStatusMsg('Creating game…');
 
-    // Optimistic: debit pot from displayed balance immediately (will be re-synced from chain)
+    // Optimistic: debit pot from displayed balance immediately
     setBalance((prev) => {
       const newBal = BigInt(prev) - BigInt(pot);
       return newBal < 0n ? '0' : newBal.toString();
@@ -765,66 +766,30 @@ export default function App({ wallet, farcaster }) {
 
     try {
       const ethers = await import('ethers');
-      const browserProvider = await getEthersProvider(wallet.walletProvider);
-      if (!browserProvider) {
-        _ethersProvider = null;
-        _ethersProviderFor = null;
-        throw new Error('Wallet not connected. Try reconnecting.');
-      }
-      const signer = await browserProvider.getSigner();
-      const contract = new ethers.Contract(V3_SETTLEMENT, SETTLEMENT_ABI, signer);
-
       const difficultyEnum = MODE_TO_V3_DIFFICULTY[hostMode];
       if (difficultyEnum === undefined) throw new Error('Invalid difficulty');
 
-      // 1. Generate host secret + commitment (keccak256(secret))
+      // Generate host secret
       const hostSecret = randomEntropy();
-      const hostCommitment = ethers.keccak256(ethers.solidityPacked(['bytes32'], [hostSecret]));
-
-      // Store host secret locally for settlement recovery
       try { localStorage.setItem(`chancy_v3_host_secret_${addr}`, hostSecret); } catch {}
 
-      // 2. createGame on-chain (pulls from your deposit balance)
+      // ── GASLESS: call API → settler bot calls createGameFor on-chain ──
       sfx.click();
-      setStatusMsg('Creating game on-chain…');
-      const tx = await contract.createGame(difficultyEnum, pot, hostCommitment);
-      const receipt = await tx.wait();
+      setStatusMsg('Creating game (gasless)…');
+      const result = await postJson('/v3/gasless/host', {
+        host: addr,
+        difficulty: difficultyEnum,
+        prizePot: pot,
+        hostSecret,
+      });
 
-      // 4. Parse GameCreated event for gameId
-      let gameId = null;
-      for (const log of receipt.logs) {
-        try {
-          const parsed = contract.interface.parseLog(log);
-          if (parsed && parsed.name === 'GameCreated') {
-            gameId = parsed.args.gameId.toString();
-            break;
-          }
-        } catch {}
-      }
-
-      if (!gameId) throw new Error('GameCreated event not found in transaction receipt');
-
-      // 5. POST host secret to the V3 engine so the settler bot can activate later
-      setStatusMsg('Registering host secret…');
-      try {
-        await postJson(`/v3/sessions/${gameId}/host-secret`, {
-          hostSecret,
-          host: addr,
-          difficulty: difficultyEnum,
-          prizePot: pot,
-        });
-      } catch (err) {
-        // Non-fatal: game is on-chain; host secret can be re-submitted.
-        console.warn('host-secret POST failed:', err);
-      }
-
-      setStatusMsg(`Game #${gameId} live on-chain`);
+      const gameId = result.gameId;
+      setStatusMsg(`Game #${gameId} created`);
       sfx.win();
       setView('lobby');
       await refreshCredits(addr);
       await refreshSessions();
     } catch (err) {
-      // Restore displayed balance on failure
       setBalance((prev) => (BigInt(prev) + BigInt(pot)).toString());
       await refreshCredits(addr);
       setError(friendlyError(err));
@@ -853,58 +818,33 @@ export default function App({ wallet, farcaster }) {
     const maxSpend = usdcUnits(joinMaxSpend);
     if (BigInt(maxSpend) <= 0n) { setError('Enter a max spend amount.'); return; }
     if (BigInt(maxSpend) > BigInt(balance)) { setError('Not enough balance. Deposit more USDC.'); return; }
-    setBusy(true); setStatusMsg('Joining on-chain…');
+    setBusy(true); setStatusMsg('Joining game…');
     try {
       const ethers = await import('ethers');
-      const browserProvider = await getEthersProvider(wallet.walletProvider);
-      if (!browserProvider) {
-        _ethersProvider = null;
-        _ethersProviderFor = null;
-        throw new Error('Wallet not connected. Try reconnecting.');
-      }
-      const signer = await browserProvider.getSigner();
-      const contract = new ethers.Contract(V3_SETTLEMENT, SETTLEMENT_ABI, signer);
 
-      // 1. Generate player commitment (random bytes32 → keccak256)
+      // Generate player random
       const playerRandom = randomEntropy();
-      const playerCommitment = ethers.keccak256(ethers.solidityPacked(['bytes32'], [playerRandom]));
-
-      // 2. joinGame on-chain (pulls from your deposit balance)
-      sfx.click();
-      setStatusMsg('Joining on-chain…');
       const gameId = sess.gameId || sess.sessionId;
-      const tx = await contract.joinGame(gameId, playerCommitment, maxSpend);
-      await tx.wait();
 
-      // 4. Set up round state and switch to round view.
-      //    The settler bot will activate the game async; we poll the V3 engine.
+      // ── GASLESS: call API → settler bot calls joinGameFor + activateGame ──
+      sfx.click();
+      setStatusMsg('Joining (gasless)…');
+      const result = await postJson('/v3/gasless/join', {
+        gameId,
+        player: addr,
+        maxSpend,
+        playerRandom,
+      });
+
+      // Set up round state and switch to round view
       const mode = sess.mode || V3_DIFFICULTY_TO_MODE[Number(sess.difficulty)] || 'Normal';
       const prizePot = sess.prizePot;
       setSession({ sessionId: gameId, gameId, mode, prizePot, maxSpend });
       setRevealed({});
-      setRun({ bombsHit: 0, prizesFound: 0, status: 'activating', spentTotal: '0', prizeEarned: '0', nextTileCost: v3RevealCostAt(prizePot, mode, 0).toString() });
+      setRun({ bombsHit: 0, prizesFound: 0, status: 'active', spentTotal: '0', prizeEarned: '0', nextTileCost: v3RevealCostAt(prizePot, mode, 0).toString() });
       setView('round');
-      setStatusMsg('Waiting for settler bot to activate…');
+      setStatusMsg('');
       sfx.win();
-
-      // 5. Poll /v3/sessions/:gameId/state until status becomes 'active'
-      //    (Runs in background without blocking the UI; round view handles its own polling too.)
-      const pollActivation = async () => {
-        for (let i = 0; i < 60; i++) {
-          try {
-            const state = await getJson(`/v3/sessions/${gameId}/state`);
-            if (state && state.status === 'active') {
-              setRun((prev) => ({ ...prev, status: 'active' }));
-              setStatusMsg('');
-              return;
-            }
-          } catch { /* engine may not have it yet */ }
-          await new Promise((r) => setTimeout(r, 2000));
-        }
-        // Timeout: show a message but don't error out — player can still quit.
-        setStatusMsg('Activation taking longer than expected — you can quit to reclaim unused funds.');
-      };
-      pollActivation();
 
       await refreshCredits(addr);
     } catch (err) {
