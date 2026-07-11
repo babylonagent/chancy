@@ -72,9 +72,9 @@ import powerButtonIcon from './assets/pixel/icons/power-button.png';
 import helpButtonIcon from './assets/pixel/icons/help-button.png';
 
 // ─── V3 CONTRACT CONFIG ─────────────────────────────────────────────────────
-const V3_SETTLEMENT = '0x46ae2f3f80d9021066a126a94b4700B17f3cB218';
-const USDC_ADDRESS = '0x036CbD53842c5426634e7929541eC2318f3dCF7e'; // USDC on Base Sepolia
-const CHAIN_ID = 84532;
+const V3_SETTLEMENT = '0x92ce236ceb0c7a0981984a0f62f9e1122107391e';
+const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'; // USDC native on Base mainnet
+const CHAIN_ID = 8453;
 
 // Minimal ABIs (subset of the on-chain ChancySettlementV3 + ERC20)
 const SETTLEMENT_ABI = [
@@ -421,10 +421,10 @@ function ApiDocsSheet({ onClose }) {
         </div>
 
         <div className="api-section">
-          <h3 className="api-h3">Contract Addresses (Base Sepolia)</h3>
+          <h3 className="api-h3">Contract Addresses (Base Mainnet)</h3>
           <div className="api-contracts">
-            <div className="api-contract"><span className="api-contract-label">Settlement V3</span><code>0x46ae2f3f80d9021066a126a94b4700B17f3cB218</code></div>
-            <div className="api-contract"><span className="api-contract-label">USDC</span><code>0x036CbD53842c5426634e7929541eC2318f3dCF7e</code></div>
+            <div className="api-contract"><span className="api-contract-label">Settlement V3</span><code>0x92ce236ceb0c7a0981984a0f62f9e1122107391e</code></div>
+            <div className="api-contract"><span className="api-contract-label">USDC</span><code>0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913</code></div>
             <div className="api-contract"><span className="api-contract-label">Treasury (5% fee)</span><code>0x51a17E6DaE3d0D04174734b906BB201Cc79a20ff</code></div>
           </div>
         </div>
@@ -437,7 +437,7 @@ function ApiDocsSheet({ onClose }) {
 # 4. Settler bot settles on-chain — 5% fee auto-sent to treasury
 
 # Full ABI: see Contract Addresses above
-# Chain: Base Sepolia (84532)`}</pre>
+# Chain: Base Mainnet (8453)`}</pre>
         </div>
 
         <button className="btn btn-primary" data-sfx-back onClick={onClose} style={{ marginTop: 16 }}>Close</button>
@@ -561,7 +561,7 @@ export default function App({ wallet, farcaster }) {
     try {
       const ethers = await import('ethers');
       // Use plain RPC for reads — BrowserProvider requires wallet session and can fail silently
-      const provider = new ethers.JsonRpcProvider('https://sepolia.base.org');
+      const provider = new ethers.JsonRpcProvider('https://mainnet.base.org');
       const settlement = new ethers.Contract(V3_SETTLEMENT, SETTLEMENT_ABI, provider);
       const bal = await settlement.balances(player);
       const balStr = bal.toString();
@@ -1276,7 +1276,7 @@ export default function App({ wallet, farcaster }) {
             <span className="label">Balance</span>
             <span className="value gold">{dollars(balance)}</span>
           </div>
-          <p className="fee-note">Base Sepolia testnet · No deposit fees · 5% on withdrawals</p>
+          <p className="fee-note">Base Mainnet · No deposit fees · 5% on withdrawals</p>
         </div>
       )}
 
