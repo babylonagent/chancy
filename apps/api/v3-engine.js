@@ -278,11 +278,22 @@ function installV3Routes(app) {
     const { gameId } = req.params;
     const { hostSecret, host, difficulty, prizePot, maxSpend, player } = req.body;
 
-    if (!hostSecret) {
-      return res.status(400).json({ error: "MISSING_HOST_SECRET" });
+    // Input validation
+    if (!hostSecret || typeof hostSecret !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(hostSecret)) {
+      return res.status(400).json({ error: "INVALID_HOST_SECRET" });
+    }
+    if (host && !/^0x[0-9a-fA-F]{40}$/.test(host)) {
+      return res.status(400).json({ error: "INVALID_HOST_ADDRESS" });
+    }
+    if (difficulty !== undefined && ![0, 1, 2].includes(Number(difficulty))) {
+      return res.status(400).json({ error: "INVALID_DIFFICULTY" });
     }
 
     const id = Number(gameId);
+    if (!Number.isInteger(id) || id < 1) {
+      return res.status(400).json({ error: "INVALID_GAME_ID" });
+    }
+
     pendingSecrets.set(id, {
       hostSecret,
       host: host || null,

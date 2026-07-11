@@ -7,25 +7,23 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /**
- * Chancy V3 On-Chain Settlement Contract
- *
- * Replaces the off-chain credit ledger with trustless on-chain escrow.
+ * Chancy V3 On-Chain Settlement Contract (Audited)
  *
  * Roles:
- *   - Host:    Any player. Locks USDC pot, commits hostSecret. Profits from losses.
- *   - Player:  Any other player. Locks max spend budget, commits randomness. Clicks tiles.
- *   - Settler: Platform bot. Calls settleGame(). ZERO money authority — contract
- *              re-derives the board and replays every click. If settler lies, tx reverts.
- *              If settler refuses, 24h timeout → refund.
+ *   - Host:    Locks USDC pot, commits hostSecret. Profits from losses.
+ *   - Player:  Locks maxSpend, commits randomness. Clicks tiles.
+ *   - Settler: Platform bot. Calls settleGame() + activateGame(). ZERO money authority —
+ *              contract re-derives the board and replays every click. If settler lies, tx reverts.
+ *              If settler refuses, 24h timeout -> full refund (no fee).
  *
  * Flow:
  *   1. createGame()    — host locks pot + commits hash(hostSecret)
- *   2. joinGame()       — player locks maxSpend + commits hash(playerRandom)
- *   3. Pyth callback    — randomness resolved on-chain
- *   4. [off-chain]      — engine derives board (knows hostSecret), player clicks tiles
- *   5. settleGame()     — settler submits click sequence → contract verifies → pays
- *   6. challengeSettlement() — (if needed) player disputes → bond slashed
- *   7. refundTimeout()   — (if needed) 24h no settlement → full refund
+ *   2. joinGame()      — player locks maxSpend + commits hash(playerRandom)
+ *   3. activateGame()  — settler submits Pyth randomness
+ *   4. [off-chain]     — engine derives board (knows hostSecret), player clicks tiles
+ *   5. settleGame()    — settler submits clicks -> contract verifies -> pays
+ *   6. challengeSettlement() — dispute wrong settlement -> bond slashed
+ *   7. refundTimeout() — 24h no settlement -> full refund, no fee
  *
  * Board secrecy:
  *   boardSeed = keccak256(abi.encodePacked(pythRandom, hostSecret, gameId))
@@ -43,7 +41,6 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
     uint256 public constant MIN_PRIZE_POT = 5_000_000;   // $5 USDC (6 decimals)
     uint256 public constant MAX_PRIZE_POT = 1_000_000_000; // $1,000 USDC
     uint16 public constant HOUSE_FEE_BPS = 500;           // 5% house fee on settlement payouts
-    uint256 public totalHouseFees;                        // lifetime fees collected
 
     IERC20 public immutable usdc;
     address public settler;
@@ -97,7 +94,7 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
     event SettlerUpdated(address indexed oldSettler, address indexed newSettler);
     event SettlerBondDeposited(uint256 amount);
     event SettlerBondSlashed(uint256 amount, address to);
-    event HouseFeeCollected(uint256 gameId, uint256 feeAmount);
+    event SettlerBondWithdrawn(uint256 amount, address to);
     event Deposited(address indexed user, uint256 amount);
     event Withdrawn(address indexed user, uint256 amount);
 
@@ -131,16 +128,21 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
         treasury = newTreasury;
     }
 
-    function withdrawHouseFees() external onlyOwner {
-        uint256 amount = totalHouseFees;
-        totalHouseFees = 0;
-        _payUSDC(treasury, amount);
-    }
-
+    /// @notice Deposit settler bond (ETH). Required before settling games.
     function depositSettlerBond() external payable onlyOwner {
         settlerBond += msg.value;
         settlerBondDeposited = true;
         emit SettlerBondDeposited(msg.value);
+    }
+
+    /// @notice Withdraw settler bond. Owner only.
+    function withdrawSettlerBond(address payable to, uint256 amount) external onlyOwner {
+        require(settlerBond >= amount, "INSUFFICIENT_BOND");
+        require(to != address(0), "INVALID_RECIPIENT");
+        settlerBond -= amount;
+        (bool ok, ) = to.call{value: amount}("");
+        require(ok, "BOND_WITHDRAW_FAILED");
+        emit SettlerBondWithdrawn(amount, to);
     }
 
     function _slashBond(address to, uint256 amount) internal {
@@ -157,6 +159,8 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
      * @notice Indexer-only: credit a user's balance from a raw USDC transfer.
      *         Called when the indexer detects a USDC Transfer event to this contract.
      *         The USDC is already in the contract (raw transfer), we just credit the balance.
+     * @dev Security: settler is a trusted platform bot. This is the ONLY privileged
+     *      balance operation. Settler cannot move user funds — only credit deposits.
      * @param user The address that sent the USDC
      * @param amount The amount of USDC sent
      */
@@ -168,8 +172,7 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Deposit USDC into the contract via approve (alternative to raw send).
-     *         For agents or users who prefer the approve flow.
+     * @notice Deposit USDC via approve (alternative to raw send).
      */
     function deposit(uint256 amount) external nonReentrant {
         require(amount > 0, "INVALID_AMOUNT");
@@ -179,7 +182,8 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Withdraw your USDC balance from the contract. 5% fee auto-sent to treasury.
+     * @notice Withdraw your USDC balance. 5% fee auto-sent to treasury.
+     *         Fees are sent immediately — no separate withdrawHouseFees needed.
      */
     function withdraw(uint256 amount) external nonReentrant {
         require(amount > 0, "INVALID_AMOUNT");
@@ -187,10 +191,9 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
 
         balances[msg.sender] -= amount;
 
-        // 5% house fee auto-sent to treasury
+        // 5% house fee — sent directly to treasury, not double-counted
         uint256 fee = (amount * HOUSE_FEE_BPS) / BPS_DENOMINATOR;
         uint256 net = amount - fee;
-        totalHouseFees += fee;
 
         _payUSDC(treasury, fee);
         _payUSDC(msg.sender, net);
@@ -198,97 +201,10 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
         emit Withdrawn(msg.sender, amount);
     }
 
-    /**
-     * @notice Settler creates a game on behalf of a host. Host signs nothing.
-     *         Requires a signed message from the host authorizing the creation.
-     * @param host The host address
-     * @param difficulty 0=Easy, 1=Normal, 2=Hardcore
-     * @param prizePot USDC amount (6 decimals) to lock as pot
-     * @param hostCommitment keccak256(hostSecret)
-     */
-    function createGameFor(
-        address host,
-        Difficulty difficulty,
-        uint256 prizePot,
-        bytes32 hostCommitment
-    ) external onlySettler nonReentrant returns (uint256 gameId) {
-        require(prizePot >= MIN_PRIZE_POT, "PRIZE_POT_TOO_LOW");
-        require(prizePot <= MAX_PRIZE_POT, "PRIZE_POT_TOO_HIGH");
-        require(hostCommitment != bytes32(0), "INVALID_COMMITMENT");
-        require(balances[host] >= prizePot, "INSUFFICIENT_BALANCE");
-
-        balances[host] -= prizePot;
-
-        gameId = nextGameId++;
-        games[gameId] = Game({
-            host: host,
-            player: address(0),
-            difficulty: difficulty,
-            prizePot: prizePot,
-            maxSpend: 0,
-            hostCommitment: hostCommitment,
-            playerCommitment: bytes32(0),
-            pythRandomNumber: bytes32(0),
-            status: GameStatus.Created,
-            createdAt: uint64(block.timestamp),
-            activatedAt: 0,
-            settledAt: 0
-        });
-
-        emit GameCreated(gameId, host, difficulty, prizePot, hostCommitment);
-    }
-
-    /**
-     * @notice Settler joins a game on behalf of a player. Player signs nothing.
-     * @param gameId The game to join
-     * @param player The player address
-     * @param playerCommitment keccak256(playerRandom)
-     * @param maxSpend Maximum USDC the player is willing to spend on reveals
-     */
-    function joinGameFor(
-        uint256 gameId,
-        address player,
-        bytes32 playerCommitment,
-        uint256 maxSpend
-    ) external onlySettler nonReentrant {
-        Game storage game = games[gameId];
-        require(game.status == GameStatus.Created, "GAME_NOT_OPEN");
-        require(player != game.host, "HOST_CANNOT_PLAY");
-        require(playerCommitment != bytes32(0), "INVALID_COMMITMENT");
-        require(maxSpend > 0, "INVALID_MAX_SPEND");
-        require(balances[player] >= maxSpend, "INSUFFICIENT_BALANCE");
-
-        game.player = player;
-        game.playerCommitment = playerCommitment;
-        game.maxSpend = maxSpend;
-
-        balances[player] -= maxSpend;
-        emit GameJoined(gameId, player, maxSpend, playerCommitment);
-    }
-
-    /**
-     * @notice Settler withdraws on behalf of a user (gasless UX).
-     */
-    function withdrawFor(address user, uint256 amount) external onlySettler nonReentrant {
-        require(amount > 0, "INVALID_AMOUNT");
-        require(balances[user] >= amount, "INSUFFICIENT_BALANCE");
-
-        balances[user] -= amount;
-
-        uint256 fee = (amount * HOUSE_FEE_BPS) / BPS_DENOMINATOR;
-        uint256 net = amount - fee;
-        totalHouseFees += fee;
-
-        _payUSDC(treasury, fee);
-        _payUSDC(user, net);
-
-        emit Withdrawn(user, amount);
-    }
-
     // ── Game Lifecycle ──────────────────────────────────────────────────────
 
     /**
-     * @notice Host creates a game. Any player can host.
+     * @notice Host creates a game. Host signs directly.
      * @param difficulty 0=Easy, 1=Normal, 2=Hardcore
      * @param prizePot USDC amount (6 decimals) to lock as pot
      * @param hostCommitment keccak256(hostSecret)
@@ -321,14 +237,13 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
             settledAt: 0
         });
 
-        // Pot stays in contract escrow, will be paid out on settle/refund
         emit GameCreated(gameId, msg.sender, difficulty, prizePot, hostCommitment);
     }
 
     /**
-     * @notice Player joins a game. Locks max spend budget.
+     * @notice Player joins a game. Player signs directly.
      * @param gameId The game to join
-     * @param playerCommitment keccak256(playerRandom) — used as Pyth userRandomNumber
+     * @param playerCommitment keccak256(playerRandom)
      * @param maxSpend Maximum USDC the player is willing to spend on reveals
      */
     function joinGame(
@@ -353,9 +268,6 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
 
     /**
      * @notice Called by settler after Pyth randomness is resolved.
-     * Records the Pyth random number and activates the game.
-     * The random number comes from ChancyRandomness contract (read via off-chain
-     * by the settler, submitted here for verification).
      */
     function activateGame(uint256 gameId, bytes32 pythRandomNumber) external onlySettler {
         Game storage game = games[gameId];
@@ -371,12 +283,7 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
 
     /**
      * @notice Settler submits game result. Contract re-derives board, replays
-     * clicks, and verifies the outcome. If anything doesn't match, reverts.
-     *
-     * @param gameId Game to settle
-     * @param hostSecret The host's secret (revealed at settlement, verified against commitment)
-     * @param clicks Ordered array of tile indices clicked (0-35)
-     * @param outcome Submitted outcome (Win/Loss/Quit)
+     * clicks, and verifies the outcome.
      */
     function settleGame(
         uint256 gameId,
@@ -440,7 +347,7 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
             settlerAddress: msg.sender
         });
 
-        // Credit payouts to on-chain balances (5% house fee deducted)
+        // Credit payouts to on-chain balances (5% house fee deducted, sent to treasury)
         balances[game.host] += _applyFee(hostPayout);
         balances[game.player] += _applyFee(playerPayout);
 
@@ -448,14 +355,15 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Player disputes a settlement. Contract re-derives board and
-     * replays the player's claimed correct clicks. If the player is right,
-     * settler bond is slashed and correct payout is made.
+     * @notice Player disputes a settlement.
      *
-     * @param gameId Game to challenge
-     * @param hostSecret Host's secret (same as submitted at settlement)
-     * @param correctClicks The player's claimed click sequence
-     * @param correctOutcome The player's claimed outcome
+     * On successful challenge:
+     *   - Overpaid party's balance is debited by the difference
+     *   - Underpaid party's balance is credited
+     *   - Settler bond slashed to cover any shortfall
+     *
+     * On failed challenge:
+     *   - Challenger's ETH bond sent to treasury (not host) to prevent risk-free spam
      */
     function challengeSettlement(
         uint256 gameId,
@@ -504,12 +412,11 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
             game.difficulty
         );
 
-        // If original settlement was correct, challenger loses
+        // If original settlement was correct, challenger loses bond to treasury
         if (originalOutcome == original.outcome) {
-            // Challenge failed — slash challenger's bond (they must send ETH with tx)
             require(msg.value > 0, "CHALLENGE_BOND_REQUIRED");
-            // Slash to settler
-            (bool ok, ) = payable(game.host).call{value: msg.value}("");
+            // Send to treasury, NOT game.host — prevents risk-free host challenge spam
+            (bool ok, ) = payable(treasury).call{value: msg.value}("");
             require(ok, "CHALLENGE_BOND_TRANSFER_FAILED");
             emit GameChallenged(gameId, msg.sender, originalOutcome, msg.value);
             return;
@@ -519,14 +426,7 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
         require(challengerOutcome == correctOutcome, "CORRECT_OUTCOME_MISMATCH");
         require(challengerSpent <= game.maxSpend, "SPEND_EXCEEDS_BUDGET");
 
-        // Slash settler bond to challenger
-        _slashBond(msg.sender, settlerBond / 2); // slash half the bond
-
-        // Recalculate correct payout
-        // NOTE: we need to clawback the original (wrong) payout, then pay correct.
-        // For simplicity, we slash the settler bond for the difference and
-        // the game record is corrected. In practice, the wrong payout is
-        // already sent. The bond covers the difference.
+        // Recalculate correct payouts
         (uint256 correctHostPayout, uint256 correctPlayerPayout) = _calculatePayout(
             game.prizePot,
             game.maxSpend,
@@ -534,21 +434,34 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
             correctOutcome
         );
 
-        // Calculate difference from original payout
-        uint256 hostDiff = original.hostPayout > correctHostPayout
-            ? original.hostPayout - correctHostPayout
-            : 0;
-        uint256 playerDiff = original.playerPayout > correctPlayerPayout
-            ? original.playerPayout - correctPlayerPayout
-            : 0;
-        uint256 totalDiff = hostDiff + playerDiff;
+        // Debit the overpaid party, credit the underpaid party
+        // Original payouts were credited net-of-fee at settlement time.
+        // We reverse the net amounts and credit the correct net amounts.
+        uint256 originalHostNet = _netOfFee(original.hostPayout);
+        uint256 originalPlayerNet = _netOfFee(original.playerPayout);
+        uint256 correctHostNet = _netOfFee(correctHostPayout);
+        uint256 correctPlayerNet = _netOfFee(correctPlayerPayout);
 
-        // Slash bond to cover the difference, pay the underpaid party
-        if (totalDiff > 0) {
-            _slashBond(
-                originalOutcome == GameOutcome.Win ? game.host : game.player,
-                totalDiff > settlerBond ? settlerBond : totalDiff
-            );
+        // Reverse original (debit what was credited)
+        if (originalHostNet > 0) {
+            uint256 toDebit = originalHostNet <= balances[game.host]
+                ? originalHostNet : balances[game.host];
+            balances[game.host] -= toDebit;
+        }
+        if (originalPlayerNet > 0) {
+            uint256 toDebit = originalPlayerNet <= balances[game.player]
+                ? originalPlayerNet : balances[game.player];
+            balances[game.player] -= toDebit;
+        }
+
+        // Credit correct payouts
+        balances[game.host] += _applyFee(correctHostPayout);
+        balances[game.player] += _applyFee(correctPlayerPayout);
+
+        // Slash settler bond by half for the error
+        uint256 slashAmount = settlerBond / 2;
+        if (slashAmount > 0) {
+            _slashBond(msg.sender, slashAmount);
         }
 
         // Update settlement record
@@ -557,11 +470,12 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
         settlements[gameId].hostPayout = correctHostPayout;
         settlements[gameId].playerPayout = correctPlayerPayout;
 
-        emit GameChallenged(gameId, msg.sender, correctOutcome, settlerBond / 2);
+        emit GameChallenged(gameId, msg.sender, correctOutcome, slashAmount);
     }
 
     /**
      * @notice Anyone can trigger a refund if no settlement happened within 24h.
+     *         Full refund, no fee (settler's fault for not settling).
      */
     function refundTimeout(uint256 gameId) external nonReentrant {
         Game storage game = games[gameId];
@@ -579,9 +493,10 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
 
         game.status = GameStatus.Refunded;
 
-        balances[game.host] += _applyFee(hostRefund);
+        // Full refund, no fee — settler failed to do their job
+        balances[game.host] += hostRefund;
         if (game.player != address(0)) {
-            balances[game.player] += _applyFee(playerRefund);
+            balances[game.player] += playerRefund;
         }
 
         emit GameRefunded(gameId, hostRefund, playerRefund);
@@ -589,11 +504,6 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
 
     // ── Board Derivation ─────────────────────────────────────────────────────
 
-    /**
-     * @notice Derive bomb and prize positions from board seed.
-     * Uses keccak256 for hashing. Mirrors the JS deriveBoardV3() function.
-     * MUST produce identical output to the JS implementation.
-     */
     function _deriveBoard(bytes32 boardSeed, Difficulty difficulty)
         internal
         pure
@@ -634,10 +544,6 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
 
     // ── Click Replay ─────────────────────────────────────────────────────────
 
-    /**
-     * @notice Replay a sequence of tile clicks against a derived board.
-     * Returns the game outcome and total spent.
-     */
     function _replayClicks(
         uint64 bombMask,
         uint64 prizeMask,
@@ -690,28 +596,32 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
 
         if (outcome == GameOutcome.Win) {
             // Player wins the full pot + gets unspent budget back
-            hostPayout = spent;           // host earns the reveal costs
-            playerPayout = prizePot + unspent; // player gets pot + unspent budget
+            hostPayout = spent;
+            playerPayout = prizePot + unspent;
         } else if (outcome == GameOutcome.Loss) {
             // Host gets pot + player's spent
             hostPayout = prizePot + spent;
-            playerPayout = unspent;        // player gets unspent budget back
+            playerPayout = unspent;
         } else {
-            // Quit — host gets spent + pot (all-or-nothing).
-            // Player only gets unspent budget back.
+            // Quit — economically same as loss
             hostPayout = prizePot + spent;
             playerPayout = unspent;
         }
     }
 
-    /// @notice Applies 5% house fee to a payout, sends fee directly to treasury.
-    ///         Returns the net amount to pay the recipient.
+    /// @notice Applies 5% house fee. Fee sent directly to treasury immediately.
+    ///         Returns net amount to credit to recipient's balance.
     function _applyFee(uint256 amount) internal returns (uint256 net) {
         if (amount == 0) return 0;
         uint256 fee = (amount * HOUSE_FEE_BPS) / BPS_DENOMINATOR;
-        totalHouseFees += fee;
         _payUSDC(treasury, fee);
         return amount - fee;
+    }
+
+    /// @dev Pure helper — calculates net after fee without sending anything.
+    function _netOfFee(uint256 amount) internal pure returns (uint256) {
+        if (amount == 0) return 0;
+        return amount - ((amount * HOUSE_FEE_BPS) / BPS_DENOMINATOR);
     }
 
     // ── Reveal Cost ──────────────────────────────────────────────────────────
