@@ -66,12 +66,7 @@ body {
   image-rendering: pixelated;
 }
 
-/* CRT scanline overlay — subtle */
-body::before {
-  content: ''; position: fixed; inset: 0; z-index: 9999; pointer-events: none;
-  background: repeating-linear-gradient(0deg, rgba(0,0,0,0.04) 0px, rgba(0,0,0,0.04) 1px, transparent 1px, transparent 3px);
-}
-[data-theme="light"] body::before { display: none; }
+/* CRT scanline overlay — removed per user request */
 
 h1, h2, h3, .display {
   font-family: 'Press Start 2P', monospace;
@@ -452,7 +447,7 @@ input { outline: none; }
 }
 
 /* How it works steps — 3 cards in a row, pixel-frame */
-.how-steps { display: flex; flex-direction: row; gap: 8px; }
+.how-steps{display:flex;flex-direction:column;gap:10px}
 .how-step {
   flex: 1; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px;
   padding: 20px 12px;
@@ -469,7 +464,7 @@ input { outline: none; }
 .step-body p { color: var(--text-dim); font-size: 11px; line-height: 1.5; }
 
 /* Mode preview cards — horizontal row, pixel-frame, left accent stripe */
-.modes-preview { display: flex; flex-direction: row; gap: 8px; }
+.modes-preview { display: flex; flex-direction: column; gap: 10px; }
 .mode-info-card {
   flex: 1; display: flex; flex-direction: column; gap: 4px;
   padding: 14px 14px 14px 16px;
@@ -489,7 +484,7 @@ input { outline: none; }
 .mode-info-card .mode-desc { color: var(--text-dim); font-size: 11px; }
 
 /* Trust + Agent feature cards — 3 in a row, icon left + text right, beveled */
-.trust-row { display: flex; flex-direction: row; gap: 8px; }
+.trust-row { display: flex; flex-direction: column; gap: 10px; }
 .trust-item {
   flex: 1; display: flex; align-items: flex-start; gap: 10px;
   padding: 12px 12px;
@@ -777,12 +772,7 @@ input { outline: none; }
 /* Desktop: keep app phone-width — game feel, not web dashboard */
 @media (min-width: 520px) { .app { max-width: 480px; } }
 
-/* Mobile: stack cards vertically (3-across is too cramped under 768px) */
-@media (max-width: 767px) {
-  .how-steps { flex-direction: column; }
-  .modes-preview { flex-direction: column; }
-  .trust-row { flex-direction: column; }
-}
+/* Cards always stacked vertically */
 
 /* Desktop landing page can be wider for marketing sections, but app stays narrow */
 @media (min-width: 768px) {
@@ -793,15 +783,6 @@ input { outline: none; }
   .landing-hero .tagline { font-size: 17px; max-width: 480px; }
   .landing-hero .btn { max-width: 340px; }
   .landing-h2 { font-size: 14px; }
-  .how-steps { flex-direction: row; gap: 16px; }
-  .how-step { flex: 1; flex-direction: column; align-items: center; text-align: center; gap: 10px; padding: 24px 20px; }
-  .step-body { align-items: center; }
-  .modes-preview { flex-direction: row; gap: 16px; }
-  .mode-info-card { flex: 1; }
-  .trust-row { flex-direction: row; gap: 16px; }
-  .trust-item { flex: 1; flex-direction: column; text-align: center; gap: 8px; padding: 18px 16px; }
-  .trust-icon { font-size: 24px; }
-  .landing-footer { gap: 32px; }
   .modal-backdrop { align-items: center; }
   .modal { max-width: 520px; border-radius: 20px; border-bottom: 2px solid var(--border); padding: 32px 28px; }
   @keyframes sheetUp { from { transform: translateY(40px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
