@@ -70,6 +70,7 @@ import soundOnIcon from './assets/pixel/icons/sound-on.png';
 import soundOffIcon from './assets/pixel/icons/sound-off.png';
 import powerButtonIcon from './assets/pixel/icons/power-button.png';
 import helpButtonIcon from './assets/pixel/icons/help-button.png';
+import notifBellIcon from './assets/pixel/buttons/notif-bell.png';
 
 // ─── V3 CONTRACT CONFIG ─────────────────────────────────────────────────────
 const V3_SETTLEMENT = '0x92ce236ceb0c7a0981984a0f62f9e1122107391e';
@@ -499,7 +500,7 @@ export default function App({ wallet, farcaster }) {
   const [statusMsg, setStatusMsg] = useState('');
   const [error, setError] = useState('');
   const [quitting, setQuitting] = useState(false);
-  const [muted, setMuted] = useState(true); // start muted
+  const [muted, setMuted] = useState(false); // matches sound.js default (unmuted)
 
   const addr = address || '';
   const modeCfg = session ? MODES[session.mode] : MODES.Normal;
@@ -1053,10 +1054,7 @@ export default function App({ wallet, farcaster }) {
             )}
             {view !== 'splash' && isConnected && (
               <button className="icon-btn notif-btn" onClick={() => { setShowNotifs(true); if (unreadCount > 0) markNotifsRead(); }} aria-label="Notifications" title="Notifications">
-                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--text-dim)' }}>
-                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                  <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-                </svg>
+                <img src={notifBellIcon} alt="Notifications" style={{ width: 40, height: 40, imageRendering: 'pixelated' }} />
                 {unreadCount > 0 && (
                   <span style={{
                     position: 'absolute', top: 2, right: 2,
@@ -1468,8 +1466,7 @@ export default function App({ wallet, farcaster }) {
         <div className="modal-backdrop" onClick={() => setShowNotifs(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-handle" />
-            <h2>Activity Log</h2>
-            <p className="modal-sub">Your important events and transactions</p>
+            <h2>Notifications</h2>
             {notifications.length === 0 ? (
               <div className="empty-state" style={{ padding: '32px 20px' }}>
                 <p>No activity yet.<br/>Play a game to see events here.</p>
