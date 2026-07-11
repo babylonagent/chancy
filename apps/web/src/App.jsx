@@ -659,25 +659,6 @@ export default function App({ wallet, farcaster }) {
 
   useEffect(() => { if (addr) refreshCredits(addr); }, [addr, refreshCredits]);
 
-  // ── Auto-poll balance while on deposit page ── (single consolidated effect)
-  useEffect(() => {
-    if (view !== 'deposit' || !addr) return;
-    setPreDepositBalance(balance);
-    const interval = setInterval(async () => {
-      const bal = await refreshCredits(addr);
-      if (preDepositBalance && BigInt(bal) > BigInt(preDepositBalance)) {
-        sfx.win();
-        const gained = (BigInt(bal) - BigInt(preDepositBalance)).toString();
-        setStatusMsg(`+${dollars(gained)} received!`);
-        // Record deposit notification
-        try { await postJson(`/v3/notifications/${addr}`, { type: 'deposit', title: 'Deposit confirmed', body: 'USDC deposited to your balance', amount: gained }); } catch {}
-        refreshNotifications();
-        setTimeout(() => { setView('lobby'); setStatusMsg(''); }, 2000);
-      }
-    }, 4000);
-    return () => clearInterval(interval);
-  }, [view, addr, balance, refreshCredits, refreshNotifications]); // eslint-disable-line react-hooks/exhaustive-deps
-
   // ── Notifications: fetch + poll ──
   const refreshNotifications = useCallback(async () => {
     if (!addr) return;
@@ -697,6 +678,24 @@ export default function App({ wallet, farcaster }) {
     const interval = setInterval(refreshNotifications, 15000);
     return () => clearInterval(interval);
   }, [addr, view, refreshNotifications]);
+
+  // ── Auto-poll balance while on deposit page ── (single consolidated effect)
+  useEffect(() => {
+    if (view !== 'deposit' || !addr) return;
+    setPreDepositBalance(balance);
+    const interval = setInterval(async () => {
+      const bal = await refreshCredits(addr);
+      if (preDepositBalance && BigInt(bal) > BigInt(preDepositBalance)) {
+        sfx.win();
+        const gained = (BigInt(bal) - BigInt(preDepositBalance)).toString();
+        setStatusMsg(`+${dollars(gained)} received!`);
+        try { await postJson(`/v3/notifications/${addr}`, { type: 'deposit', title: 'Deposit confirmed', body: 'USDC deposited to your balance', amount: gained }); } catch {}
+        refreshNotifications();
+        setTimeout(() => { setView('lobby'); setStatusMsg(''); }, 2000);
+      }
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [view, addr, balance, refreshCredits, refreshNotifications]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function markNotifsRead() {
     if (!addr) return;
