@@ -4,14 +4,14 @@ import { WagmiProvider, useAccount, useDisconnect } from 'wagmi';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createAppKit, useAppKit, useAppKitAccount, useAppKitProvider } from '@reown/appkit/react';
 import { WagmiAdapter } from '@reown/appkit-adapter-wagmi';
-import { baseSepolia } from 'viem/chains';
+import { base } from 'viem/chains';
 
 import App from './App.jsx';
 import './styles.css';
 
 // ─── REOWN APPKIT CONFIG ────────────────────────────────────────────────────
 const PROJECT_ID = 'b6af60317a6f1fc61c5ad130fc80b4d7';
-const networks = [baseSepolia];
+const networks = [base];
 
 const wagmiAdapter = new WagmiAdapter({
   networks,
