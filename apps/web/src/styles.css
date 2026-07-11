@@ -630,7 +630,7 @@ input { outline: none; }
 .host-balance .value { font-family: 'Press Start 2P', monospace; font-size: 14px; font-weight: 400; }
 .host-balance .value.gold { color: var(--accent); }
 
-.mode-selector { display: flex; gap: 8px; }
+.mode-selector { display: flex; flex-direction: column; gap: 8px; }
 .mode-tab {
   flex: 1; padding: 14px 8px; border-radius: var(--radius);
   display: flex; flex-direction: column; align-items: center; gap: 4px;
