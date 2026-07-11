@@ -157,12 +157,12 @@ input { outline: none; }
 /* Caps are INSIDE the button box (not negative offset) to prevent overlap */
 /* z-index: -1 so caps paint behind text nodes (which are unpositioned) */
 .btn::before, .btn::after {
-  content: ''; position: absolute; top: 0; height: 75px; width: 28px;
+  content: ''; position: absolute; top: 0; height: 75px; width: 29px;
   background-size: 100% 75px;
   image-rendering: pixelated; pointer-events: none; z-index: -1;
 }
-.btn::before { left: -1px; }
-.btn::after { right: -1px; }
+.btn::before { left: -2px; }
+.btn::after { right: -2px; }
 
 /* ── ORANGE (primary) — 3-slice ── */
 .btn-primary {
@@ -220,12 +220,12 @@ input { outline: none; }
 }
 .misc-btn > * { position: relative; z-index: 1; }
 .misc-btn::before, .misc-btn::after {
-  content: ''; position: absolute; top: 0; height: 25px; width: 8px;
+  content: ''; position: absolute; top: 0; height: 25px; width: 9px;
   background-size: 100% 25px;
   image-rendering: pixelated; pointer-events: none; z-index: -1;
 }
-.misc-btn::before { left: -1px; background-image: var(--misc-left); }
-.misc-btn::after { right: -1px; background-image: var(--misc-right); }
+.misc-btn::before { left: -2px; background-image: var(--misc-left); }
+.misc-btn::after { right: -2px; background-image: var(--misc-right); }
 .misc-btn:active { transform: translateY(1px); }
 
 /* ═══ 9-SLICE TEXTFIELD — panel borders ═══ */
