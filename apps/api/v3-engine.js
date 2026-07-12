@@ -373,6 +373,29 @@ function installV3Routes(app) {
     }
   });
 
+  // Store player random for settler bot to read (for Pyth request)
+  const pendingPlayerRandoms = new Map(); // gameId → playerRandom
+
+  // Get player random (settler bot reads this to request Pyth randomness)
+  router.get("/v3/sessions/:gameId/player-random", (req, res) => {
+    const id = Number(req.params.gameId);
+    const playerRandom = pendingPlayerRandoms.get(id);
+    if (!playerRandom) return res.status(404).json({ error: "PLAYER_RANDOM_NOT_FOUND" });
+    res.json({ playerRandom });
+  });
+
+  // Store player random (called by frontend after joinGame on-chain)
+  router.post("/v3/sessions/:gameId/player-random", (req, res) => {
+    const id = Number(req.params.gameId);
+    const { playerRandom } = req.body;
+    if (!playerRandom || !/^0x[0-9a-fA-F]{64}$/.test(playerRandom)) {
+      return res.status(400).json({ error: "INVALID_PLAYER_RANDOM" });
+    }
+    pendingPlayerRandoms.set(id, playerRandom);
+    console.log(`[v3-engine] Player random stored for game ${id}`);
+    res.json({ ok: true });
+  });
+
   // Click a tile — requires session token
   router.post("/v3/sessions/:gameId/click", (req, res) => {
     const { gameId } = req.params;

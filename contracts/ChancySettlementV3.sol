@@ -6,6 +6,16 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
+/// @dev Minimal interface to read verified Pyth randomness from ChancyRandomness.
+interface IChancyRandomness {
+    function getRequest(uint64 seq) external view returns (
+        bytes32 userRandomNumber,
+        bytes32 pythRandomNumber,
+        bool resolved,
+        uint256 requestedAt
+    );
+}
+
 /**
  * Chancy V3 On-Chain Settlement Contract (Audited)
  *
@@ -43,6 +53,7 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
     uint16 public constant HOUSE_FEE_BPS = 500;           // 5% house fee on settlement payouts
 
     IERC20 public immutable usdc;
+    IChancyRandomness public immutable randomness;  // Pyth Entropy bridge
     address public settler;
     address public treasury;                              // house fee recipient
     uint256 public settlerBond;
@@ -105,11 +116,13 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
     }
 
     // ── Constructor ──────────────────────────────────────────────────────────
-    constructor(address usdcAddress, address initialSettler, address treasuryAddress) Ownable(msg.sender) {
+    constructor(address usdcAddress, address randomnessAddress, address initialSettler, address treasuryAddress) Ownable(msg.sender) {
         require(usdcAddress != address(0), "INVALID_USDC");
+        require(randomnessAddress != address(0), "INVALID_RANDOMNESS");
         require(initialSettler != address(0), "INVALID_SETTLER");
         require(treasuryAddress != address(0), "INVALID_TREASURY");
         usdc = IERC20(usdcAddress);
+        randomness = IChancyRandomness(randomnessAddress);
         settler = initialSettler;
         treasury = treasuryAddress;
         emit SettlerUpdated(address(0), initialSettler);
@@ -274,19 +287,41 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
         emit GameJoined(gameId, msg.sender, maxSpend, playerCommitment);
     }
 
+    /// @notice Mapping from gameId to the Pyth randomness sequence number used.
+    mapping(uint256 => uint64) public gameRandomnessSeq;
+
     /**
      * @notice Called by settler after Pyth randomness is resolved.
+     *         The settler provides ONLY a sequence number — the contract reads
+     *         the actual random value from ChancyRandomness (verified Pyth result).
+     *         The settler CANNOT inject a fake random number.
+     *
+     * @param gameId        Game to activate
+     * @param sequenceNumber  Pyth Entropy sequence number (pointer to verified result)
      */
-    function activateGame(uint256 gameId, bytes32 pythRandomNumber) external onlySettler {
+    function activateGame(uint256 gameId, uint64 sequenceNumber) external onlySettler {
         Game storage game = games[gameId];
         require(game.status == GameStatus.Created, "GAME_NOT_CREATED_STATE");
         require(game.player != address(0), "NO_PLAYER_JOINED");
-        require(pythRandomNumber != bytes32(0), "INVALID_RANDOM");
 
-        game.pythRandomNumber = pythRandomNumber;
+        // Read the verified Pyth randomness from ChancyRandomness
+        (bytes32 userRandom, bytes32 pythRandom, bool resolved, ) = randomness.getRequest(sequenceNumber);
+        require(resolved, "RANDOMNESS_NOT_RESOLVED");
+
+        // Verify the player's random was used in this Pyth request
+        // The player committed hash(playerRandom) at joinGame.
+        // The settler must request Pyth with the same playerRandom.
+        require(
+            keccak256(abi.encodePacked(userRandom)) == game.playerCommitment,
+            "PLAYER_RANDOM_MISMATCH"
+        );
+
+        // Store verified random
+        game.pythRandomNumber = pythRandom;
+        gameRandomnessSeq[gameId] = sequenceNumber;
         game.status = GameStatus.Active;
         game.activatedAt = uint64(block.timestamp);
-        emit GameActivated(gameId, pythRandomNumber);
+        emit GameActivated(gameId, pythRandom);
     }
 
     /**

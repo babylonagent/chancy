@@ -73,7 +73,7 @@ import helpButtonIcon from './assets/pixel/icons/help-button.png';
 import notifBellIcon from './assets/pixel/buttons/notif-bell.png';
 
 // ─── V3 CONTRACT CONFIG ─────────────────────────────────────────────────────
-const V3_SETTLEMENT = '0x5b28CB4f812A2f9829B9E8c7f353983390dAbbBa';
+const V3_SETTLEMENT = '0xc12c8c99452Fa18c246eBD047c6D6AccA7e9043c';
 const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'; // USDC native on Base mainnet
 const CHAIN_ID = 8453;
 
@@ -424,7 +424,7 @@ function ApiDocsSheet({ onClose }) {
         <div className="api-section">
           <h3 className="api-h3">Contract Addresses (Base Mainnet)</h3>
           <div className="api-contracts">
-            <div className="api-contract"><span className="api-contract-label">Settlement V3</span><code>0x5b28CB4f812A2f9829B9E8c7f353983390dAbbBa</code></div>
+            <div className="api-contract"><span className="api-contract-label">Settlement V3</span><code>0xc12c8c99452Fa18c246eBD047c6D6AccA7e9043c</code></div>
             <div className="api-contract"><span className="api-contract-label">USDC</span><code>0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913</code></div>
             <div className="api-contract"><span className="api-contract-label">Treasury (5% fee)</span><code>0x1DDc99B09512EbD58f65B91DbaddCd252Bd2e58e</code></div>
           </div>
@@ -869,6 +869,13 @@ export default function App({ wallet, farcaster }) {
       setStatusMsg('Confirm in wallet…');
       const tx = await contract.joinGame(gameId, playerCommitment, maxSpend);
       await tx.wait();
+
+      // Store playerRandom in engine so settler bot can request Pyth randomness
+      try {
+        await postJson(`/v3/sessions/${gameId}/player-random`, { playerRandom });
+      } catch (err) {
+        console.warn('player-random POST failed:', err);
+      }
 
       // Set up round state and switch to round view
       const mode = sess.mode || V3_DIFFICULTY_TO_MODE[Number(sess.difficulty)] || 'Normal';
