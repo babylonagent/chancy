@@ -36,9 +36,9 @@ const BOMBS_TO_GAME_OVER = 3;
 
 // ── Session Structure ───────────────────────────────────────────────────────
 
-function createSession(gameId, host, player, difficulty, prizePot, maxSpend, hostSecret, pythRandom) {
+function createSession(gameId, host, player, difficulty, prizePot, maxSpend, hostSecret, pythRandom, playerCommitment) {
   const mode = difficulty === 0 ? "Easy" : difficulty === 1 ? "Normal" : "Hardcore";
-  const boardSeed = computeBoardSeed(pythRandom, hostSecret, gameId);
+  const boardSeed = computeBoardSeed(pythRandom, hostSecret, gameId, playerCommitment);
   const board = deriveBoardV3(boardSeed, mode);
 
   // Generate a per-session auth token — required for click/quit
@@ -319,7 +319,7 @@ function installV3Routes(app) {
   router.post("/v3/sessions/:gameId/activate", (req, res) => {
     const { gameId } = req.params;
     const id = Number(gameId);
-    const { host, player, difficulty, prizePot, maxSpend, hostSecret, pythRandom } = req.body;
+    const { host, player, difficulty, prizePot, maxSpend, hostSecret, pythRandom, playerCommitment } = req.body;
 
     if (!pythRandom) {
       return res.status(400).json({ error: "MISSING_PYTH_RANDOM" });
@@ -331,7 +331,7 @@ function installV3Routes(app) {
 
     // Try to get hostSecret from request body first, then from pendingSecrets
     let secret = hostSecret;
-    let gameData = { host, player, difficulty, prizePot, maxSpend };
+    let gameData = { host, player, difficulty, prizePot, maxSpend, playerCommitment };
 
     if (!secret && pendingSecrets.has(id)) {
       const pending = pendingSecrets.get(id);
@@ -360,7 +360,8 @@ function installV3Routes(app) {
         BigInt(gameData.prizePot),
         BigInt(gameData.maxSpend),
         secret,
-        pythRandom
+        pythRandom,
+        gameData.playerCommitment
       );
 
       // Clean up pending secret

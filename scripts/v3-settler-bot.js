@@ -73,6 +73,7 @@ async function runSettlerLoop() {
         prizePot: game.prizePot.toString(),
         maxSpend: game.maxSpend.toString(),
         pythRandom: pythRandomNumber,
+        playerCommitment: game.playerCommitment,
       };
 
       console.log(`[settler] Activating engine session for game ${gameId}...`);

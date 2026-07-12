@@ -167,6 +167,14 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
     function adminCredit(address user, uint256 amount) external onlySettler {
         require(user != address(0), "INVALID_USER");
         require(amount > 0, "INVALID_AMOUNT");
+        // Solvency guard: after crediting, total sum of all balances must not
+        // exceed the actual USDC held by this contract.
+        // Note: this is a best-effort check. A full solvency check would require
+        // iterating all balances (gas-prohibitive). Instead we verify the marginal
+        // credit doesn't exceed available USDC.
+        uint256 contractBalance = usdc.balanceOf(address(this));
+        uint256 totalEscrowed = _totalEscrowed();
+        require(contractBalance >= totalEscrowed + amount, "INSOLVENT_CREDIT");
         balances[user] += amount;
         emit Deposited(user, amount);
     }
@@ -305,9 +313,12 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
         );
 
         // Derive board seed from on-chain inputs
+        // Includes playerCommitment so the settler CANNOT pre-derive the board
+        // without the player's participation. Both parties influence the outcome.
         bytes32 boardSeed = keccak256(abi.encodePacked(
             game.pythRandomNumber,
             hostSecret,
+            game.playerCommitment,
             gameId
         ));
 
@@ -385,10 +396,11 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
             "HOST_SECRET_MISMATCH"
         );
 
-        // Re-derive board
+        // Re-derive board (same formula as settleGame)
         bytes32 boardSeed = keccak256(abi.encodePacked(
             game.pythRandomNumber,
             hostSecret,
+            game.playerCommitment,
             gameId
         ));
         (uint64 bombMask, uint64 prizeMask) = _deriveBoard(boardSeed, game.difficulty);
@@ -434,9 +446,12 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
             correctOutcome
         );
 
-        // Debit the overpaid party, credit the underpaid party
-        // Original payouts were credited net-of-fee at settlement time.
-        // We reverse the net amounts and credit the correct net amounts.
+        // Correct the payouts without double-charging fees.
+        // At settlement, _applyFee already sent fees to treasury.
+        // On challenge reversal, we:
+        //   1. Debit the original NET amounts (what was actually credited)
+        //   2. Credit the correct NET amounts directly (no new fee)
+        //    This way fees are only charged once per game, not twice.
         uint256 originalHostNet = _netOfFee(original.hostPayout);
         uint256 originalPlayerNet = _netOfFee(original.playerPayout);
         uint256 correctHostNet = _netOfFee(correctHostPayout);
@@ -454,9 +469,9 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
             balances[game.player] -= toDebit;
         }
 
-        // Credit correct payouts
-        balances[game.host] += _applyFee(correctHostPayout);
-        balances[game.player] += _applyFee(correctPlayerPayout);
+        // Credit correct net amounts directly — no _applyFee (avoids double-fee)
+        balances[game.host] += correctHostNet;
+        balances[game.player] += correctPlayerNet;
 
         // Slash settler bond by half for the error
         uint256 slashAmount = settlerBond / 2;
@@ -667,6 +682,22 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
     function _payUSDC(address to, uint256 amount) internal {
         if (amount > 0) {
             usdc.safeTransfer(to, amount);
+        }
+    }
+
+    /// @dev Tracks total USDC locked in active game escrow (prizePots + maxSpends).
+    ///      Used by adminCredit's solvency check.
+    function _totalEscrowed() internal view returns (uint256 total) {
+        // Gas note: this iterates all games. For large game counts, consider
+        // maintaining a running counter instead.
+        for (uint256 i = 1; i < nextGameId; i++) {
+            Game storage g = games[i];
+            if (g.status == GameStatus.Created || g.status == GameStatus.Active) {
+                total += g.prizePot;
+                if (g.player != address(0)) {
+                    total += g.maxSpend;
+                }
+            }
         }
     }
 

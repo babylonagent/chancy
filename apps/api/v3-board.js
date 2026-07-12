@@ -101,7 +101,14 @@ function deriveBoardV3(boardSeed, mode) {
  * @param {string|number|bigint} gameId - uint256
  * @returns {string} bytes32 hex
  */
-function computeBoardSeed(pythRandomNumber, hostSecret, gameId) {
+function computeBoardSeed(pythRandomNumber, hostSecret, gameId, playerCommitment) {
+  if (playerCommitment) {
+    return keccak256(encodePacked(
+      ["bytes32", "bytes32", "bytes32", "uint256"],
+      [pythRandomNumber, hostSecret, playerCommitment, BigInt(gameId)]
+    ));
+  }
+  // Backward-compatible fallback (no playerCommitment provided)
   return keccak256(encodePacked(
     ["bytes32", "bytes32", "uint256"],
     [pythRandomNumber, hostSecret, BigInt(gameId)]
