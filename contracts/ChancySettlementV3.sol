@@ -484,7 +484,7 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
             "NOT_REFUNDABLE"
         );
         require(
-            block.timestamp > game.createdAt + REFUND_TIMEOUT,
+            block.timestamp > (game.status == GameStatus.Active ? game.activatedAt : game.createdAt) + REFUND_TIMEOUT,
             "REFUND_TIMEOUT_NOT_REACHED"
         );
 

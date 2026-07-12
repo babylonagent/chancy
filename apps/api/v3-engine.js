@@ -35,15 +35,19 @@ const BOARD_SIZE = 36;
 const BOMBS_TO_GAME_OVER = 3;
 
 // ── Session Structure ───────────────────────────────────────────────────────
+
 function createSession(gameId, host, player, difficulty, prizePot, maxSpend, hostSecret, pythRandom) {
   const mode = difficulty === 0 ? "Easy" : difficulty === 1 ? "Normal" : "Hardcore";
   const boardSeed = computeBoardSeed(pythRandom, hostSecret, gameId);
   const board = deriveBoardV3(boardSeed, mode);
 
+  // Generate a per-session auth token — required for click/quit
+  const sessionToken = crypto.randomBytes(32).toString("hex");
+
   const session = {
     gameId,
     host,
-    player,
+    player: player.toLowerCase(),
     difficulty: mode,
     prizePot: BigInt(prizePot),
     maxSpend: BigInt(maxSpend),
@@ -51,6 +55,7 @@ function createSession(gameId, host, player, difficulty, prizePot, maxSpend, hos
     pythRandom,
     boardSeed,
     board,
+    sessionToken,
     clicks: [],
     bombsHit: 0,
     prizesFound: 0,
@@ -64,7 +69,6 @@ function createSession(gameId, host, player, difficulty, prizePot, maxSpend, hos
 
   sessions.set(gameId, session);
   console.log(`[v3-engine] Session ${gameId} activated: ${mode} mode, pot=${prizePot}, maxSpend=${maxSpend}`);
-  console.log(`[v3-engine] Board: ${board.bombPositions.length} bombs, ${board.prizePositions.length} prizes`);
   return session;
 }
 
@@ -249,6 +253,7 @@ function getSessionState(gameId) {
     bombsHit: session.bombsHit,
     prizesFound: session.prizesFound,
     spent: session.spent.toString(),
+    sessionToken: session.sessionToken,
     // Don't expose bomb/prize positions to frontend (only to settler bot)
     bombPositions: session.status === "finished" ? session.board.bombPositions : undefined,
     prizePositions: session.status === "finished" ? session.board.prizePositions : undefined,
@@ -367,13 +372,20 @@ function installV3Routes(app) {
     }
   });
 
-  // Click a tile
+  // Click a tile — requires session token
   router.post("/v3/sessions/:gameId/click", (req, res) => {
     const { gameId } = req.params;
-    const { player, tile } = req.body;
+    const { player, tile, token } = req.body;
 
     if (!player || tile === undefined) {
       return res.status(400).json({ error: "MISSING_FIELDS" });
+    }
+
+    // Validate session token
+    const session = sessions.get(Number(gameId));
+    if (!session) return res.status(404).json({ error: "SESSION_NOT_FOUND" });
+    if (!token || token !== session.sessionToken) {
+      return res.status(403).json({ error: "INVALID_SESSION_TOKEN" });
     }
 
     try {
@@ -387,12 +399,19 @@ function installV3Routes(app) {
     }
   });
 
-  // Quit session
+  // Quit session — requires session token
   router.post("/v3/sessions/:gameId/quit", (req, res) => {
     const { gameId } = req.params;
-    const { player } = req.body;
+    const { player, token } = req.body;
 
     if (!player) return res.status(400).json({ error: "MISSING_FIELDS" });
+
+    // Validate session token
+    const session = sessions.get(Number(gameId));
+    if (!session) return res.status(404).json({ error: "SESSION_NOT_FOUND" });
+    if (!token || token !== session.sessionToken) {
+      return res.status(403).json({ error: "INVALID_SESSION_TOKEN" });
+    }
 
     try {
       const result = quitSession(Number(gameId), player);

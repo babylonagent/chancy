@@ -426,7 +426,7 @@ function ApiDocsSheet({ onClose }) {
           <div className="api-contracts">
             <div className="api-contract"><span className="api-contract-label">Settlement V3</span><code>0x08ddD41f2482fB0A7c135632259cEB8796A08e89</code></div>
             <div className="api-contract"><span className="api-contract-label">USDC</span><code>0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913</code></div>
-            <div className="api-contract"><span className="api-contract-label">Treasury (5% fee)</span><code>0x51a17E6DaE3d0D04174734b906BB201Cc79a20ff</code></div>
+            <div className="api-contract"><span className="api-contract-label">Treasury (5% fee)</span><code>0x1DDc99B09512EbD58f65B91DbaddCd252Bd2e58e</code></div>
           </div>
         </div>
 
@@ -468,7 +468,7 @@ export default function App({ wallet, farcaster }) {
   const [showNotifs, setShowNotifs] = useState(false);
 
   // Deposit
-  const [vaultAddress, setVaultAddress] = useState('');
+  const [vaultAddress] = useState(V3_SETTLEMENT);
   const [copied, setCopied] = useState(false);
   const [pollingDeposit, setPollingDeposit] = useState(false);
   const [preDepositBalance, setPreDepositBalance] = useState('0');
@@ -486,6 +486,7 @@ export default function App({ wallet, farcaster }) {
 
   // Round
   const [session, setSession] = useState(null);
+  const [sessionToken, setSessionToken] = useState(null);
   const [revealed, setRevealed] = useState({});
   const [run, setRun] = useState({ bombsHit: 0, prizesFound: 0, status: 'idle', spentTotal: '0', prizeEarned: '0', nextTileCost: '0' });
   const [proof, setProof] = useState(null);
@@ -689,7 +690,7 @@ export default function App({ wallet, farcaster }) {
         sfx.win();
         const gained = (BigInt(bal) - BigInt(preDepositBalance)).toString();
         setStatusMsg(`+${dollars(gained)} received!`);
-        try { await postJson(`/v3/notifications/${addr}`, { type: 'deposit', title: 'Deposit confirmed', body: 'USDC deposited to your balance', amount: gained }); } catch {}
+        // Deposit notification handled by engine indexer — skip API POST
         refreshNotifications();
         setTimeout(() => { setView('lobby'); setStatusMsg(''); }, 2000);
       }
@@ -722,15 +723,26 @@ export default function App({ wallet, farcaster }) {
   async function openWalletSend() {
     if (!isConnected) { openModal(); return; }
     try {
-      const provider = wallet.walletProvider;
-      if (!provider) { await copyVaultAddress(); setPollingDeposit(true); return; }
-      await provider.request({
-        method: 'eth_sendTransaction',
-        params: [{ from: addr, to: vaultAddress, value: '0x0' }],
-      });
+      const ethers = await import('ethers');
+      const browserProvider = await getEthersProvider(wallet.walletProvider);
+      if (!browserProvider) { await copyVaultAddress(); setPollingDeposit(true); return; }
+      const signer = await browserProvider.getSigner();
+      const usdc = new ethers.Contract(USDC_ADDRESS, ['function transfer(address to, uint256 amount) returns (bool)'], signer);
+      // Prompt user for amount
+      const amountStr = window.prompt('Enter USDC amount to deposit (e.g. 5):');
+      if (!amountStr) return;
+      const amount = ethers.parseUnits(amountStr, 6).toString();
+      setStatusMsg('Sending USDC...');
+      const tx = await usdc.transfer(V3_SETTLEMENT, amount);
+      await tx.wait();
       setPollingDeposit(true);
+      setStatusMsg('Deposit sent — waiting for confirmation...');
     } catch (err) {
-      if (err.code !== 4001) { await copyVaultAddress(); setStatusMsg('Address copied — send from your wallet'); setPollingDeposit(true); }
+      if (err.code !== 4001 && err.code !== 'ACTION_REJECTED') {
+        await copyVaultAddress();
+        setStatusMsg('Address copied — send USDC from your wallet');
+        setPollingDeposit(true);
+      }
     }
   }
 
@@ -874,6 +886,7 @@ export default function App({ wallet, farcaster }) {
           try {
             const state = await getJson(`/v3/sessions/${gameId}/state`);
             if (state && state.status === 'active') {
+              setSessionToken(state.sessionToken);
               setRun((prev) => ({ ...prev, status: 'active' }));
               setStatusMsg('');
               return;
@@ -906,7 +919,7 @@ export default function App({ wallet, farcaster }) {
     try {
       // V3 tiles are 0-indexed in the engine; TILES is 1-based. Map to 0-based.
       const tileIndex0 = tile - 1;
-      const result = await postJson(`/v3/sessions/${session.sessionId}/click`, { player: addr, tile: tileIndex0 });
+      const result = await postJson(`/v3/sessions/${session.sessionId}/click`, { player: addr, tile: tileIndex0, token: sessionToken });
       // V3 result shape: { tile, type: 'bomb'|'prize'|'empty', bombsHit, prizesFound, totalPrizes, spent, gameOver, outcome }
       const tileKey = tile; // keep 1-based for display
       const tileState = result.type === 'bomb' ? 'bomb' : result.type === 'prize' ? 'prize' : 'empty';
@@ -951,7 +964,7 @@ export default function App({ wallet, farcaster }) {
     setBusy(true);
     try {
       if (run.status === 'active') {
-        const final = await postJson(`/v3/sessions/${session.sessionId}/quit`, { player: addr });
+        const final = await postJson(`/v3/sessions/${session.sessionId}/quit`, { player: addr, token: sessionToken });
         if (final.proof) setProof(final.proof);
         // V3 quit returns { outcome: 'quit', spent }. Reveal full board by polling state.
         try {
@@ -964,7 +977,7 @@ export default function App({ wallet, farcaster }) {
           }
         } catch {}
       }
-      setSession(null);
+      setSession(null); setSessionToken(null);
       setRun({ bombsHit: 0, prizesFound: 0, status: 'idle', spentTotal: '0', prizeEarned: '0', nextTileCost: '0' });
       setProof(null);
       setShowProof(false);
@@ -976,7 +989,7 @@ export default function App({ wallet, farcaster }) {
       // Even on error, refresh — on-chain state is the source of truth
       await refreshCredits(addr);
       await refreshSessions();
-      setSession(null);
+      setSession(null); setSessionToken(null);
       setRun({ bombsHit: 0, prizesFound: 0, status: 'idle', spentTotal: '0', prizeEarned: '0', nextTileCost: '0' });
       setProof(null);
       setShowProof(false);
@@ -1006,7 +1019,7 @@ export default function App({ wallet, farcaster }) {
 
   function goHome() {
     if (!isPlaying) {
-      setSession(null); setStatusMsg(''); setError('');
+      setSession(null); setSessionToken(null); setStatusMsg(''); setError('');
       setView('lobby');
     }
   }

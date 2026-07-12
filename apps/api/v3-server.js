@@ -30,6 +30,9 @@ global._chancyNotifications = notifStore;
 const app = express();
 
 // ── Middleware ──────────────────────────────────────────────────────────────
+// Trust nginx proxy so req.ip is the real client IP (not 127.0.0.1)
+app.set('trust proxy', 1);
+
 app.use(express.json({ limit: "1mb" }));
 app.use(cors({
   origin: true,
