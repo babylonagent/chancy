@@ -290,6 +290,8 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
 
     /// @notice Mapping from gameId to the Pyth randomness sequence number used.
     mapping(uint256 => uint64) public gameRandomnessSeq;
+    /// @notice Tracks which sequence numbers have been used to prevent reuse.
+    mapping(uint64 => bool) public usedSequences;
 
     /**
      * @notice Called by settler after Pyth randomness is resolved.
@@ -304,6 +306,7 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
         Game storage game = games[gameId];
         require(game.status == GameStatus.Created, "GAME_NOT_CREATED_STATE");
         require(game.player != address(0), "NO_PLAYER_JOINED");
+        require(!usedSequences[sequenceNumber], "SEQUENCE_ALREADY_USED");
 
         // Read the verified Pyth randomness from ChancyRandomness
         (bytes32 userRandom, bytes32 pythRandom, bool resolved, ) = randomness.getRequest(sequenceNumber);
@@ -320,6 +323,7 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
         // Store verified random
         game.pythRandomNumber = pythRandom;
         gameRandomnessSeq[gameId] = sequenceNumber;
+        usedSequences[sequenceNumber] = true;
         game.status = GameStatus.Active;
         game.activatedAt = uint64(block.timestamp);
         emit GameActivated(gameId, pythRandom);
@@ -337,6 +341,7 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
     ) external onlySettler nonReentrant {
         Game storage game = games[gameId];
         require(game.status == GameStatus.Active, "GAME_NOT_ACTIVE");
+        require(settlerBondDeposited, "BOND_NOT_DEPOSITED");
         require(
             block.timestamp <= game.activatedAt + REFUND_TIMEOUT,
             "REFUND_WINDOW_PASSED"
@@ -495,6 +500,10 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
         uint256 correctPlayerNet = _netOfFee(correctPlayerPayout);
 
         // Reverse original (debit what was credited)
+        // Note: if a party already withdrew, their balance may be < the debit amount.
+        // In that case we debit what we can. The settler's half-bond slash compensates
+        // the challenger. The contract itself stays solvent because settlement payouts
+        // are internal balance credits — USDC stays in the contract until withdrawn.
         if (originalHostNet > 0) {
             uint256 toDebit = originalHostNet <= balances[game.host]
                 ? originalHostNet : balances[game.host];

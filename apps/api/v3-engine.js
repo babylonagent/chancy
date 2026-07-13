@@ -40,6 +40,9 @@ const sessions = new Map();
 // GameActivated fires and supplies the pythRandom.
 const pendingSecrets = new Map();
 
+// Player randoms stored after joinGame, read by settler bot for Pyth request
+const pendingPlayerRandoms = new Map(); // gameId → playerRandom
+
 // ── Constants ────────────────────────────────────────────────────────────────
 const BOARD_SIZE = 36;
 const BOMBS_TO_GAME_OVER = 3;
@@ -103,6 +106,40 @@ function processClick(gameId, player, tileIndex) {
 
   // Calculate cost
   const cost = revealCostAt(session.prizePot, session.difficulty, session.clicks.length - 1);
+  
+  // Budget enforcement: stop the player from clicking beyond maxSpend
+  if (session.spent + cost > session.maxSpend) {
+    // Undo the click — this tile was never actually revealed
+    session.clicks.pop();
+    session.clickedMask &= ~bit;
+
+    // Auto-quit: player ran out of budget
+    session.status = "finished";
+    session.outcome = "quit";
+    recordNotif(session.player, {
+      type: "budget_exhausted",
+      title: "Budget exhausted",
+      body: `Ran out of maxSpend on ${session.difficulty} mode after ${session.clicks.length} tiles`,
+      amount: session.spent.toString(),
+      gameId: session.gameId,
+    });
+    recordNotif(session.host, {
+      type: "pot_earned",
+      title: "Player ran out of budget",
+      body: `Player exhausted maxSpend on game #${session.gameId}`,
+      amount: session.spent.toString(),
+      gameId: session.gameId,
+    });
+    return {
+      tile: tileIndex,
+      type: "budget_exhausted",
+      spent: session.spent.toString(),
+      gameOver: true,
+      outcome: "quit",
+      proof: buildProof(session),
+    };
+  }
+
   session.spent += cost;
 
   // Check if bomb
@@ -378,9 +415,6 @@ function installV3Routes(app) {
     }
   });
 
-  // Store player random for settler bot to read (for Pyth request)
-  const pendingPlayerRandoms = new Map(); // gameId → playerRandom
-
   // Get player random (settler bot reads this to request Pyth randomness)
   router.get("/v3/sessions/:gameId/player-random", (req, res) => {
     const id = Number(req.params.gameId);
@@ -531,4 +565,5 @@ module.exports = {
   getSettlementData,
   sessions,
   pendingSecrets,
+  pendingPlayerRandoms,
 };

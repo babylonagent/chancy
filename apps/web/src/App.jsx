@@ -73,7 +73,7 @@ import helpButtonIcon from './assets/pixel/icons/help-button.png';
 import notifBellIcon from './assets/pixel/buttons/notif-bell.png';
 
 // ─── V3 CONTRACT CONFIG ─────────────────────────────────────────────────────
-const V3_SETTLEMENT = '0x7BE9C6E07F383dEDDB332b975F996D9B1F919661';
+const V3_SETTLEMENT = '0x3A202177b415b04c8adbfbC1a79f22b36a0C7102';
 const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'; // USDC native on Base mainnet
 const CHAIN_ID = 8453;
 
@@ -424,7 +424,7 @@ function ApiDocsSheet({ onClose }) {
         <div className="api-section">
           <h3 className="api-h3">Contract Addresses (Base Mainnet)</h3>
           <div className="api-contracts">
-            <div className="api-contract"><span className="api-contract-label">Settlement V3</span><code>0x7BE9C6E07F383dEDDB332b975F996D9B1F919661</code></div>
+            <div className="api-contract"><span className="api-contract-label">Settlement V3</span><code>0x3A202177b415b04c8adbfbC1a79f22b36a0C7102</code></div>
             <div className="api-contract"><span className="api-contract-label">USDC</span><code>0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913</code></div>
             <div className="api-contract"><span className="api-contract-label">Treasury (5% fee)</span><code>0x1DDc99B09512EbD58f65B91DbaddCd252Bd2e58e</code></div>
           </div>
@@ -952,6 +952,10 @@ export default function App({ wallet, farcaster }) {
         } else if (result.outcome === 'loss') {
           setRun({ bombsHit: newBombs, prizesFound: newPrizes, status: 'lost', spentTotal: newSpent, prizeEarned: '0', nextTileCost: '0' });
           setStatusMsg('Game over — 3 bombs');
+          sfx.bomb();
+        } else if (result.outcome === 'quit' || result.type === 'budget_exhausted') {
+          setRun({ bombsHit: newBombs, prizesFound: newPrizes, status: 'lost', spentTotal: newSpent, prizeEarned: '0', nextTileCost: '0' });
+          setStatusMsg('Budget exhausted — game over');
           sfx.bomb();
         }
         await refreshCredits(addr);
