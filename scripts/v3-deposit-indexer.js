@@ -74,8 +74,8 @@ async function main() {
       const current = await provider.getBlockNumber();
       if (current <= lastBlock) return;
 
-      const events = await provider.getLogs({ ...filter, fromBlock: lastBlock + 1, toBlock: current });
-      lastBlock = current;
+      const events = await provider.getLogs({ ...filter, fromBlock: lastBlock + 1, toBlock: current - 3 });
+      lastBlock = current - 3 > lastBlock ? current - 3 : lastBlock;
 
       for (const log of events) {
         const txHash = log.transactionHash + '-' + log.logIndex;

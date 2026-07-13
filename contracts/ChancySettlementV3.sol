@@ -94,6 +94,7 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
     mapping(uint256 => Settlement) public settlements;
     mapping(address => uint256) public balances;  // on-chain USDC credit balance
     uint256 public nextGameId = 1;
+    uint256 public totalEscrowed;  // running total of locked USDC (games Created/Active)
 
     // ── Events ───────────────────────────────────────────────────────────────
     event GameCreated(uint256 indexed gameId, address indexed host, Difficulty difficulty, uint256 prizePot, bytes32 hostCommitment);
@@ -180,14 +181,9 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
     function adminCredit(address user, uint256 amount) external onlySettler {
         require(user != address(0), "INVALID_USER");
         require(amount > 0, "INVALID_AMOUNT");
-        // Solvency guard: after crediting, total sum of all balances must not
-        // exceed the actual USDC held by this contract.
-        // Note: this is a best-effort check. A full solvency check would require
-        // iterating all balances (gas-prohibitive). Instead we verify the marginal
-        // credit doesn't exceed available USDC.
+        // Solvency guard: total balances + escrowed funds must not exceed USDC held
         uint256 contractBalance = usdc.balanceOf(address(this));
-        uint256 totalEscrowed = _totalEscrowed();
-        require(contractBalance >= totalEscrowed + amount, "INSOLVENT_CREDIT");
+        require(contractBalance - totalEscrowed >= amount, "INSOLVENT_CREDIT");
         balances[user] += amount;
         emit Deposited(user, amount);
     }
@@ -241,6 +237,7 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
         require(balances[msg.sender] >= prizePot, "INSUFFICIENT_BALANCE");
 
         balances[msg.sender] -= prizePot;
+        totalEscrowed += prizePot;
 
         gameId = nextGameId++;
         games[gameId] = Game({
@@ -277,6 +274,9 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
         require(msg.sender != game.host, "HOST_CANNOT_PLAY");
         require(playerCommitment != bytes32(0), "INVALID_COMMITMENT");
         require(maxSpend > 0, "INVALID_MAX_SPEND");
+        // Player must be able to afford at least one tile reveal
+        uint256 firstTileCost = _revealCostAt(game.prizePot, game.difficulty, 0);
+        require(maxSpend >= firstTileCost, "MAX_SPEND_TOO_LOW");
         require(balances[msg.sender] >= maxSpend, "INSUFFICIENT_BALANCE");
 
         game.player = msg.sender;
@@ -284,6 +284,7 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
         game.maxSpend = maxSpend;
 
         balances[msg.sender] -= maxSpend;
+        totalEscrowed += maxSpend;
         emit GameJoined(gameId, msg.sender, maxSpend, playerCommitment);
     }
 
@@ -383,6 +384,7 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
         // Set state before transfers (checks-effects-interactions)
         game.status = GameStatus.Settled;
         game.settledAt = uint64(block.timestamp);
+        totalEscrowed -= (game.prizePot + game.maxSpend);
 
         settlements[gameId] = Settlement({
             hostSecret: hostSecret,
@@ -542,6 +544,7 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
         uint256 playerRefund = game.maxSpend;
 
         game.status = GameStatus.Refunded;
+        totalEscrowed -= (game.prizePot + (game.player != address(0) ? game.maxSpend : 0));
 
         // Full refund, no fee — settler failed to do their job
         balances[game.host] += hostRefund;
@@ -717,22 +720,6 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
     function _payUSDC(address to, uint256 amount) internal {
         if (amount > 0) {
             usdc.safeTransfer(to, amount);
-        }
-    }
-
-    /// @dev Tracks total USDC locked in active game escrow (prizePots + maxSpends).
-    ///      Used by adminCredit's solvency check.
-    function _totalEscrowed() internal view returns (uint256 total) {
-        // Gas note: this iterates all games. For large game counts, consider
-        // maintaining a running counter instead.
-        for (uint256 i = 1; i < nextGameId; i++) {
-            Game storage g = games[i];
-            if (g.status == GameStatus.Created || g.status == GameStatus.Active) {
-                total += g.prizePot;
-                if (g.player != address(0)) {
-                    total += g.maxSpend;
-                }
-            }
         }
     }
 

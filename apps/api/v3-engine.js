@@ -17,6 +17,16 @@ const crypto = require("crypto");
 const { keccak256, encodePacked, bytesToHex, hexToBytes } = require("viem");
 const { deriveBoardV3, computeBoardSeed, computeHostCommitment, revealCostAt, modeConfig } = require("./v3-board");
 
+// ── Notifications helper ────────────────────────────────────────────────────
+function recordNotif(player, data) {
+  try {
+    const store = global._chancyNotifications;
+    if (store) store.recordNotification({ player, ...data });
+  } catch (e) {
+    console.error("[v3-engine] notif error:", e.message);
+  }
+}
+
 // ── Session Storage ─────────────────────────────────────────────────────────
 // In-memory only. No SQLite. No persistence needed — if the engine crashes,
 // the contract still has the escrowed funds and the 24h timeout refunds everyone.
@@ -68,6 +78,10 @@ function createSession(gameId, host, player, difficulty, prizePot, maxSpend, hos
   };
 
   sessions.set(gameId, session);
+  // Clean up: remove from pendingSecrets (hostSecret now lives only in session)
+  pendingSecrets.delete(gameId);
+  // Clean up: remove from pendingPlayerRandoms (settler already used it for Pyth)
+  pendingPlayerRandoms.delete(gameId);
   console.log(`[v3-engine] Session ${gameId} activated: ${mode} mode, pot=${prizePot}, maxSpend=${maxSpend}`);
   return session;
 }
@@ -87,17 +101,7 @@ function processClick(gameId, player, tileIndex) {
   session.clicks.push(tileIndex);
   session.clickedMask |= bit;
 
-  // ── Notifications helper ────────────────────────────────────────────────────
-function recordNotif(player, data) {
-  try {
-    const store = global._chancyNotifications;
-    if (store) store.recordNotification({ player, ...data });
-  } catch (e) {
-    console.error("[v3-engine] notif error:", e.message);
-  }
-}
-
-// Calculate cost
+  // Calculate cost
   const cost = revealCostAt(session.prizePot, session.difficulty, session.clicks.length - 1);
   session.spent += cost;
 
@@ -253,7 +257,8 @@ function getSessionState(gameId) {
     bombsHit: session.bombsHit,
     prizesFound: session.prizesFound,
     spent: session.spent.toString(),
-    sessionToken: session.sessionToken,
+    // Don't expose sessionToken here — it's returned only via the
+    // /token endpoint which requires the player's address match.
     // Don't expose bomb/prize positions to frontend (only to settler bot)
     bombPositions: session.status === "finished" ? session.board.bombPositions : undefined,
     prizePositions: session.status === "finished" ? session.board.prizePositions : undefined,
@@ -454,6 +459,18 @@ function installV3Routes(app) {
     res.json(state);
   });
 
+  // Get session token — only the player can get their own token
+  router.get("/v3/sessions/:gameId/token", (req, res) => {
+    const { gameId } = req.params;
+    const player = (req.query.player || "").toLowerCase();
+    const session = sessions.get(Number(gameId));
+    if (!session) return res.status(404).json({ error: "SESSION_NOT_FOUND" });
+    if (!player || player !== session.player.toLowerCase()) {
+      return res.status(403).json({ error: "NOT_YOUR_SESSION" });
+    }
+    res.json({ sessionToken: session.sessionToken });
+  });
+
   // Get settlement data (settler bot calls this)
   router.get("/v3/sessions/:gameId/settlement", (req, res) => {
     const { gameId } = req.params;
@@ -483,6 +500,7 @@ function installV3Routes(app) {
   // List finished sessions (for settler bot to poll)
   router.get("/v3/sessions/finished", (req, res) => {
     const list = [];
+    const toDelete = [];
     for (const [id, s] of sessions) {
       if (s.status === "finished") {
         list.push({
@@ -491,7 +509,12 @@ function installV3Routes(app) {
           spent: s.spent.toString(),
         });
       }
+      // GC: delete finished sessions older than 1 hour
+      if (s.status === "finished" && Date.now() - s.activatedAt > 3600000) {
+        toDelete.push(id);
+      }
     }
+    for (const id of toDelete) sessions.delete(id);
     res.json({ sessions: list });
   });
 
