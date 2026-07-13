@@ -199,8 +199,8 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Withdraw your USDC balance. 5% fee auto-sent to treasury.
-     *         Fees are sent immediately — no separate withdrawHouseFees needed.
+     * @notice Withdraw your USDC balance. No fee — house already takes 5%
+     *         at settlement time via _applyFee.
      */
     function withdraw(uint256 amount) external nonReentrant {
         require(amount > 0, "INVALID_AMOUNT");
@@ -208,12 +208,7 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
 
         balances[msg.sender] -= amount;
 
-        // 5% house fee — sent directly to treasury, not double-counted
-        uint256 fee = (amount * HOUSE_FEE_BPS) / BPS_DENOMINATOR;
-        uint256 net = amount - fee;
-
-        _payUSDC(treasury, fee);
-        _payUSDC(msg.sender, net);
+        _payUSDC(msg.sender, amount);
 
         emit Withdrawn(msg.sender, amount);
     }
