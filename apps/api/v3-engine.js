@@ -103,6 +103,7 @@ function processClick(gameId, player, tileIndex) {
   // Record click
   session.clicks.push(tileIndex);
   session.clickedMask |= bit;
+  session.lastClickAt = Date.now();
 
   // Calculate cost
   const cost = revealCostAt(session.prizePot, session.difficulty, session.clicks.length - 1);
@@ -113,12 +114,12 @@ function processClick(gameId, player, tileIndex) {
     session.clicks.pop();
     session.clickedMask &= ~bit;
 
-    // Auto-quit: player ran out of budget
+    // Budget exhausted = game over as loss (Option A: no quit)
     session.status = "finished";
-    session.outcome = "quit";
+    session.outcome = "loss";
     recordNotif(session.player, {
       type: "budget_exhausted",
-      title: "Budget exhausted",
+      title: "Budget exhausted — game over",
       body: `Ran out of maxSpend on ${session.difficulty} mode after ${session.clicks.length} tiles`,
       amount: session.spent.toString(),
       gameId: session.gameId,
@@ -135,7 +136,7 @@ function processClick(gameId, player, tileIndex) {
       type: "budget_exhausted",
       spent: session.spent.toString(),
       gameOver: true,
-      outcome: "quit",
+      outcome: "loss",
       proof: buildProof(session),
     };
   }
@@ -235,28 +236,9 @@ function processClick(gameId, player, tileIndex) {
 }
 
 function quitSession(gameId, player) {
-  const session = sessions.get(gameId);
-  if (!session) throw new Error("SESSION_NOT_FOUND");
-  if (session.player.toLowerCase() !== player.toLowerCase()) throw new Error("NOT_YOUR_SESSION");
-  if (session.status !== "active") throw new Error("SESSION_NOT_ACTIVE");
-
-  session.status = "finished";
-  session.outcome = "quit";
-  recordNotif(session.player, {
-    type: "game_quit",
-    title: "Quit game",
-    body: `Spent ${session.spent.toString()} on ${session.difficulty} mode before quitting`,
-    amount: session.spent.toString(),
-    gameId: session.gameId,
-  });
-  recordNotif(session.host, {
-    type: "pot_earned",
-    title: "Player quit your board",
-    body: `Player spent ${session.spent.toString()} on game #${session.gameId}`,
-    amount: session.spent.toString(),
-    gameId: session.gameId,
-  });
-  return { outcome: "quit", spent: session.spent.toString(), proof: buildProof(session) };
+  // DISABLED — Option A: no voluntary quit. Player must win or lose.
+  // Kept for API stability but always returns error.
+  throw new Error("QUIT_DISABLED");
 }
 
 // ── Provably Fair Proof ────────────────────────────────────────────────────
@@ -535,7 +517,18 @@ function installV3Routes(app) {
   router.get("/v3/sessions/finished", (req, res) => {
     const list = [];
     const toDelete = [];
+    const now = Date.now();
     for (const [id, s] of sessions) {
+      // Auto-finish stale sessions: 10 min inactivity = loss (Option A)
+      if (s.status === "active" && now - s.activatedAt > 600000) {
+        // Check if any clicks happened — use lastClickAt if available
+        const lastActivity = s.lastClickAt || s.activatedAt;
+        if (now - lastActivity > 600000) {
+          s.status = "finished";
+          s.outcome = "loss";
+          console.log(`[v3-engine] Auto-finished stale session ${id} (10 min inactivity)`);
+        }
+      }
       if (s.status === "finished") {
         list.push({
           gameId: s.gameId,
@@ -544,7 +537,7 @@ function installV3Routes(app) {
         });
       }
       // GC: delete finished sessions older than 1 hour
-      if (s.status === "finished" && Date.now() - s.activatedAt > 3600000) {
+      if (s.status === "finished" && now - s.activatedAt > 3600000) {
         toDelete.push(id);
       }
     }

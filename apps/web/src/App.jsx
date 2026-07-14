@@ -73,7 +73,7 @@ import helpButtonIcon from './assets/pixel/icons/help-button.png';
 import notifBellIcon from './assets/pixel/buttons/notif-bell.png';
 
 // ─── V3 CONTRACT CONFIG ─────────────────────────────────────────────────────
-const V3_SETTLEMENT = '0x16Afabb12BFDF5f18C4454F0a73814b822F87BC2';
+const V3_SETTLEMENT = '0xA22C4F76EF915E33916Ef39516a95E11Ae21C172';
 const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'; // USDC native on Base mainnet
 const CHAIN_ID = 8453;
 
@@ -258,7 +258,7 @@ async function computeBodyHash(body) {
 function friendlyError(err) {
   const msg = err?.message || String(err);
   const map = {
-    INSUFFICIENT_CREDITS_FOR_REVEAL: 'Not enough credits for the next tile. Add more credits or quit.',
+    INSUFFICIENT_CREDITS_FOR_REVEAL: 'Not enough credits for the next tile. Game over.',
     INSUFFICIENT_CREDITS: 'Not enough credits to do that.',
     SESSION_NOT_FOUND: 'This game no longer exists.',
     SESSION_NOT_OPEN: 'This game is already occupied or closed.',
@@ -376,7 +376,7 @@ function RulesSheet({ onClose }) {
         </div>
         <div className="rule-item pixel-frame">
           <div className="rule-icon red">✺</div>
-          <div className="rule-text"><strong>Dodge bombs</strong><span>Three bombs ends your run. Quit or bomb out and you lose everything. Sweep all prizes to win the pot.</span></div>
+          <div className="rule-text"><strong>Dodge bombs</strong><span>Three bombs ends your run. Bomb out and you lose everything. Sweep all prizes to win the pot.</span></div>
         </div>
         <button className="btn btn-primary" data-sfx-back onClick={onClose} style={{ marginTop: 16, margin: '16px auto 0', display: 'flex' }}>Got it</button>
       </div>
@@ -405,8 +405,8 @@ function ApiDocsSheet({ onClose }) {
             <li>Indexer detects transfer &rarr; calls <code>adminCredit(user, amount)</code> on-chain</li>
             <li>Host calls <code>createGame(difficulty, prizePot, hostCommitment)</code> — pulls from balance</li>
             <li>Player calls <code>joinGame(gameId, playerCommitment, maxSpend)</code> — pulls from balance</li>
-            <li>Game settles on-chain on win/loss/quit &rarr; winnings credited to balance</li>
-            <li><code>withdraw(amount)</code> anytime — 5% fee auto-sent to treasury</li>
+            <li>Game settles on-chain on win/loss &rarr; winnings credited to balance</li>
+            <li><code>withdraw(amount)</code> anytime — fee-free (house takes 5% at settlement)</li>
           </ol>
         </div>
 
@@ -414,8 +414,7 @@ function ApiDocsSheet({ onClose }) {
           <h3 className="api-h3">V3 Engine Endpoints</h3>
           <div className="api-endpoints">
             <div className="api-endpoint"><span className="api-method free">POST</span><code>/v3/sessions/:gameId/host-secret</code><span className="api-note">Host stores secret (after createGame tx)</span></div>
-            <div className="api-endpoint"><span className="api-method paid">POST</span><code>/v3/sessions/:gameId/click</code><span className="api-note">Reveal tile {`{ player, tile }`}</span></div>
-            <div className="api-endpoint"><span className="api-method free">POST</span><code>/v3/sessions/:gameId/quit</code><span className="api-note">Quit game {`{ player }`}</span></div>
+            <div className="api-endpoint"><span className="api-method paid">POST</span><code>/v3/sessions/:gameId/click</code><span className="api-note">Reveal tile {`{ player, tile, token }`}</span></div>
             <div className="api-endpoint"><span className="api-method free">GET</span><code>/v3/sessions/:gameId/state</code><span className="api-note">Poll full game state</span></div>
             <div className="api-endpoint"><span className="api-method free">GET</span><code>/v3/sessions</code><span className="api-note">List active games</span></div>
           </div>
@@ -424,7 +423,7 @@ function ApiDocsSheet({ onClose }) {
         <div className="api-section">
           <h3 className="api-h3">Contract Addresses (Base Mainnet)</h3>
           <div className="api-contracts">
-            <div className="api-contract"><span className="api-contract-label">Settlement V3</span><code>0x16Afabb12BFDF5f18C4454F0a73814b822F87BC2</code></div>
+            <div className="api-contract"><span className="api-contract-label">Settlement V3</span><code>0xA22C4F76EF915E33916Ef39516a95E11Ae21C172</code></div>
             <div className="api-contract"><span className="api-contract-label">USDC</span><code>0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913</code></div>
             <div className="api-contract"><span className="api-contract-label">Treasury (5% fee)</span><code>0x1DDc99B09512EbD58f65B91DbaddCd252Bd2e58e</code></div>
           </div>
@@ -500,7 +499,7 @@ export default function App({ wallet, farcaster }) {
   const [busy, setBusy] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
   const [error, setError] = useState('');
-  const [quitting, setQuitting] = useState(false);
+  const [quitting] = useState(false);  // kept for refs but unused — quit removed
   const [muted, setMuted] = useState(false); // matches sound.js default (unmuted)
 
   const addr = address || '';
@@ -905,7 +904,7 @@ export default function App({ wallet, farcaster }) {
           } catch { /* engine may not have it yet */ }
           await new Promise((r) => setTimeout(r, 2000));
         }
-        setStatusMsg('Activation taking longer than expected — you can quit to reclaim unused funds.');
+        setStatusMsg('Activation taking longer than expected — game will auto-settle if needed.');
       };
       pollActivation();
 
@@ -953,7 +952,7 @@ export default function App({ wallet, farcaster }) {
           setRun({ bombsHit: newBombs, prizesFound: newPrizes, status: 'lost', spentTotal: newSpent, prizeEarned: '0', nextTileCost: '0' });
           setStatusMsg('Game over — 3 bombs');
           sfx.bomb();
-        } else if (result.outcome === 'quit' || result.type === 'budget_exhausted') {
+        } else if (result.type === 'budget_exhausted') {
           setRun({ bombsHit: newBombs, prizesFound: newPrizes, status: 'lost', spentTotal: newSpent, prizeEarned: '0', nextTileCost: '0' });
           setStatusMsg('Budget exhausted — game over');
           sfx.bomb();
@@ -972,48 +971,17 @@ export default function App({ wallet, farcaster }) {
     } finally { setBusy(false); }
   }
 
-  // ── PLAYER: QUIT (V3) ──
-  async function quitRound() {
-    if (!session) { setView('lobby'); return; }
-    setQuitting(true);
-    setBusy(true);
-    try {
-      if (run.status === 'active') {
-        const final = await postJson(`/v3/sessions/${session.sessionId}/quit`, { player: addr, token: sessionToken });
-        if (final.proof) setProof(final.proof);
-        // V3 quit returns { outcome: 'quit', spent }. Reveal full board by polling state.
-        try {
-          const state = await getJson(`/v3/sessions/${session.sessionId}/state`);
-          if (state && state.bombPositions && state.prizePositions) {
-            const full = {};
-            (state.bombPositions || []).forEach((t) => { full[t + 1] = 'bomb'; }); // +1 to 1-based
-            (state.prizePositions || []).forEach((t) => { full[t + 1] = 'prize'; });
-            setRevealed((prev) => ({ ...full, ...prev }));
-          }
-        } catch {}
-      }
-      setSession(null); setSessionToken(null);
-      setRun({ bombsHit: 0, prizesFound: 0, status: 'idle', spentTotal: '0', prizeEarned: '0', nextTileCost: '0' });
-      setProof(null);
-      setShowProof(false);
-      setView('lobby');
-      setStatusMsg('');
-      await refreshCredits(addr);
-      await refreshSessions();
-    } catch (err) {
-      // Even on error, refresh — on-chain state is the source of truth
-      await refreshCredits(addr);
-      await refreshSessions();
-      setSession(null); setSessionToken(null);
-      setRun({ bombsHit: 0, prizesFound: 0, status: 'idle', spentTotal: '0', prizeEarned: '0', nextTileCost: '0' });
-      setProof(null);
-      setShowProof(false);
-      setView('lobby');
-      setError(friendlyError(err));
-    } finally {
-      setBusy(false);
-      setQuitting(false);
-    }
+  // ── PLAYER: EXIT ROUND (after game over only) ──
+  // Quit removed (Option A). This is just "Done" — returns to lobby after game ends.
+  async function exitRound() {
+    setSession(null); setSessionToken(null);
+    setRun({ bombsHit: 0, prizesFound: 0, status: 'idle', spentTotal: '0', prizeEarned: '0', nextTileCost: '0' });
+    setProof(null);
+    setShowProof(false);
+    setView('lobby');
+    setStatusMsg('');
+    await refreshCredits(addr);
+    await refreshSessions();
   }
 
   // ── WITHDRAW (V3: no-op — USDC is direct on-chain, no vault to withdraw from) ──
@@ -1123,7 +1091,7 @@ export default function App({ wallet, farcaster }) {
                 <div className="step-num">3</div>
                 <div className="step-body">
                   <strong>Win or lose</strong>
-                  <p>Find every prize → sweep the pot. Hit 3 bombs → lose it all. Quit → lose it all.</p>
+                  <p>Find every prize → sweep the pot. Hit 3 bombs → lose it all.</p>
                 </div>
               </div>
             </div>
@@ -1349,8 +1317,8 @@ export default function App({ wallet, farcaster }) {
       {view === 'round' && session && (
         <div className="round-view pixel-frame">
           <div className="round-header">
-            <button className="misc-btn back-btn" data-sfx-back onClick={quitRound} disabled={quitting}>
-              {quitting ? 'Quitting…' : `← ${gameEnded ? 'Done' : 'Quit'}`}
+            <button className="misc-btn back-btn" data-sfx-back onClick={exitRound} disabled={!gameEnded}>
+              {gameEnded ? '← Done' : 'Play on'}
             </button>
             <span className="mode-badge">{session.mode}</span>
           </div>
@@ -1497,7 +1465,7 @@ export default function App({ wallet, farcaster }) {
                     }}>
                       {n.type === 'game_won' ? '🏆' :
                        n.type === 'game_lost' ? '💥' :
-                       n.type === 'game_quit' ? '🏳' :
+                       n.type === 'budget_exhausted' ? '💸' :
                        n.type === 'deposit' ? '↓' :
                        n.type === 'withdrawal' ? '↑' :
                        n.type === 'pot_loss' ? '📉' :

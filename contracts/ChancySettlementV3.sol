@@ -62,7 +62,7 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
     // ── Enums ─────────────────────────────────────────────────────────────────
     enum GameStatus { Created, Active, Settled, Challenged, Refunded }
     enum Difficulty { Easy, Normal, Hardcore }
-    enum GameOutcome { Pending, Win, Loss, Quit }
+    enum GameOutcome { Pending, Win, Loss, Quit }  // Quit kept for ABI stability, never produced
 
     // ── Data Structures ──────────────────────────────────────────────────────
     struct Game {
@@ -641,8 +641,8 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
             }
         }
 
-        // Player ended without win or loss = quit
-        return (GameOutcome.Quit, spent);
+        // Player ended without win or loss = abandoned/ran out of budget = Loss
+        return (GameOutcome.Loss, spent);
     }
 
     // ── Payout Calculation ──────────────────────────────────────────────────
@@ -660,14 +660,11 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
             hostPayout = spent;
             // Player's profit is the pot; unspent is their principal back
             playerPayout = prizePot + unspent;
-        } else if (outcome == GameOutcome.Loss) {
+        } else {
+            // Loss (includes abandonment and budget exhaustion)
             // Host's profit is what player spent; pot is host's principal back
             hostPayout = prizePot + spent;
             // Player gets unspent principal back, no profit
-            playerPayout = unspent;
-        } else {
-            // Quit — economically same as loss
-            hostPayout = prizePot + spent;
             playerPayout = unspent;
         }
     }

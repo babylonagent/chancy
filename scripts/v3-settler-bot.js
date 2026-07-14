@@ -47,7 +47,7 @@ const settlement = new ethers.Contract(SETTLEMENT_ADDRESS, settlementArtifact.ab
 const randomness = new ethers.Contract(RANDOMNESS_ADDRESS, randomnessArtifact.abi, settler);
 
 // ── Outcome mapping ─────────────────────────────────────────────────────────
-const outcomeEnum = { win: 1, loss: 2, quit: 3 };
+const outcomeEnum = { win: 1, loss: 2 };  // quit (3) removed — Option A
 
 // ── Track pending Pyth requests ─────────────────────────────────────────────
 const pendingActivations = new Map(); // gameId → { seq, attempts }
