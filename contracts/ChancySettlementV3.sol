@@ -395,9 +395,13 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
             settlerAddress: msg.sender
         });
 
-        // Credit payouts to on-chain balances (5% house fee deducted, sent to treasury)
-        balances[game.host] += _applyFee(hostPayout);
-        balances[game.player] += _applyFee(playerPayout);
+        // Credit payouts to on-chain balances
+        // Fee only on PROFIT, not principal:
+        //   Host principal = prizePot (their own money back)
+        //   Player principal = maxSpend - spent (their unspent budget back)
+        uint256 playerPrincipal = game.maxSpend - spent;
+        balances[game.host] += _applyFeeOnProfit(hostPayout, game.prizePot);
+        balances[game.player] += _applyFeeOnProfit(playerPayout, playerPrincipal);
 
         emit GameSettled(gameId, outcome, hostPayout, playerPayout);
     }
@@ -484,15 +488,15 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
         );
 
         // Correct the payouts without double-charging fees.
-        // At settlement, _applyFee already sent fees to treasury.
         // On challenge reversal, we:
         //   1. Debit the original NET amounts (what was actually credited)
-        //   2. Credit the correct NET amounts directly (no new fee)
-        //    This way fees are only charged once per game, not twice.
-        uint256 originalHostNet = _netOfFee(original.hostPayout);
-        uint256 originalPlayerNet = _netOfFee(original.playerPayout);
-        uint256 correctHostNet = _netOfFee(correctHostPayout);
-        uint256 correctPlayerNet = _netOfFee(correctPlayerPayout);
+        //   2. Credit the correct NET amounts using fee-on-profit model
+        // Fee-on-profit: principal (prizePot for host, unspent for player) is free,
+        //                 5% fee only on the profit portion.
+        uint256 originalHostNet = _netOfProfit(original.hostPayout, game.prizePot);
+        uint256 originalPlayerNet = _netOfProfit(original.playerPayout, game.maxSpend - originalHostNet);
+        uint256 correctHostNet = _netOfProfit(correctHostPayout, game.prizePot);
+        uint256 correctPlayerNet = _netOfProfit(correctPlayerPayout, game.maxSpend - challengerSpent);
 
         // Reverse original (debit what was credited)
         // Note: if a party already withdrew, their balance may be < the debit amount.
@@ -652,12 +656,14 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
         uint256 unspent = maxSpend - spent;
 
         if (outcome == GameOutcome.Win) {
-            // Player wins the full pot + gets unspent budget back
+            // Player wins: host's profit is what player spent
             hostPayout = spent;
+            // Player's profit is the pot; unspent is their principal back
             playerPayout = prizePot + unspent;
         } else if (outcome == GameOutcome.Loss) {
-            // Host gets pot + player's spent
+            // Host's profit is what player spent; pot is host's principal back
             hostPayout = prizePot + spent;
+            // Player gets unspent principal back, no profit
             playerPayout = unspent;
         } else {
             // Quit — economically same as loss
@@ -666,16 +672,36 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
         }
     }
 
-    /// @notice Applies 5% house fee. Fee sent directly to treasury immediately.
-    ///         Returns net amount to credit to recipient's balance.
-    function _applyFee(uint256 amount) internal returns (uint256 net) {
-        if (amount == 0) return 0;
-        uint256 fee = (amount * HOUSE_FEE_BPS) / BPS_DENOMINATOR;
+    /// @notice Splits a payout into principal (fee-free) and profit (5% fee).
+    ///         For host: principal = prizePot (their own money back), profit = everything else.
+    ///         For player: principal = unspent (their own budget back), profit = everything else.
+    /// @param totalPayout Total amount to credit
+    /// @param principal The portion that returns fee-free
+    /// @return net Amount to credit to recipient's balance (after fee on profit)
+    function _applyFeeOnProfit(uint256 totalPayout, uint256 principal) internal returns (uint256 net) {
+        if (totalPayout == 0) return 0;
+        if (totalPayout <= principal) {
+            // No profit — all principal, no fee
+            return totalPayout;
+        }
+        // Fee only on the profit portion
+        uint256 profit = totalPayout - principal;
+        uint256 fee = (profit * HOUSE_FEE_BPS) / BPS_DENOMINATOR;
         _payUSDC(treasury, fee);
-        return amount - fee;
+        return totalPayout - fee;
     }
 
-    /// @dev Pure helper — calculates net after fee without sending anything.
+    /// @dev Pure helper — calculates net after fee-on-profit without sending anything.
+    ///      Principal portion returns free, 5% fee only on profit.
+    function _netOfProfit(uint256 totalPayout, uint256 principal) internal pure returns (uint256) {
+        if (totalPayout == 0) return 0;
+        if (totalPayout <= principal) return totalPayout;
+        uint256 profit = totalPayout - principal;
+        uint256 fee = (profit * HOUSE_FEE_BPS) / BPS_DENOMINATOR;
+        return totalPayout - fee;
+    }
+
+    /// @dev Deprecated — kept for reference. Use _netOfProfit instead.
     function _netOfFee(uint256 amount) internal pure returns (uint256) {
         if (amount == 0) return 0;
         return amount - ((amount * HOUSE_FEE_BPS) / BPS_DENOMINATOR);

@@ -73,7 +73,7 @@ import helpButtonIcon from './assets/pixel/icons/help-button.png';
 import notifBellIcon from './assets/pixel/buttons/notif-bell.png';
 
 // ─── V3 CONTRACT CONFIG ─────────────────────────────────────────────────────
-const V3_SETTLEMENT = '0xcF01f1fF459aADea4f079A4617519d72801D953e';
+const V3_SETTLEMENT = '0x16Afabb12BFDF5f18C4454F0a73814b822F87BC2';
 const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'; // USDC native on Base mainnet
 const CHAIN_ID = 8453;
 
@@ -424,7 +424,7 @@ function ApiDocsSheet({ onClose }) {
         <div className="api-section">
           <h3 className="api-h3">Contract Addresses (Base Mainnet)</h3>
           <div className="api-contracts">
-            <div className="api-contract"><span className="api-contract-label">Settlement V3</span><code>0xcF01f1fF459aADea4f079A4617519d72801D953e</code></div>
+            <div className="api-contract"><span className="api-contract-label">Settlement V3</span><code>0x16Afabb12BFDF5f18C4454F0a73814b822F87BC2</code></div>
             <div className="api-contract"><span className="api-contract-label">USDC</span><code>0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913</code></div>
             <div className="api-contract"><span className="api-contract-label">Treasury (5% fee)</span><code>0x1DDc99B09512EbD58f65B91DbaddCd252Bd2e58e</code></div>
           </div>
