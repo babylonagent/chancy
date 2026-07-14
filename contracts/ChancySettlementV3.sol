@@ -448,7 +448,7 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
 
         // Replay the CHALLENGED (original) settlement clicks
         Settlement storage original = settlements[gameId];
-        (GameOutcome originalOutcome, ) = _replayClicks(
+        (GameOutcome originalOutcome, uint256 originalSpent) = _replayClicks(
             bombMask,
             prizeMask,
             original.clicks,
@@ -494,7 +494,7 @@ contract ChancySettlementV3 is Ownable, ReentrancyGuard {
         // Fee-on-profit: principal (prizePot for host, unspent for player) is free,
         //                 5% fee only on the profit portion.
         uint256 originalHostNet = _netOfProfit(original.hostPayout, game.prizePot);
-        uint256 originalPlayerNet = _netOfProfit(original.playerPayout, game.maxSpend - originalHostNet);
+        uint256 originalPlayerNet = _netOfProfit(original.playerPayout, game.maxSpend - originalSpent);
         uint256 correctHostNet = _netOfProfit(correctHostPayout, game.prizePot);
         uint256 correctPlayerNet = _netOfProfit(correctPlayerPayout, game.maxSpend - challengerSpent);
 
