@@ -364,11 +364,11 @@ function RulesSheet({ onClose }) {
         <p className="modal-sub">Hosts fund prize pots. Players pay per tile. Find all prizes to win the pot.</p>
         <div className="rule-item pixel-frame">
           <div className="rule-icon gold">$</div>
-          <div className="rule-text"><strong>Add credits</strong><span>Send USDC to your deposit address. Credits appear in seconds.</span></div>
+          <div className="rule-text"><strong>Add credits</strong><span>Send USDC to the contract address. Credits appear in seconds.</span></div>
         </div>
         <div className="rule-item pixel-frame">
           <div className="rule-icon blue">◉</div>
-          <div className="rule-text"><strong>Host or join</strong><span>Hosts lock a pot. Players pay $0.05 to join and reveal tiles.</span></div>
+          <div className="rule-text"><strong>Host or join</strong><span>Hosts lock a pot. Players set a spend budget and join — each tile reveal costs USDC.</span></div>
         </div>
         <div className="rule-item pixel-frame">
           <div className="rule-icon green">★</div>
@@ -396,7 +396,7 @@ function ApiDocsSheet({ onClose }) {
       <div className="modal api-docs-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-handle" />
         <h2>API &amp; Agents</h2>
-        <p className="modal-sub">Send USDC to the contract — no approvals needed. The indexer credits your on-chain balance automatically. Play unlimited games, withdraw anytime (5% fee to treasury).</p>
+        <p className="modal-sub">Send USDC to the contract — no approvals needed. The indexer credits your on-chain balance automatically. Play games, withdraw anytime — fee-free.</p>
 
         <div className="api-section">
           <h3 className="api-h3">On-chain Flow</h3>
@@ -434,7 +434,7 @@ function ApiDocsSheet({ onClose }) {
           <pre className="api-code-block">{`# 1. Approve USDC for the settlement contract
 # 2. Call createGame() or joinGame() on-chain
 # 3. POST /v3/sessions/:gameId/click to reveal tiles
-# 4. Settler bot settles on-chain — 5% fee auto-sent to treasury
+# 4. Settler bot settles on-chain — 5% fee on profit auto-sent to treasury
 
 # Full ABI: see Contract Addresses above
 # Chain: Base Mainnet (8453)`}</pre>
@@ -1084,7 +1084,7 @@ export default function App({ wallet, farcaster }) {
                 <div className="step-num">2</div>
                 <div className="step-body">
                   <strong>Player joins</strong>
-                  <p>Pay a small entry. Reveal tiles one by one. Each tile costs more than the last.</p>
+                  <p>Set a spending budget, lock it, and start revealing tiles. Each tile costs more than the last.</p>
                 </div>
               </div>
               <div className="how-step pixel-frame">
@@ -1404,7 +1404,7 @@ export default function App({ wallet, farcaster }) {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-handle" />
             <h2>Withdraw</h2>
-            <p className="modal-sub">Withdraw USDC from your on-chain balance. 5% fee auto-sent to treasury.</p>
+            <p className="modal-sub">Withdraw USDC from your on-chain balance. Fee-free — house takes 5% at settlement, not on withdrawals.</p>
             <div className="pot-input-group" style={{ marginBottom: 8 }}>
               <span className="pot-prefix">$</span>
               <input value={withdrawAmt} onChange={(e) => setWithdrawAmt(e.target.value)} placeholder={dollars(withdrawable)} inputMode="decimal" />
@@ -1424,7 +1424,7 @@ export default function App({ wallet, farcaster }) {
                 sfx.win();
                 setShowWithdraw(false);
                 refreshCredits(addr);
-                setStatusMsg(`Withdrew ${dollars(amount)} (5% fee applied)`);
+                setStatusMsg(`Withdrew ${dollars(amount)}`);
               } catch (e) { setError(e.message?.slice(0, 200) || 'Withdraw failed'); }
               finally { setBusy(false); }
             }}>{busy ? 'Processing…' : 'Withdraw'}</button>
