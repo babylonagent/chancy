@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chancy — How to Play</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Silkscreen:wght@400;700&display=swap');
+
+  :root {
+    --bg: #0a0a0f;
+    --bg-card: #14141f;
+    --bg-elevated: #1e1e2e;
+    --bg-input: #22222e;
+    --border: #2a2a3a;
+    --border-hover: #4a4a5a;
+    --accent: #ffb800;
+    --accent-dim: rgba(255,184,0,0.15);
+    --accent-glow: rgba(255,184,0,0.4);
+    --accent-dark: #c89000;
+    --accent-light: #ffd944;
+    --green: #3eeb80;
+    --green-dim: rgba(62,235,128,0.12);
+    --red: #ff4444;
+    --red-dim: rgba(255,68,68,0.12);
+    --text: #f0f0f5;
+    --text-dim: #9999bb;
+    --text-faint: #666677;
+    --radius: 12px;
+    --radius-sm: 8px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    overflow: hidden;
+    font-family: 'Silkscreen', monospace;
+    font-size: 15px;
+  }
+
+  /* ─── THE VIEWPORT ─── */
+  .viewport {
+    width: min(90vw, 600px);
+    aspect-ratio: 1;
+    overflow: hidden;
+    position: relative;
+    border-radius: var(--radius);
+    background: var(--bg);
+    box-shadow: 0 0 60px rgba(255,184,0,0.08);
+  }
+
+  /* ─── THE STAGE ─── */
+  .stage {
+    position: absolute;
+    width: 1800px;
+    height: 1800px;
+    left: 50%;
+    top: 50%;
+    will-change: transform;
+    transition: transform 1.1s cubic-bezier(0.45, 0.05, 0.35, 1);
+  }
+
+  /* ─── THE CURSOR ─── */
+  .cursor {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    z-index: 1000;
+    pointer-events: none;
+    width: 32px;
+    height: 37px;
+    margin-left: -8px;
+    margin-top: -4px;
+    transition: transform 0.12s ease;
+    image-rendering: pixelated;
+  }
+  .cursor img { width: 100%; height: 100%; image-rendering: pixelated; }
+  .cursor.clicking { transform: scale(0.85); }
+
+  /* ─── CLICK RIPPLE ─── */
+  .ripple {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 0;
+    height: 0;
+    border: 2px solid var(--accent);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 999;
+    opacity: 0;
+  }
+  .ripple.fire {
+    animation: rippleAnim 0.5s ease-out;
+  }
+  @keyframes rippleAnim {
+    0% { width: 4px; height: 4px; opacity: 1; border-width: 3px; }
+    100% { width: 70px; height: 70px; opacity: 0; border-width: 1px; }
+  }
+
+  /* ─── SCENE LABEL ─── */
+  .label {
+    position: absolute;
+    bottom: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: var(--text-dim);
+    font-family: 'Press Start 2P', monospace;
+    font-size: 8px;
+    letter-spacing: 1px;
+    white-space: nowrap;
+    z-index: 100;
+    opacity: 0;
+    transition: opacity 0.4s;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.8);
+  }
+  .label.show { opacity: 1; }
+
+  /* ─── UI SCENES ─── */
+  .scene {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .logo {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 24px;
+    color: var(--accent);
+    text-shadow: 0 0 20px var(--accent-glow);
+    letter-spacing: 2px;
+  }
+  .tagline {
+    color: var(--text-dim);
+    font-size: 13px;
+    text-align: center;
+    line-height: 1.6;
+  }
+
+  /* ═══ PIXEL BUTTONS — exact copy from real site styles.css ═══ */
+  .btn {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 0 27px; font-family: 'Press Start 2P', monospace; font-size: 13px; font-weight: 400; line-height: 1.8;
+    white-space: nowrap; text-transform: uppercase;
+    transition: transform 0.08s; width: auto; min-width: 60%; max-width: 90%; margin: 0 auto; position: relative;
+    border-radius: 0; border: none;
+    background-repeat: repeat-x;
+    background-size: auto 75px; height: 75px; box-sizing: border-box;
+    background-origin: content-box;
+    background-clip: content-box;
+    overflow: visible;
+    image-rendering: pixelated;
+    image-rendering: -webkit-optimize-contrast;
+    user-select: none; -webkit-user-select: none;
+    isolation: isolate;
+    cursor: pointer;
+  }
+  .btn > * { position: relative; z-index: 1; }
+  .btn::before, .btn::after {
+    content: ''; position: absolute; top: 0; height: 75px; width: 29px;
+    background-size: 100% 75px;
+    image-rendering: pixelated; pointer-events: none; z-index: -1;
+  }
+  .btn::before { left: -2px; }
+  .btn::after { right: -2px; }
+
+  /* ORANGE (primary) */
+  .btn-primary {
+    background-image: url('pixel/buttons/OrangeButtonBody.png');
+    background-color: transparent; color: #1a1000;
+    text-shadow: none;
+  }
+  .btn-primary::before { background-image: url('pixel/buttons/OrangeButtonLeft.png'); }
+  .btn-primary::after { background-image: url('pixel/buttons/OrangeButtonRight.png'); }
+  .btn-primary.pressed {
+    background-image: url('pixel/buttons/OrangeButtonBodyPressed.png');
+    transform: translateY(2px);
+  }
+  .btn-primary.pressed::before { background-image: url('pixel/buttons/OrangeButtonLeftPressed.png'); }
+  .btn-primary.pressed::after { background-image: url('pixel/buttons/OrangeButtonRightPressed.png'); }
+
+  /* ═══ 9-SLICE PIXEL FRAME — exact copy from real site ═══ */
+  .pixel-frame {
+    border: 14px solid transparent !important;
+    border-image: url('pixel/textfield/textfield-9slice.png') 14 stretch !important;
+    background-image: url('pixel/textfield/center-tile.png') !important;
+    background-repeat: repeat !important;
+    image-rendering: pixelated;
+  }
+
+  /* ═══ TILES — exact copy from real site ═══ */
+  .tile {
+    aspect-ratio: 1; border-radius: 8px;
+    background-image: url('pixel/block.png');
+    background-repeat: no-repeat;
+    background-position: bottom center;
+    background-size: 100% auto;
+    background-color: transparent;
+    border: none;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; font-weight: 700;
+    transition: transform 0.1s; position: relative; overflow: hidden;
+    image-rendering: pixelated;
+  }
+  .tile.pressed {
+    background-image: url('pixel/block_pressed.png');
+    transform: none;
+  }
+  .tile img { width: 70%; height: 70%; image-rendering: pixelated; }
+  .tile-cost {
+    position: absolute;
+    top: 4px; left: 4px;
+    font-family: 'Silkscreen', monospace;
+    font-size: 8px;
+    color: rgba(255,255,255,0.5);
+    pointer-events: none;
+    z-index: 2;
+  }
+  .tile.revealed .tile-cost { display: none; }
+  .tile.revealing { animation: revealPop 0.25s ease; }
+  @keyframes revealPop { 0% { transform: scale(0.8); } 100% { transform: scale(1); } }
+  /* Revealed tiles keep the pressed PNG texture — no CSS borders/boxes */
+  .tile.prize { animation: prizePop 0.4s ease; }
+  @keyframes prizePop { 0% { transform: scale(0); } 60% { transform: scale(1.15); } 100% { transform: scale(1); } }
+  .tile.bomb { animation: bombShake 0.3s ease; }
+  @keyframes bombShake { 0%,100% { transform: translate(0); } 25% { transform: translate(-2px, 1px); } 75% { transform: translate(2px, -1px); } }
+
+  /* ─── WALLET BAR ─── */
+  .wallet-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 18px;
+    background: var(--bg-card);
+    border: 2px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+  }
+  .wallet-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--text-faint);
+    transition: all 0.3s;
+  }
+  .wallet-dot.connected {
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+  }
+  .wallet-addr { color: var(--text-dim); font-size: 11px; }
+  .wallet-balance {
+    color: var(--accent); font-size: 11px;
+    opacity: 0; transition: opacity 0.3s;
+  }
+  .wallet-balance.show { opacity: 1; }
+
+  /* ─── POT DISPLAY ─── */
+  .pot-display {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 20px;
+    color: var(--accent);
+    text-shadow: 0 0 12px var(--accent-glow);
+  }
+  .pot-label {
+    font-size: 10px;
+    color: var(--text-faint);
+    letter-spacing: 1px;
+  }
+
+  /* ─── DIFFICULTY CARDS (pixel frame) ─── */
+  .diff-row { display: flex; gap: 12px; }
+  .diff-card {
+    width: 96px; padding: 14px 8px;
+    text-align: center;
+    transition: all 0.2s;
+    image-rendering: pixelated;
+  }
+  .diff-card.selected {
+    box-shadow: 0 0 12px 2px rgba(204, 153, 0, 0.6), inset 0 0 8px rgba(204, 153, 0, 0.2);
+  }
+  .diff-card.selected .diff-name { color: var(--accent); }
+  .diff-name {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 8px; color: var(--text); margin-bottom: 8px;
+  }
+  .diff-stats { font-size: 10px; color: var(--text-faint); line-height: 1.5; }
+
+  /* ═══ GAME BOARD — real pixel tiles ═══ */
+  .board {
+    display: grid;
+    grid-template-columns: repeat(5, 56px);
+    grid-template-rows: repeat(5, 56px);
+    gap: 4px;
+    padding: 14px;
+  }
+  /* old duplicate tile rules removed — using exact-copy rules above */
+
+  /* ─── GAME HEADER ─── */
+  .game-header {
+    display: flex; align-items: center; justify-content: space-between;
+    width: 100%; max-width: 310px;
+  }
+  .game-title {
+    font-family: 'Press Start 2P', monospace; font-size: 10px; color: var(--text);
+  }
+  .game-mode {
+    font-size: 10px; color: var(--accent);
+    padding: 4px 8px; background: var(--accent-dim);
+    border-radius: 4px;
+  }
+
+  /* ─── SPEND COUNTER ─── */
+  .spend-bar {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 11px; color: var(--text-dim);
+  }
+  .spend-amount {
+    color: var(--accent); font-family: 'Press Start 2P', monospace; font-size: 9px;
+  }
+
+  /* ─── WIN BANNER ─── */
+  .result-banner {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 16px;
+    padding: 24px 40px;
+    border: 3px solid var(--accent);
+    border-radius: var(--radius);
+    text-align: center;
+    opacity: 0;
+    transform: scale(0.9);
+    transition: all 0.4s ease;
+    background: rgba(255,184,0,0.05);
+  }
+  .result-banner.show { opacity: 1; transform: scale(1); }
+  .result-win {
+    border-color: var(--accent);
+    color: var(--accent);
+    text-shadow: 0 0 20px var(--accent-glow);
+  }
+</style>
+</head>
+<body>
+
+<div class="viewport" id="viewport">
+  <!-- Scene label -->
+  <div class="label" id="label"></div>
+
+  <!-- Cursor -->
+  <div class="cursor" id="cursor">
+    <img src="cursor-pixel.png" alt="">
+  </div>
+  <div class="ripple" id="ripple"></div>
+
+  <!-- THE STAGE -->
+  <div class="stage" id="stage">
+
+    <!-- Scene 1: Landing -->
+    <div class="scene" id="scene-landing" style="left: 900px; top: 900px; transform: translate(-50%, -50%);">
+      <div class="logo">CHANCY</div>
+      <div style="height: 20px"></div>
+      <button class="btn btn-primary" id="btn-connect">CONNECT WALLET</button>
+      <div style="height: 16px"></div>
+      <div class="wallet-bar pixel-frame" id="wallet-bar">
+        <div class="wallet-dot" id="wallet-dot"></div>
+        <span class="wallet-addr" id="wallet-addr">Not connected</span>
+        <span class="wallet-balance" id="wallet-balance">50.00 USDC</span>
+      </div>
+    </div>
+
+    <!-- Scene 2: Host Game -->
+    <div class="scene" id="scene-host" style="left: 1400px; top: 900px; transform: translate(-50%, -50%);">
+      <div class="logo" style="font-size: 16px;">HOST A GAME</div>
+      <div style="height: 12px"></div>
+      <div class="pot-display" id="pot-amount">$5.00</div>
+      <div class="pot-label">PRIZE POT</div>
+      <div style="height: 12px"></div>
+      <div class="diff-row" id="diff-row">
+        <div class="diff-card pixel-frame selected" data-diff="0">
+          <div class="diff-name">EASY</div>
+          <div class="diff-stats">3 bombs<br>3 prizes</div>
+        </div>
+        <div class="diff-card pixel-frame" data-diff="1">
+          <div class="diff-name">NORMAL</div>
+          <div class="diff-stats">4 bombs<br>2 prizes</div>
+        </div>
+        <div class="diff-card pixel-frame" data-diff="2">
+          <div class="diff-name">HARDCORE</div>
+          <div class="diff-stats">6 bombs<br>1 prize</div>
+        </div>
+      </div>
+      <div style="height: 8px"></div>
+      <button class="btn btn-primary" id="btn-create">CREATE GAME</button>
+    </div>
+
+    <!-- Scene 3: Game Board -->
+    <div class="scene" id="scene-board" style="left: 900px; top: 1400px; transform: translate(-50%, -50%);">
+      <div class="game-header">
+        <span class="game-title">GAME #1</span>
+        <span class="game-mode" id="board-mode">EASY</span>
+      </div>
+      <div class="board pixel-frame" id="board"></div>
+      <div class="spend-bar">
+        <span>SPENT:</span>
+        <span class="spend-amount" id="spend-counter">$0.00</span>
+        <span style="color: var(--text-faint)">·</span>
+        <span>POT:</span>
+        <span class="spend-amount">$5.00</span>
+      </div>
+    </div>
+
+    <!-- Scene 4: Win -->
+    <div class="scene" id="scene-win" style="left: 400px; top: 900px; transform: translate(-50%, -50%);">
+      <div class="result-banner result-win pixel-frame" id="win-banner">POT SWEPT!<br><span style="font-size: 12px;">+$5.00</span></div>
+      <div style="height: 20px"></div>
+      <button class="btn btn-primary" id="btn-again">PLAY AGAIN</button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const stage = document.getElementById('stage');
+const cursor = document.getElementById('cursor');
+const ripple = document.getElementById('ripple');
+const labelEl = document.getElementById('label');
+
+// ─── TILE COST (mirrors v3RevealCostAt from App.jsx) ───
+const V3_MODE_COST = {
+  Easy:     { startBps: 150, capBps: 15000 },
+  Normal:   { startBps: 250, capBps: 20000 },
+  Hardcore: { startBps: 350, capBps: 25000 },
+};
+function v3RevealCostAt(prizePot, mode, revealIndex) {
+  const cfg = V3_MODE_COST[mode];
+  if (!cfg) return 0;
+  const baseTotalBps = cfg.startBps * 36;
+  const stepBps = cfg.capBps > baseTotalBps
+    ? Math.floor((cfg.capBps - baseTotalBps) * 2 / (36 * 35))
+    : 0;
+  const costBps = cfg.startBps + stepBps * revealIndex;
+  return (prizePot * costBps) / 10000;
+}
+
+// ─── BUILD THE 5×5 BOARD ───
+const board = document.getElementById('board');
+const tiles = [];
+const tileCosts = []; // cost label element per tile
+const PRIZE_POT = 5.00;
+const MODE = 'Normal';
+
+for (let i = 0; i < 25; i++) {
+  const t = document.createElement('div');
+  t.className = 'tile';
+  t.dataset.idx = i;
+  // Cost label on the left
+  const costLabel = document.createElement('span');
+  costLabel.className = 'tile-cost';
+  const cost = v3RevealCostAt(PRIZE_POT, MODE, i);
+  costLabel.textContent = '$' + cost.toFixed(2);
+  t.appendChild(costLabel);
+  board.appendChild(t);
+  tiles.push(t);
+  tileCosts.push(costLabel);
+}
+
+const REVEAL_ORDER = [
+  { idx: 0,  type: 'empty' },
+  { idx: 5,  type: 'empty' },
+  { idx: 3,  type: 'prize' },
+  { idx: 10, type: 'empty' },
+  { idx: 11, type: 'prize' },
+  { idx: 15, type: 'empty' },
+  { idx: 22, type: 'prize' },
+];
+
+const dots = [];
+
+function centerOn(el) {
+  const rect = el.getBoundingClientRect();
+  const elCx = rect.left + rect.width / 2;
+  const elCy = rect.top + rect.height / 2;
+  const vp = document.getElementById('viewport');
+  const vpRect = vp.getBoundingClientRect();
+  const vpCx = vpRect.left + vpRect.width / 2;
+  const vpCy = vpRect.top + vpRect.height / 2;
+  const dx = vpCx - elCx;
+  const dy = vpCy - elCy;
+  const computed = window.getComputedStyle(stage).transform;
+  let curX = 0, curY = 0;
+  if (computed && computed !== 'none') {
+    try {
+      const m = new DOMMatrix(computed);
+      curX = m.e;
+      curY = m.f;
+    } catch(e) {}
+  }
+  stage.style.transform = `translate(${curX + dx}px, ${curY + dy}px)`;
+}
+
+function fireClick() {
+  cursor.classList.add('clicking');
+  ripple.classList.remove('fire');
+  void ripple.offsetWidth;
+  ripple.classList.add('fire');
+  setTimeout(() => cursor.classList.remove('clicking'), 150);
+}
+
+function setLabel(text) {
+  labelEl.textContent = text;
+  labelEl.classList.add('show');
+}
+
+function setProgress(idx) {
+  dots.forEach((d, i) => {
+    d.classList.remove('active', 'done');
+    if (i < idx) d.classList.add('done');
+    if (i === idx) d.classList.add('active');
+  });
+}
+
+function wait(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function resetAll() {
+  tiles.forEach((t, i) => {
+    t.className = 'tile';
+    t.innerHTML = '';
+    const costLabel = document.createElement('span');
+    costLabel.className = 'tile-cost';
+    const cost = v3RevealCostAt(PRIZE_POT, MODE, i);
+    costLabel.textContent = '$' + cost.toFixed(2);
+    t.appendChild(costLabel);
+  });
+  document.getElementById('wallet-dot').classList.remove('connected');
+  document.getElementById('wallet-addr').textContent = 'Not connected';
+  document.getElementById('wallet-balance').classList.remove('show');
+  document.querySelectorAll('.diff-card').forEach((c, i) => c.classList.toggle('selected', i === 0));
+  document.getElementById('win-banner').classList.remove('show');
+  document.getElementById('spend-counter').textContent = '$0.00';
+  document.getElementById('board-mode').textContent = 'EASY';
+}
+
+async function runLoop() {
+  await wait(500);
+
+  while (true) {
+    resetAll();
+
+    // ── Step 0: Connect Wallet ──
+    setProgress(0);
+    setLabel('CONNECT WALLET');
+    centerOn(document.getElementById('btn-connect'));
+    await wait(1200);
+    fireClick();
+    document.getElementById('btn-connect').classList.add('pressed');
+    await wait(300);
+    document.getElementById('btn-connect').classList.remove('pressed');
+    await wait(200);
+    document.getElementById('wallet-dot').classList.add('connected');
+    document.getElementById('wallet-addr').textContent = '0xd205...4CC10';
+    document.getElementById('wallet-balance').classList.add('show');
+    await wait(1000);
+
+    // ── Step 1: Pan to Host ──
+    setProgress(1);
+    setLabel('HOST A GAME');
+    centerOn(document.getElementById('scene-host'));
+    await wait(1300);
+
+    // ── Step 2: Pick difficulty ──
+    setProgress(2);
+    setLabel('PICK DIFFICULTY');
+    centerOn(document.querySelectorAll('.diff-card')[1]);
+    await wait(800);
+    fireClick();
+    document.querySelectorAll('.diff-card')[1].classList.add('selected');
+    document.querySelectorAll('.diff-card')[0].classList.remove('selected');
+    document.getElementById('board-mode').textContent = 'NORMAL';
+    await wait(700);
+
+    // ── Step 3: Create Game ──
+    setProgress(3);
+    setLabel('CREATE GAME');
+    centerOn(document.getElementById('btn-create'));
+    await wait(700);
+    fireClick();
+    document.getElementById('btn-create').classList.add('pressed');
+    await wait(300);
+    document.getElementById('btn-create').classList.remove('pressed');
+    await wait(400);
+
+    // ── Step 4: Player joins ──
+    setProgress(4);
+    setLabel('PLAYER JOINS');
+    centerOn(document.getElementById('scene-board'));
+    await wait(1300);
+
+    // ── Step 5: Reveal tiles ──
+    setProgress(5);
+    setLabel('REVEAL TILES');
+    await wait(300);
+
+    const tileCost = [0.02, 0.03, 0.05, 0.08, 0.12, 0.18, 0.25];
+    let totalSpent = 0;
+
+    for (let i = 0; i < REVEAL_ORDER.length; i++) {
+      const step = REVEAL_ORDER[i];
+      const tileEl = tiles[step.idx];
+      centerOn(tileEl);
+      await wait(800);
+      // Show pressed state (block_pressed.png) — stays pressed
+      tileEl.classList.add('pressed');
+      fireClick();
+      await wait(200);
+      // Reveal on top of pressed state
+      tileEl.classList.add('revealing', step.type, 'revealed');
+      // Add reveal content (cost label is hidden by CSS .tile.revealed .tile-cost)
+      let revealIcon;
+      if (step.type === 'prize') {
+        revealIcon = document.createElement('span');
+        revealIcon.textContent = '$';
+        revealIcon.style.cssText = 'font-family: "Press Start 2P", monospace; font-size: 14px; color: var(--accent); position: relative; z-index: 2;';
+        tileEl.appendChild(revealIcon);
+      } else {
+        revealIcon = document.createElement('span');
+        revealIcon.textContent = '·';
+        revealIcon.style.cssText = 'font-size: 16px; color: var(--text-faint); position: relative; z-index: 2;';
+        tileEl.appendChild(revealIcon);
+      }
+      totalSpent += tileCost[i] || 0.25;
+      document.getElementById('spend-counter').textContent = `$${totalSpent.toFixed(2)}`;
+      await wait(step.type === 'prize' ? 600 : 400);
+    }
+
+    // ── Step 6: Pot Swept! ──
+    setProgress(6);
+    setLabel('POT SWEPT');
+    await wait(500);
+    centerOn(document.getElementById('scene-win'));
+    await wait(800);
+    document.getElementById('win-banner').classList.add('show');
+    await wait(2200);
+
+    // ── Play Again ──
+    centerOn(document.getElementById('btn-again'));
+    await wait(600);
+    fireClick();
+    document.getElementById('btn-again').classList.add('pressed');
+    await wait(300);
+    document.getElementById('btn-again').classList.remove('pressed');
+    await wait(300);
+  }
+}
+
+// Start
+stage.style.transform = 'translate(0px, 0px)';
+runLoop();
+</script>
+</body>
+</html>

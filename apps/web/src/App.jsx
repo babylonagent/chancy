@@ -1338,8 +1338,10 @@ export default function App({ wallet, farcaster }) {
           <div className="board" aria-label="Chancy 6x6 board" role="grid">
             {TILES.map((tile) => {
               const state = revealed[tile];
+              const tileCost = v3RevealCostAt(session.prizePot, session.mode, tile);
               return (
                 <button key={tile} className={`tile ${state || ''}`} disabled={!!state || run.status !== 'active' || busy} onClick={() => clickTile(tile)}>
+                  {!state && <span className="tile-cost">${dollars(tileCost)}</span>}
                   {state === 'prize' && <img src={gemSprite} alt="prize" />}
                   {state === 'bomb' && <img src={bombSprite} alt="bomb" />}
                 </button>
